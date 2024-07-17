@@ -1,2 +1,5 @@
+.DS_Store
 # netcdf files
 *.nc
+
+cache/**/download-links.txt
