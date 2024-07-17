@@ -21,9 +21,9 @@ retrieve_urls() {
 }
 
 retrieve_and_write_urls() {
-    local dir_name="$1"
+    local dataset_type="$1"
     local precision="$2"
-    local dataset_type="$3"
+    local dir_name="${dataset_type}-${precision}"
     local urls
 
     mkdir -p "$dir_name" # create if it doesn't exist yet
@@ -46,10 +46,22 @@ download() {
     cd ..
 }
 
-retrieve_and_write_urls p05 p05 "final"
-retrieve_and_write_urls p25 p25 "final"
-retrieve_and_write_urls prelim p05 "prelim"
-
-download p05
-download p25
-download prelim
+for arg in "$@"; do
+    case "$arg" in
+        final-p05)
+            retrieve_and_write_urls final p05
+            download final-p05
+            ;;
+        final-p25)
+            retrieve_and_write_urls final p25
+            download final-p25
+            ;;
+        prelim-p05)
+            retrieve_and_write_urls prelim p05
+            download prelim-p05
+            ;;
+        *)
+            echo "Unknown argument: $arg" >&2
+            ;;
+    esac
+done

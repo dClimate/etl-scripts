@@ -1,6 +1,4 @@
-#!/bin/sh
 # Downloading is idempotent. Because wget only continues downloads if needed, if something was already downloaded and has the same filename, it won't try again.
-
 generate_urls() {
     local base_url="$1"
     local start_year="$2"
@@ -41,15 +39,26 @@ download() {
     cd ..
 }
 
-generate_and_write precip-global 'https://psl.noaa.gov/thredds/fileServer/Datasets/cpc_global_precip/precip.' 1979
-
-generate_and_write precip-conus 'https://psl.noaa.gov/thredds/fileServer/Datasets/cpc_us_precip/RT/precip.V1.0.' 2016
-
-generate_and_write tmax 'https://psl.noaa.gov/thredds/fileServer/Datasets/cpc_global_temp/tmax.' 1979
-
-generate_and_write tmin 'https://psl.noaa.gov/thredds/fileServer/Datasets/cpc_global_temp/tmin.' 1979
-
-download precip-global
-download precip-conus
-download tmax
-download tmin
+for arg in "$@"; do
+    case "$arg" in
+        precip-conus)
+            generate_and_write precip-conus 'https://psl.noaa.gov/thredds/fileServer/Datasets/cpc_us_precip/RT/precip.V1.0.' 2016
+            download precip-conus
+            ;;
+        precip-global)
+            generate_and_write precip-global 'https://psl.noaa.gov/thredds/fileServer/Datasets/cpc_global_precip/precip.' 1979
+            download precip-global
+            ;;
+        tmax)
+            generate_and_write tmax 'https://psl.noaa.gov/thredds/fileServer/Datasets/cpc_global_temp/tmax.' 1979
+            download tmax
+            ;;
+        tmin)
+            generate_and_write tmin 'https://psl.noaa.gov/thredds/fileServer/Datasets/cpc_global_temp/tmin.' 1979
+            download tmin
+            ;;
+        *)
+            echo "Unknown argument: $arg" >&2
+            ;;
+    esac
+done
