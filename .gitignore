@@ -1,5 +1,7 @@
 .DS_Store
-# netcdf files
-*.nc
 
-cache/**/download-links.txt
+*.nc
+*.zarr
+download-links.txt
+
+pyrightconfig.json
