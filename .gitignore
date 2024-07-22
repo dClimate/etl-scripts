@@ -2,6 +2,7 @@
 
 *.nc
 *.zarr
+*.cid
 download-links.txt
 
 pyrightconfig.json
