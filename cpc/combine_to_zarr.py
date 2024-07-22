@@ -15,20 +15,22 @@ def combine_nc_to_zarr(dataset_name: str):
 
     data_dir = f"./{dataset_name}"
 
+    # Get the cpc files which are all netcdf files
     nc_files = glob(os.path.join(data_dir, "*.nc"))
     if not nc_files:
         print(f"no .nc files found in {data_dir}")
         return
 
+    # Where we store our combined zarr for caching
     zarr_path = os.path.join(data_dir, f"{dataset_name}.zarr")
 
-    # Check if Zarr store exists and get its modification time
+    # If Zarr store already exists and is cached, get its modification time
     zarr_mtime = os.path.getmtime(zarr_path) if os.path.exists(zarr_path) else 0
 
-    # Get the latest modification time of .nc files
+    # Get the most recent modification time of .nc files
     latest_nc_mtime = get_latest_modification_time(nc_files)
 
-    # If Zarr store doesn't exist or any .nc file is newer, regenerate the Zarr store
+    # If Zarr store doesn't exist or any of the data is newer than the last time we created the zarr, generate the zarr
     if zarr_mtime < latest_nc_mtime:
         print(f"Generating/updating Zarr store for {dataset_name}")
         # Open all .nc files as a single dataset
@@ -52,7 +54,7 @@ def main():
     print(absolute_script_dir)
     os.chdir(absolute_script_dir)
 
-    # Skip the script name (sys.argv[0])
+    # Skip the script name (sys.argv[0]), so start at index 1
     for arg in sys.argv[1:]:
         if arg == "precip-conus":
             print("Processing precip-conus dataset")
