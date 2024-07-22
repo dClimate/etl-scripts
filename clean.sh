@@ -11,6 +11,7 @@ for arg in "$@"; do
             ;;
         misc)
             find . -type d -name ".ruff_cache" -exec rm -rf {} +
+            find . -type f -name "*.cid" -delete
             ;;
         *)
             echo "Unknown argument: $arg" >&2
