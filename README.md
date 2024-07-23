@@ -10,6 +10,24 @@ Necessary exceptions have been made however, and are noted where possible. Idemp
   + `uv` [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv) for python packages and virtual environment creation.
   + python >= 3.10.14
 
+## Run an ETL for: CPC
+```sh
+cd ./cpc
+sh pipeline.sh precip-conus precip-global tmax tmin
+cat precip-conus/*.cid
+cat precip-global/*.cid
+cat tmax/*.cid
+cat tmin/*.cid
+```
+The CIDs are stored as files in the directory created for each dataset from CPC once done.
+You can also mix and match, e.g.
+```sh
+cd ./cpc
+sh pipeline.sh tmin tmax
+cat tmax/*.cid
+cat tmin/*.cid
+```
+
 # Development Environment
 ## Setting up
 ### Local Environment
@@ -21,10 +39,9 @@ Ensure the following are installed in the local environment.
 ```sh
 cd ~/etl-scripts # or wherever this is
 pwd # "..."/etl-scripts
-uv venv
+uv venv --python=cpython@3.10.14
 uv pip sync requirements.txt
 ```
-`uv` will use `./.python-version` to determine what python version to install.
 
 Now activate the virtual environment.
 ```sh
