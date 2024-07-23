@@ -14,5 +14,3 @@ dev = [
 all = [
     "etl-scripts[dev]"
 ]
-
-# TODO setup rest of a proper pyproject.toml, beyond just the basic dependencies
