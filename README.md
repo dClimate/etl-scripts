@@ -39,7 +39,7 @@ Ensure the following are installed in the local environment.
 ```sh
 cd ~/etl-scripts # or wherever this is
 pwd # "..."/etl-scripts
-uv venv --python=cpython@3.10.14
+uv venv
 uv pip sync requirements.txt
 ```
 
