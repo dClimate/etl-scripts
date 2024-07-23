@@ -88,7 +88,6 @@ def main():
     os.chdir(absolute_script_dir)
 
     # Skip the script name (sys.argv[0]), so start at index 1
-    # Skip the script name (sys.argv[0]), so start at index 1
     for arg in sys.argv[1:]:
         if arg in ["precip-conus", "precip-global", "tmax", "tmin"]:
             dataset_name = arg
