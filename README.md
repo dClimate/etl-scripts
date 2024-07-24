@@ -28,13 +28,12 @@ cat tmax/*.cid
 cat tmin/*.cid
 ```
 
-# Development Environment
-## Setting up
-### Local Environment
+# Development Environment Setup
+## Local Environment
 Ensure the following are installed in the local environment.
   + Everything from the Operations Setup requirements
   + `ruff` for python formatting defaults and linting. [https://github.com/astral-sh/ruff](https://github.com/astral-sh/ruff)
-### Setup python virtual environment
+## Setup python virtual environment
 1. Create virtual environment, install packages
 ```sh
 cd ~/etl-scripts # or wherever this is
@@ -53,14 +52,26 @@ To deactivate once done working, just run
 deactivate
 ```
 
+## Commit Hooks
+Activate your python virtualenv. Now run
+```sh
+$ source .venv/bin/activate
+(venv) $ pre-commit install
+```
+
 ## Formatting and Linting
-### Formatting
+Just run the pre-commit hook using
+```sh
+pre-commit run --all-files
+```
+This will reformat all files, and lint them as well. For doing it manually, see below.
+### Manually Formatting
 ```sh
 ruff format
 ```
 This command automatically reformats any files as needed. To only do a check, run `ruff format --check`
 
-### Linting
+### Manually Linting
 ```sh
 pwd # .../etl-scripts
 ruff check
