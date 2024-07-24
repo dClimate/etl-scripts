@@ -1,3 +1,4 @@
+#!/bin/sh
 # Downloading is idempotent. Because wget only continues downloads if needed, if something was already downloaded and has the same filename, it won't try again.
 generate_urls() {
     local base_url="$1"

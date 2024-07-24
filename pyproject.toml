@@ -14,6 +14,3 @@ dev = [
     "ruff",
     "pre-commit"
 ]
-all = [
-    "etl-scripts[dev]"
-]
