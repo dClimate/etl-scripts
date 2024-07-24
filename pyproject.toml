@@ -1,6 +1,8 @@
 # pyproject.toml
 [project]
 name = "etl-scripts"
+# Semantic Versioning https://semver.org/
+version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
     "xarray[io]",
@@ -9,7 +11,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "ruff"
+    "ruff",
+    "pre-commit"
 ]
 all = [
     "etl-scripts[dev]"

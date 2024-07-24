@@ -28,18 +28,18 @@ cat tmax/*.cid
 cat tmin/*.cid
 ```
 
-# Development Environment
-## Setting up
-### Local Environment
+# Development Environment Setup
+## Local Environment
 Ensure the following are installed in the local environment.
   + Everything from the Operations Setup requirements
   + `ruff` for python formatting defaults and linting. [https://github.com/astral-sh/ruff](https://github.com/astral-sh/ruff)
-### Setup python virtual environment
+## Setup python virtual environment
 1. Create virtual environment, install packages
 ```sh
 cd ~/etl-scripts # or wherever this is
 pwd # "..."/etl-scripts
 uv venv
+uv pip compile --all-extras pyproject.toml -o requirements.txt
 uv pip sync requirements.txt
 ```
 
@@ -52,21 +52,32 @@ To deactivate once done working, just run
 deactivate
 ```
 
+## Commit Hooks
+Activate your python virtualenv. Now run
+```sh
+$ source .venv/bin/activate
+(venv) $ pre-commit install
+```
+
 ## Formatting and Linting
-### Formatting
+Just run the pre-commit hook using
+```sh
+pre-commit run --all-files
+```
+This will reformat all files, and lint them as well. For doing it manually, see below.
+### Manually Formatting
 ```sh
 ruff format
 ```
 This command automatically reformats any files as needed. To only do a check, run `ruff format --check`
 
-### Linting
+### Manually Linting
 ```sh
 pwd # .../etl-scripts
 ruff check
 ```
 
 ## Changing python requirements
-We manually all dependencies in `pyproject.toml`, just like a package.json, but synchronize our actual installed complete tree of packages with `requirements-lock.txt`, which is generated from the `pyproject.toml` file.
 ### Add dependency
 As an example, we will use `xarray` with the optional `[io]`.
 1. Change `pyproject.toml` file.
@@ -81,14 +92,14 @@ index 1234567..8901234 100644
      "ipldstore @ git+https://github.com/dClimate/ipldstore",
  ]
 ```
-2. Create new locked set of dependencies `requirements-lock.txt`
+2. Create new locked set of dependencies `requirements.txt`
 ```sh
-uv pip compile pyproject.toml -o requirements-lock.txt
+uv pip compile pyproject.toml -o requirements.txt
 ```
 3. Reinstall and uninstall package as needed, all computed automatically by `uv`
 ```sh
-uv pip sync requirements-lock.txt
+uv pip sync requirements.txt
 ```
 
 ### Remove a dependency
-It's the same steps, regenerate `requirements-lock.txt` and then `uv pip sync requirements-lock.txt`.
+It's the same steps, regenerate `requirements.txt` and then `uv pip sync requirements.txt`.

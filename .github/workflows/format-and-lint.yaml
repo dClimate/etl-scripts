@@ -1,0 +1,40 @@
+# This workflow just checks the formatting and linting
+
+name: format-and-lint
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+
+    - uses: yezz123/setup-uv@v4
+      with:
+        uv-venv: ".venv"
+
+    - name: Install all dependencies
+      run: |
+        uv pip compile --all-extras pyproject.toml -o requirements.txt
+        uv pip sync requirements.txt
+
+    - name: Check formatting
+      run: |
+        ruff format --check
+
+    - name: Check linting
+      run: |
+        ruff check
