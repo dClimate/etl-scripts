@@ -32,10 +32,12 @@ download() {
 
     cd "$dir_name"
     echo "Downloading all datasets from: $dir_name"
-    # Using `parallel` runs as many concurrent downloads as possible
+    # wget's flag --timestamping makes it check to see if files from the incoming server are marked as newer or not than the ones we've already downloaded
+    # This makes it idempotent, as long as the download files all remain inside the same folder and as the same names
+    # Using xargs to run as many concurrent downloads as possible
     # This is idempotent, as long as the download files all remain inside the same folder as this script, since the -c flag of wget will either resume or quit downloads if it sees the same filename
-    # +0 of the --jobs flag in GNU parallel tells it to consume as many concurrent processes as possible
-    cat download-links.txt | parallel --jobs +0 wget --timestamping {}
+    # --max-procs=0 flag tells it to run as many processes as possible
+    cat download-links.txt | xargs --max-procs=0 -n 1 wget --timestamping
     cd ..
 }
 
