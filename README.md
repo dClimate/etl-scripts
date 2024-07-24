@@ -40,6 +40,7 @@ Ensure the following are installed in the local environment.
 cd ~/etl-scripts # or wherever this is
 pwd # "..."/etl-scripts
 uv venv
+uv pip compile --all-extras pyproject.toml -o requirements.txt
 uv pip sync requirements.txt
 ```
 
@@ -66,7 +67,6 @@ ruff check
 ```
 
 ## Changing python requirements
-We manually all dependencies in `pyproject.toml`, just like a package.json, but synchronize our actual installed complete tree of packages with `requirements-lock.txt`, which is generated from the `pyproject.toml` file.
 ### Add dependency
 As an example, we will use `xarray` with the optional `[io]`.
 1. Change `pyproject.toml` file.
@@ -81,14 +81,14 @@ index 1234567..8901234 100644
      "ipldstore @ git+https://github.com/dClimate/ipldstore",
  ]
 ```
-2. Create new locked set of dependencies `requirements-lock.txt`
+2. Create new locked set of dependencies `requirements.txt`
 ```sh
-uv pip compile pyproject.toml -o requirements-lock.txt
+uv pip compile pyproject.toml -o requirements.txt
 ```
 3. Reinstall and uninstall package as needed, all computed automatically by `uv`
 ```sh
-uv pip sync requirements-lock.txt
+uv pip sync requirements.txt
 ```
 
 ### Remove a dependency
-It's the same steps, regenerate `requirements-lock.txt` and then `uv pip sync requirements-lock.txt`.
+It's the same steps, regenerate `requirements.txt` and then `uv pip sync requirements.txt`.
