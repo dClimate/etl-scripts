@@ -6,7 +6,6 @@ Necessary exceptions have been made however, and are noted where possible. Idemp
 ## Requirements
 1. Ensure the following are installed in the local environment.
   + `wget`
-  + GNU `parallel`
   + `uv` [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv) for python packages and virtual environment creation.
   + python >= 3.10.14
 
