@@ -23,13 +23,13 @@ jobs:
         python-version: "3.10"
 
     - uses: yezz123/setup-uv@v4
+      with:
+        uv-venv: ".venv"
 
     - name: Install all dependencies
       run: |
-        uv venv
         uv pip compile --all-extras pyproject.toml -o requirements.txt
         uv pip sync requirements.txt
-        source .venv/bin/activate
 
     - name: Check formatting
       run: |
