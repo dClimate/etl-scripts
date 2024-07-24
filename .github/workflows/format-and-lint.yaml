@@ -29,6 +29,7 @@ jobs:
         uv venv
         uv pip compile --all-extras pyproject.toml -o requirements.txt
         uv pip sync requirements.txt
+        source .venv/bin/activate
 
     - name: Check formatting
       run: |
