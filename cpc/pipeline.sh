@@ -13,7 +13,10 @@ process_dataset() {
 for arg in "$@"; do
     case "$arg" in
         all)
-            process_dataset precip-conus precip-global tmax tmin
+            process_dataset precip-conus
+            process_dataset precip-global
+            process_dataset tmax
+            process_dataset tmin
             ;;
         precip-conus)
             process_dataset precip-conus

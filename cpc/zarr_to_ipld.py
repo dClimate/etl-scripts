@@ -66,7 +66,7 @@ def main():
     for arg in sys.argv[1:]:
         if arg in ["precip-conus", "precip-global", "tmax", "tmin"]:
             dataset_name = arg
-            print(f"Converting {dataset_name}.zarr to HAMT CAR")
+            print(f"Converting {dataset_name}.zarr to HAMT")
             zarr_to_ipld(dataset_name)
         else:
             print(f"Unknown argument: {arg}", file=sys.stderr)
