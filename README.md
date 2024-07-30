@@ -91,14 +91,7 @@ index 1234567..8901234 100644
      "ipldstore @ git+https://github.com/dClimate/ipldstore",
  ]
 ```
-2. Create new locked set of dependencies `requirements.txt`
-```sh
-uv pip compile pyproject.toml -o requirements.txt
-```
-3. Reinstall and uninstall package as needed, all computed automatically by `uv`
-```sh
-uv pip sync requirements.txt
-```
+2. Rerun the steps after `uv venv` in the project setup.
 
 ### Remove a dependency
 It's the same steps, regenerate `requirements.txt` and then `uv pip sync requirements.txt`.
