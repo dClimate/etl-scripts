@@ -10,10 +10,6 @@ def combine_nc_to_zarr(dataset_name: str):
     def get_latest_modification_time(files):
         return max(os.path.getmtime(file) for file in files)
 
-    # Make sure the dataset files are available
-    print("Making sure dataset files are available")
-    subprocess.run(["sh", "download.sh", dataset_name], check=True)
-
     data_dir = f"./{dataset_name}"
 
     # Get the cpc files which are all netcdf files
