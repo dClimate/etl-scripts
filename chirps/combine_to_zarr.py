@@ -34,9 +34,7 @@ def combine_nc_to_zarr(dataset_name: str):
         ds = xr.open_mfdataset(
             nc_files,
             combine="by_coords",
-            # chunks={'time': 100, 'latitude': 100, 'longitude': 100}  # Adjust as needed
         )
-        print(ds.chunks)
 
         # Rechunk the dataset
         chunk_sizes = {
@@ -45,7 +43,6 @@ def combine_nc_to_zarr(dataset_name: str):
             'longitude': 'auto'
         }
         ds = ds.chunk(chunk_sizes)
-        print(ds.chunks)
 
         for var in ds.data_vars:
             fill_value = ds[var].encoding.get("_FillValue")
