@@ -4,9 +4,12 @@ import sys
 from glob import glob
 import xarray as xr
 import numpy as np
+import multiprocessing
 
+# Set up a dask cluster with memory limits
+from dask.distributed import Client, LocalCluster
 
-def combine_nc_to_zarr(dataset_name: str):
+def combine_nc_to_zarr(dataset_name: str, dask_client):
     def get_latest_modification_time(files):
         return max(os.path.getmtime(file) for file in files)
 
@@ -34,15 +37,18 @@ def combine_nc_to_zarr(dataset_name: str):
         ds = xr.open_mfdataset(
             nc_files,
             combine="by_coords",
+            parallel=True,
         )
+        print(ds.chunks)
 
-        # Rechunk the dataset
         chunk_sizes = {
-            'time': 'auto',  # Use -1 to chunk along the entire dimension
+            'time': 'auto',
             'latitude': 'auto',
             'longitude': 'auto'
         }
         ds = ds.chunk(chunk_sizes)
+        print(ds.chunks)
+
 
         for var in ds.data_vars:
             fill_value = ds[var].encoding.get("_FillValue")
@@ -78,7 +84,9 @@ def combine_nc_to_zarr(dataset_name: str):
             for var in ds.data_vars
         }
         # Save to Zarr format
-        ds.to_zarr(zarr_path, mode="w", consolidated=True, encoding=encoding)
+        with dask_client:
+            ds.to_zarr(zarr_path, mode="w", consolidated=True, encoding=encoding)
+
 
         print(f"Combined dataset {dataset_name} saved to {zarr_path}")
     else:
@@ -86,20 +94,31 @@ def combine_nc_to_zarr(dataset_name: str):
 
 
 def main():
+    n_workers = 2  # or however many your system can handle
+    memory_limit = '12GB'  # or however much memory you can allocate
+
+    # Set up a dask cluster with memory limits
+    cluster = LocalCluster(n_workers=n_workers, threads_per_worker=1, memory_limit=memory_limit)
+    dask_client = Client(cluster)
+
     # First, change directory to the location of this file, which should be in the cpc folder, since everything else is relative from this
     # This way, this python script can be called from anywhere
     absolute_script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(absolute_script_dir)
 
-    # Skip the script name (sys.argv[0]), so start at index 1
-    for arg in sys.argv[1:]:
-        if arg in ["final-p05", "final-p25", "prelim-p05"]:
-            dataset_name = arg
-            print(f"Creating {dataset_name}.zarr by combining all .nc files")
-            combine_nc_to_zarr(dataset_name)
-        else:
-            print(f"Unknown argument: {arg}", file=sys.stderr)
-
+    try:
+        # Skip the script name (sys.argv[0]), so start at index 1
+        for arg in sys.argv[1:]:
+            if arg in ["final-p05", "final-p25", "prelim-p05"]:
+                dataset_name = arg
+                print(f"Creating {dataset_name}.zarr by combining all .nc files")
+                combine_nc_to_zarr(dataset_name, dask_client)
+            else:
+                print(f"Unknown argument: {arg}", file=sys.stderr)
+    finally:
+        dask_client.close()
+        cluster.close()
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()
