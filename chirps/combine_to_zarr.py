@@ -39,7 +39,6 @@ def combine_nc_to_zarr(dataset_name: str, dask_client):
             combine="by_coords",
             parallel=True,
         )
-        print(ds.chunks)
 
         chunk_sizes = {
             'time': 'auto',
@@ -47,7 +46,6 @@ def combine_nc_to_zarr(dataset_name: str, dask_client):
             'longitude': 'auto'
         }
         ds = ds.chunk(chunk_sizes)
-        print(ds.chunks)
 
 
         for var in ds.data_vars:
