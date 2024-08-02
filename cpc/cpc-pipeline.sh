@@ -5,10 +5,28 @@ set -e
 process_dataset() {
     local dataset_name="$1"
     sh download.sh "$dataset_name"
-    . ../.venv/bin/activate
+    . .venv/bin/activate
     python combine_to_zarr.py "$dataset_name"
     python zarr_to_ipld.py "$dataset_name"
 }
+
+original_dir=$(pwd)
+
+# Change to the directory of the script
+script_dir=$(dirname "$0")
+cd "$script_dir"
+
+# Find the root of the git repository
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+
+if [ -z "$repo_root" ]; then
+    echo "Error: This script must be run from within the etl-scripts git repository." >&2
+    exit 1
+fi
+
+# Change to the root directory of the repository
+cd "$repo_root"
+
 
 for arg in "$@"; do
     case "$arg" in
@@ -35,3 +53,6 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Return to the original directory
+cd "$original_dir"
