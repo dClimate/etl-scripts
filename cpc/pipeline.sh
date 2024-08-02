@@ -5,7 +5,7 @@ set -e
 process_dataset() {
     local dataset_name="$1"
     sh download.sh "$dataset_name"
-    source ../.venv/bin/activate
+    . ../.venv/bin/activate
     python combine_to_zarr.py "$dataset_name"
     python zarr_to_ipld.py "$dataset_name"
 }
