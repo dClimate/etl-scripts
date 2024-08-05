@@ -4,10 +4,20 @@ set -e
 
 process_dataset() {
     local dataset_name="$1"
+
+    # Go into CPC
+    cd cpc
+    # Convert the dataset over
     sh download.sh "$dataset_name"
-    . .venv/bin/activate
     python combine_to_zarr.py "$dataset_name"
     python zarr_to_ipld.py "$dataset_name"
+
+    # Publish to IPNS
+    cd ../operations
+    sh publish-to-ipns.sh cpc
+
+    # Go back to the repo root directory
+    cd ..
 }
 
 original_dir=$(pwd)
@@ -22,6 +32,9 @@ fi
 
 # Change to the root directory of the repository
 cd "$repo_root"
+
+# Activate the python virtual environment
+. .venv/bin/activate
 
 for arg in "$@"; do
     case "$arg" in
