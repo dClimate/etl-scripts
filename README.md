@@ -1,97 +1,66 @@
-These are a set of scripts meant to perform the ETLs for dClimate. Almost all scripts are **idempotent**. This means that you can rerun the script and it will only change things if any of the underlying data has changed.
+This repository contains scripts that compute and deploy ETLs for dClimate.
 
+For:
++ **Dev environment setup, Writing ETLs** See README-dev.md
+  + **Provider and dataset specific information** See the README.md inside that provider's directory (e.g. `cpc/README.md`)
++ **Running ETLs and deploying to IPFS** See README-ops.md
++ **Ensuring data access reliaibility and accuracy** See README-monitoring.md
+
+Almost all scripts are **idempotent**. This means rerunning script and it will only change things if any of the underlying data has changed.
 Necessary exceptions have been made however, and are noted where possible. Idempotency can be assumed for all the rest.
 
-# Operations Setup
-## Requirements
-1. Ensure the following are installed in the local environment.
-  + `wget`
-  + `uv` [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv) for python packages and virtual environment creation.
-  + python >= 3.10.14
+The rest of this document is meant to contain information about all the files and folders in this project and their purpose.
 
-## Run an ETL for: CPC
-```sh
-cd ./cpc
-sh pipeline.sh precip-conus precip-global tmax tmin
-cat precip-conus/*.cid
-cat precip-global/*.cid
-cat tmax/*.cid
-cat tmin/*.cid
+# Project Organization Overview
+## Data Folders
+These are the datasets we concerned with, under their larger overall groupings.
 ```
-The CIDs are stored as files in the directory created for each dataset from CPC once done.
-You can also mix and match, e.g.
-```sh
-cd ./cpc
-sh pipeline.sh tmin tmax
-cat tmax/*.cid
-cat tmin/*.cid
-```
+AGB
+agb-quarterly
 
-# Development Environment Setup
-## Local Environment
-Ensure the following are installed in the local environment.
-  + Everything from the Operations Setup requirements
-  + `ruff` for python formatting defaults and linting. [https://github.com/astral-sh/ruff](https://github.com/astral-sh/ruff)
-## Setup python virtual environment
-1. Create virtual environment, install packages
-```sh
-cd ~/etl-scripts # or wherever this is
-pwd # "..."/etl-scripts
-uv venv
-uv pip compile --all-extras pyproject.toml -o requirements.txt
-uv pip sync requirements.txt
-```
+CHIRPS
+chirps_final_05-daily
+chirps_final_25-daily
+chirps_prelim_05-daily
 
-Now activate the virtual environment.
-```sh
-source .venv/bin/activate
-```
-To deactivate once done working, just run
-```sh
-deactivate
-```
+Copernicus
+copernicus_ocean_salinity_0p5_meters-daily
+copernicus_ocean_salinity_109_meters-daily
+copernicus_ocean_salinity_1p5_meters-daily
+copernicus_ocean_salinity_25_meters-daily
+copernicus_ocean_salinity_2p6_meters-daily
+copernicus_ocean_sea_level-daily
+copernicus_ocean_temp_1p5_meters-daily
+copernicus_ocean_temp_6p5_meters-daily
 
-## Commit Hooks
-Activate your python virtualenv. Now run
-```sh
-$ source .venv/bin/activate
-(venv) $ pre-commit install
-```
+CPC
+cpc_precip_global-daily
+cpc_precip_us-daily
+cpc_temp_max-daily
+cpc_temp_min-daily
 
-## Formatting and Linting
-Just run the pre-commit hook using
-```sh
-pre-commit run --all-files
-```
-This will reformat all files, and lint them as well. For doing it manually, see below.
-### Manually Formatting
-```sh
-ruff format
-```
-This command automatically reformats any files as needed. To only do a check, run `ruff format --check`
+Deforestation
+deforestation-quarterly
 
-### Manually Linting
-```sh
-pwd # .../etl-scripts
-ruff check
-```
+ERA5
+era5_2m_temp-hourly
+era5_land_precip-hourly
+era5_land_surface_pressure-hourly
+era5_precip-hourly
+era5_surface_solar_radiation_downwards-hourly
+era5_wind_100m_u-hourly
+era5_wind_100m_v-hourly
+era5_wind_10m_u-hourly
+era5_wind_10m_v-hourly
 
-## Changing python requirements
-### Add dependency
-As an example, we will use `xarray` with the optional `[io]`.
-1. Change `pyproject.toml` file.
-```diff
-diff --git a/pyproject.toml b/pyproject.toml
-index 1234567..8901234 100644
---- a/pyproject.toml
-+++ b/pyproject.toml
-@@ -1,4 +1,5 @@
- dependencies = [
-+    "xarray[io]",
-     "ipldstore @ git+https://github.com/dClimate/ipldstore",
- ]
-```
-2. Rerun the steps after `uv venv` in the project setup.
+PRISM
+prism-precip-daily
+prism-tmax-daily
+prism-tmin-daily
 
-### Remove a dependency
-It's the same steps, regenerate `requirements.txt` and then `uv pip sync requirements.txt`.
+VHI
+vhi-weekly
+```
+You can see that there is a directory for each of these larger groupings, and every dataset has its own directory under those groupings. CPC is a good example to verify this.
+
+Under each of those directories, there are also various files that correspond to the ETL operations.

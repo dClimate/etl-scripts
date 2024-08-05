@@ -5,11 +5,13 @@ First ensure the following are installed.
 + python >= 3.10.14
 
 ## Setup python virtual environment
-1. Use `uv`
+1. Use `uv` to instantiate the virtual environment and install packages
 ```sh
 $ pwd
 "..."/etl-scripts
 $ uv venv
+$ uv pip compile --all-extras pyproject.toml -o requirements.txt
+$ uv pip sync requirements.txt
 ```
 2. To activate the virtual environment:
 ```sh
@@ -18,12 +20,6 @@ $ source .venv/bin/activate
 To deactivate once done working, just run
 ```sh
 $ deactivate
-```
-
-## Install Packages into virtual environment
-```sh
-$ uv pip compile --all-extras pyproject.toml -o requirements.txt
-$ uv pip sync requirements.txt
 ```
 
 ## Install Commit Hooks
@@ -38,7 +34,8 @@ Just run the pre-commit hook using
 pre-commit run --all-files
 ```
 This will reformat all files, and lint them as well.
-### Manually Formatting and Linting
+
+### Manually Formatting
 ```sh
 $ ruff format
 ```
@@ -67,6 +64,10 @@ index 1234567..8901234 100644
  ]
 ```
 2. Now just rerun the steps to install packages. `uv` will automatically compute what to uninstall and reinstall for us.
+```sh
+$ uv pip compile --all-extras pyproject.toml -o requirements.txt
+$ uv pip sync requirements.txt
+```
 
 ### Remove a dependency
 It's the same steps adding a dependency, after changing the `pyproject.toml` file, you rerun the steps to install packages.
