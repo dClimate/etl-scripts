@@ -40,10 +40,6 @@ process_directory() {
 
 original_dir=$(pwd)
 
-# Change to the directory of the script
-script_dir=$(dirname "$0")
-cd "$script_dir"
-
 # Find the root of the git repository
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
 
