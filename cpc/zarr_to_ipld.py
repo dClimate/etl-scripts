@@ -3,6 +3,7 @@ import sys
 from glob import glob
 from ipldstore import get_ipfs_mapper
 import xarray as xr
+import subprocess
 
 
 def zarr_to_ipld(dataset_name: str):
@@ -68,6 +69,19 @@ def main():
             dataset_name = arg
             print(f"Converting {dataset_name}.zarr to HAMT")
             zarr_to_ipld(dataset_name)
+            try:
+                subprocess.run(
+                    ["ipfs", "repo", "gc"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                print("IPFS garbage collection completed successfully.")
+            except subprocess.CalledProcessError as e:
+                print(
+                    f"Error: IPFS garbage collection failed with exit code {e.returncode}",
+                    file=sys.stderr,
+                )
         else:
             print(f"Unknown argument: {arg}", file=sys.stderr)
 

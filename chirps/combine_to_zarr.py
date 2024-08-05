@@ -1,5 +1,4 @@
 import os
-import subprocess
 import sys
 from glob import glob
 import xarray as xr
@@ -8,6 +7,7 @@ import multiprocessing
 
 # Set up a dask cluster with memory limits
 from dask.distributed import Client, LocalCluster
+
 
 def combine_nc_to_zarr(dataset_name: str, dask_client):
     def get_latest_modification_time(files):
@@ -40,13 +40,8 @@ def combine_nc_to_zarr(dataset_name: str, dask_client):
             parallel=True,
         )
 
-        chunk_sizes = {
-            'time': 'auto',
-            'latitude': 'auto',
-            'longitude': 'auto'
-        }
+        chunk_sizes = {"time": "auto", "latitude": "auto", "longitude": "auto"}
         ds = ds.chunk(chunk_sizes)
-
 
         for var in ds.data_vars:
             fill_value = ds[var].encoding.get("_FillValue")
@@ -85,7 +80,6 @@ def combine_nc_to_zarr(dataset_name: str, dask_client):
         with dask_client:
             ds.to_zarr(zarr_path, mode="w", consolidated=True, encoding=encoding)
 
-
         print(f"Combined dataset {dataset_name} saved to {zarr_path}")
     else:
         print(f"Zarr store for {dataset_name} is up to date. Skipping regeneration.")
@@ -93,10 +87,12 @@ def combine_nc_to_zarr(dataset_name: str, dask_client):
 
 def main():
     n_workers = 2  # or however many your system can handle
-    memory_limit = '12GB'  # or however much memory you can allocate
+    memory_limit = "12GB"  # or however much memory you can allocate
 
     # Set up a dask cluster with memory limits
-    cluster = LocalCluster(n_workers=n_workers, threads_per_worker=1, memory_limit=memory_limit)
+    cluster = LocalCluster(
+        n_workers=n_workers, threads_per_worker=1, memory_limit=memory_limit
+    )
     dask_client = Client(cluster)
 
     # First, change directory to the location of this file, which should be in the cpc folder, since everything else is relative from this
@@ -116,6 +112,7 @@ def main():
     finally:
         dask_client.close()
         cluster.close()
+
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
