@@ -17,7 +17,7 @@ def zarr_to_ipld(dataset_name: str):
         # Path to our zarr file, and name of our CAR file
         cid_path = f"{zarr_path}.hamt.cid"
 
-        # Check if the CAR file needs to be regenerated
+        # Check if the CID needs to be regenerated
         zarr_mtime = os.path.getmtime(zarr_path)
         car_mtime = os.path.getmtime(cid_path) if os.path.exists(cid_path) else 0
 
