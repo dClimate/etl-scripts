@@ -2,9 +2,15 @@
 # Exit immediately on any errors
 set -e
 
+# Usage Examples
+# sh publish-to-ipns.sh cpc precip-conus
+# sh publish-to-ipns.sh chirps final-p05
+# This script can also be run from anywhere as long as it is inside the etl-scripts directory
+# sh etl-scripts/dir1/dir2/publish-to-ipns.sh cpc tmax
+
 original_dir=$(pwd)
 
-# Find the root of the git repository
+# Find the root of the git repository and cd there
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
 
 if [ -z "$repo_root" ]; then
