@@ -65,12 +65,25 @@ def zarr_to_ipld(dataset_name: str):
     with open(cid_path, "w") as file:
         file.write(str(root_cid))
 
+    # Pin the new CID
+    subprocess.run(
+        [
+            "ipfs-cluster-ctl",
+            "pin",
+            "add",
+            "--name",
+            f"cpc-{dataset_name}",
+            str(root_cid),
+        ],
+        check=True,
+    )
+
     # Unpin the old CID
     if previous_cid:
         print("Unpinning previous CID")
-        subprocess.run(["ipfs", "pin", "rm", previous_cid])
+        subprocess.run(["ipfs-cluster-ctl", "pin", "rm", previous_cid], check=True)
 
-    # Cleanup the intermediate IPFS objects left over from unused HAMT nodes
+    # Cleanup the intermediate IPFS objects left over from unused HAMT nodes on this ipfs node
     print("Performing IPFS garbge collection")
     try:
         subprocess.run(
