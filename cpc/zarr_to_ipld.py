@@ -14,11 +14,12 @@ def zarr_to_ipld(dataset_name: str):
         print(f"No zarr directories found in {data_dir}")
         return
 
+    # There should only be one zarr, so just get the first element from the array
     zarr_path = zarr_dirs[0]
     # Path to our zarr file, and name of the file containing the CID
     cid_path = f"{zarr_path}.hamt.cid"
 
-    # Check if the CAR file needs to be regenerated
+    # Check if the CID needs to be regenerated if the zarr is newer
     zarr_mtime = os.path.getmtime(zarr_path)
     cid_mtime = os.path.getmtime(cid_path) if os.path.exists(cid_path) else 0
 
@@ -69,6 +70,22 @@ def zarr_to_ipld(dataset_name: str):
         print("Unpinning previous CID")
         subprocess.run(["ipfs", "pin", "rm", previous_cid])
 
+    # Cleanup the intermediate IPFS objects left over from unused HAMT nodes
+    print("Performing IPFS garbge collection")
+    try:
+        subprocess.run(
+            ["ipfs", "repo", "gc"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        print("IPFS garbage collection completed successfully.")
+    except subprocess.CalledProcessError as e:
+        print(
+            f"Error: IPFS garbage collection failed with exit code {e.returncode}",
+            file=sys.stderr,
+        )
+
 
 def main():
     # First, change directory to the location of this file, which should be in the cpc folder, since everything else is relative from this
@@ -82,21 +99,6 @@ def main():
             dataset_name = arg
             print(f"Converting {dataset_name}.zarr to HAMT")
             zarr_to_ipld(dataset_name)
-            # Cleanup the intermediate IPFS objects left over from unused HAMT nodes
-            print("Performing IPFS garbge collection")
-            try:
-                subprocess.run(
-                    ["ipfs", "repo", "gc"],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                print("IPFS garbage collection completed successfully.")
-            except subprocess.CalledProcessError as e:
-                print(
-                    f"Error: IPFS garbage collection failed with exit code {e.returncode}",
-                    file=sys.stderr,
-                )
         else:
             print(f"Unknown argument: {arg}", file=sys.stderr)
 
