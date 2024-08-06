@@ -1,5 +1,5 @@
 #!/bin/sh
-# Exit if any command fails
+# Exit immediately on any errors
 set -e
 
 process_dataset() {
@@ -14,7 +14,7 @@ process_dataset() {
 
     # Publish to IPNS
     cd ../operations
-    sh publish-to-ipns.sh cpc
+    sh publish-to-ipns.sh cpc "$dataset_name"
 
     # Go back to the repo root directory
     cd ..
