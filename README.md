@@ -163,12 +163,6 @@ First, ensure an ipfs-cluster-ctl and ipfs daemon are running.
 ```sh
 cd operations
 sh pipeline-cpc.sh precip-conus
+cat cpc/precip-conus/*.cid
 ```
 The CIDs are stored as files in the directory created for each dataset from CPC once done.
-You can also mix and match, e.g.
-```sh
-cd ./cpc
-sh pipeline.sh tmin tmax
-cat tmax/*.cid
-cat tmin/*.cid
-```
