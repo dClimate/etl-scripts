@@ -1,18 +1,14 @@
 This repository contains scripts that compute and deploy ETLs for dClimate.
 
 For:
-+ **Dev environment setup, Writing ETLs** See README-dev.md
++ **Dev environment setup, Writing ETLs** See `README-dev.md`
   + **Provider and dataset specific information** See the README.md inside that provider's directory (e.g. `cpc/README.md`)
-+ **Running ETLs and deploying to IPFS** See README-ops.md
-+ **Ensuring data access reliaibility and accuracy** See README-monitoring.md
++ **Running ETLs and deploying to IPFS** See `README-ops.md`
++ **Ensuring data access reliaibility and accuracy** See `README-monitoring.md`
 
-Almost all scripts are **idempotent**. This means rerunning script and it will only change things if any of the underlying data has changed.
-Necessary exceptions have been made however, and are noted where possible. Idempotency can be assumed for all the rest.
-
-The rest of this document is meant to contain information about all the files and folders in this project and their purpose.
+Almost all scripts can be assumed to be **idempotent**. This means rerunning script and it will only change things if any of the underlying data has changed. Necessary exceptions have been made however, and are noted where possible.
 
 # Project Organization Overview
-## Data Folders
 These are the datasets we concerned with, under their larger overall groupings.
 ```
 AGB
@@ -64,3 +60,24 @@ vhi-weekly
 You can see that there is a directory for each of these larger groupings, and every dataset has its own directory under those groupings. CPC is a good example to verify this.
 
 Under each of those directories, there are also various files that correspond to the ETL operations.
+
+# General ETL Steps
+```mermaid
+graph
+
+remote["CPC's Remote HTTPS Server"]
+nc["netCDF Files"]
+zarr["Zarr on Disk"]
+CID
+cluster["IPFS Cluster"]
+IPNS
+
+remote -->|download.sh| nc
+nc -->|combine_to_zarr.py| zarr
+zarr -->|zarr_to_ipld.py| CID
+CID -->|publish-to-ipns.sh| IPNS
+CID -->|ipfs-cluster-ctl| cluster
+
+cpc-precip-conus --- remote
+cpc-tmax --- remote
+```
