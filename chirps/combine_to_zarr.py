@@ -87,7 +87,7 @@ def combine_nc_to_zarr(dataset_name: str, dask_client):
 
 def main():
     n_workers = 2  # or however many your system can handle
-    memory_limit = "12GB"  # or however much memory you can allocate
+    memory_limit = "10GB"  # or however much memory you can allocate
 
     # Set up a dask cluster with memory limits
     cluster = LocalCluster(

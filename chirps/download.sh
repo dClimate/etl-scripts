@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 # Downloading is idempotent. Because wget only continues downloads if needed, if something was already downloaded and has the same filename, it won't try again.
 
 retrieve_urls() {
@@ -26,7 +27,6 @@ retrieve_and_write_urls() {
     local dir_name="${dataset_type}-${precision}"
     local urls
 
-    mkdir -p "$dir_name" # create if it doesn't exist yet
     cd "$dir_name"
     urls=$(retrieve_urls "$precision" "$dataset_type")
     echo "$urls" > ./download-links.txt

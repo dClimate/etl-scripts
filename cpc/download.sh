@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 # Downloading is idempotent. Because wget only continues downloads if needed, if something was already downloaded and has the same filename, it won't try again.
 generate_urls() {
     local base_url="$1"
@@ -21,7 +22,6 @@ generate_and_write() {
     local current_year=$(date +"%Y")
     local urls
 
-    mkdir -p "$dir_name" # create if it doesn't exist yet
     cd "$dir_name"
     urls=$(generate_urls "$base_url" "$start_year" "$current_year")
     echo "$urls" > ./download-links.txt
