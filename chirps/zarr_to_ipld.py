@@ -3,6 +3,7 @@ import sys
 from glob import glob
 from ipldstore import get_ipfs_mapper
 import xarray as xr
+import subprocess
 
 
 def zarr_to_ipld(dataset_name: str):
@@ -13,47 +14,91 @@ def zarr_to_ipld(dataset_name: str):
         print(f"No zarr directories found in {data_dir}")
         return
 
-    for zarr_path in zarr_dirs:
-        # Path to our zarr file, and name of our CAR file
-        cid_path = f"{zarr_path}.hamt.cid"
+    # There should only be one zarr, so just get the first element from the array
+    zarr_path = zarr_dirs[0]
+    # Path to our zarr file, and name of the file containing the CID
+    cid_path = f"{zarr_path}.hamt.cid"
 
-        # Check if the CID needs to be regenerated
-        zarr_mtime = os.path.getmtime(zarr_path)
-        car_mtime = os.path.getmtime(cid_path) if os.path.exists(cid_path) else 0
+    # Check if the CID needs to be regenerated if the zarr is newer
+    zarr_mtime = os.path.getmtime(zarr_path)
+    cid_mtime = os.path.getmtime(cid_path) if os.path.exists(cid_path) else 0
 
-        if zarr_mtime > car_mtime:
-            print(f"Using {zarr_path} to create {cid_path}")
+    # If our CID is newer than our Zarr data, don't process this and just exit'
+    if cid_mtime > zarr_mtime:
+        print(
+            f"Zarr {zarr_path} is older than last generated CID {cid_path}, skipping sending to IPLD"
+        )
+        return
 
-            # Create an IPLDStore instance
-            ipld_store = get_ipfs_mapper(host="http://127.0.0.1:5001")
+    print(f"Using {zarr_path} to create {cid_path}")
 
-            # Open the Zarr dataset using xarray
-            try:
-                ds = xr.open_zarr(zarr_path)
-            except Exception as e:
-                print(
-                    f"Error: Unable to open Zarr dataset at {zarr_path} due to exception: {e}"
-                )
-                continue
+    # Create an IPLDStore instance
+    ipld_store = get_ipfs_mapper(host="http://127.0.0.1:5001")
 
-            # Create a new Zarr dataset in the IPLDStore
-            try:
-                ds.to_zarr(ipld_store, mode="w", consolidated=True)
-            except Exception as e:
-                print(f"Error: Unable to write dataset to IPLDStore: {e}")
-                continue
+    # Open the Zarr dataset using xarray
+    try:
+        ds = xr.open_zarr(zarr_path)
+    except Exception as e:
+        print(
+            f"Error: Unable to open Zarr dataset at {zarr_path} due to exception: {e}"
+        )
+        return
 
-            # Freeze the current state of the HAMT and get the root CID
-            root_cid = ipld_store.freeze()
+    # Create a new Zarr dataset in the IPLDStore
+    try:
+        ds.to_zarr(ipld_store, mode="w", consolidated=True)
+    except Exception as e:
+        print(f"Error: Unable to write dataset to IPLDStore: {e}")
+        return
 
-            # Write the HAMT CID to a file
-            with open(cid_path, "w") as file:
-                file.write(str(root_cid))
+    # Freeze the current state of the HAMT and get the root CID
+    root_cid = ipld_store.freeze()
 
-        else:
-            print(
-                f"CID {cid_path} for {zarr_path} is up to date. Skipping regeneration."
-            )
+    # Store the previous CID so that we can tell IPFS daemon to unpin it once done creating the new CID
+    previous_cid = None
+    if os.path.exists(cid_path):
+        with open(cid_path, "r") as file:
+            previous_cid = file.read().strip()
+
+    # Write the CID of the HAMT to a file
+    # This will also implicitly pin the new root of the HAMT
+    with open(cid_path, "w") as file:
+        file.write(str(root_cid))
+
+    # Pin the new CID
+    subprocess.run(
+        [
+            "ipfs-cluster-ctl",
+            "pin",
+            "add",
+            "--name",
+            f"chirps-{dataset_name}",
+            str(root_cid),
+        ],
+        check=True,
+    )
+
+    # Unpin the old CID
+    if previous_cid:
+        print("Unpinning previous CID")
+        # Don't check the result of this, in case the old CID was already unpinned
+        subprocess.run(["ipfs-cluster-ctl", "pin", "rm", previous_cid], check=False)
+
+    # Cleanup the intermediate IPFS objects left over from unused HAMT nodes on this ipfs node
+    print("Performing IPFS garbge collection")
+    try:
+        subprocess.run(
+            ["ipfs", "repo", "gc"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        print("IPFS garbage collection completed successfully.")
+    except subprocess.CalledProcessError as e:
+        print(
+            f"Error: IPFS garbage collection failed with exit code {e.returncode}",
+            file=sys.stderr,
+        )
 
 
 def main():
