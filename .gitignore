@@ -1,10 +1,11 @@
 .DS_Store
 
 *.nc
+*.zip
 *.zarr
 *.cid
 download-links.txt
-available-for-download-*.txt
+available-for-download.txt
 
 pyrightconfig.json
 requirements.txt
