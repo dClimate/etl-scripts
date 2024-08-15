@@ -167,6 +167,52 @@ dataset_description = {
         "The product gives additional variables (i.e. Absolute Dynamic Topography and geostrophic currents (absolute and anomalies))."  # noqa: E501
         "It serves in delayed-time applications. This product is processed by the DUACS multimission altimeter data processing system. "  # noqa: E501
         f"More information at {_dataset_parameters(analysis_type='analysis')[2]} and {_dataset_parameters(analysis_type='reanalysis')[2]}"
+    },
+    # TODO FIX THE ANALYSIS AND REANALYSIS LINK
+    "physics": {
+         "The Operational Mercator global ocean analysis and forecast system at 1/12 degree includes daily mean ",
+        "files of temperature from the top to the bottom over the global ocean. ",
+            "The global ocean output files are displayed with a 1/12 degree horizontal ",
+            "resolution with regular longitude/latitude equirectangular projection. ",
+            "50 vertical levels are provided, ranging from 0 to 5500 meters. ",
+            "Data is updated on a 24 hour lag at 12:01 PM every day. ",
+            "Prior to January 1, 2020 data from the GLORYS12V1 reanalysis is provided. ",
+            "The GLORYS12V1 product is the CMEMS global ocean eddy-resolving (1/12° horizontal resolution, ",
+            "50 vertical levels) reanalysis covering the altimetry (1993 onward). ",
+            "It is based largely on the current real-time global forecasting CMEMS system. ",
+            "The model component is the NEMO platform driven at surface by ECMWF ERA-Interim ",
+            "then ERA5 reanalyses for recent years. Observations are assimilated by means of a reduced-order ",
+            "Kalman filter. Along track altimeter data (Sea Level Anomaly), Satellite Sea Surface Temperature, ",
+            "Sea Ice Concentration and In situ Temperature and Salinity vertical Profiles are jointly assimilated. ",
+            "Moreover, a 3D-VAR scheme provides a correction for the slowly-evolving large-scale biases ",
+            "in temperature and salinity. ",
+            f"More information at {_dataset_parameters(analysis_type='analysis')[2]} and {_dataset_parameters(analysis_type='reanalysis')[2]}"
+    },
+    # TODO FIX THE ANALYSIS AND REANALYSIS LINK
+    "salinity": {
+            "The Operational Mercator global ocean analysis and forecast system at 1/12 degree includes daily mean ",
+            "files of temperature from the top to the bottom over the global ocean. ",
+            "The global ocean output files are displayed with a 1/12 degree horizontal ",
+            "resolution with regular longitude/latitude equirectangular projection. ",
+            "50 vertical levels are provided, ranging from 0 to 5500 meters. ",
+            "Data is updated on a 24 hour lag at 12:01 PM every day. ",
+            "Prior to January 1, 2020 data from the GLORYS12V1 reanalysis is provided. ",
+            "The GLORYS12V1 product is the CMEMS global ocean eddy-resolving (1/12° horizontal resolution, ",
+            "50 vertical levels) reanalysis covering the altimetry (1993 onward). ",
+            "It is based largely on the current real-time global forecasting CMEMS system. ",
+            "The model component is the NEMO platform driven at surface by ECMWF ERA-Interim ",
+            "then ERA5 reanalyses for recent years. Observations are assimilated by means of ",
+            "a reduced-order Kalman filter. Along track altimeter data (Sea Level Anomaly), ",
+            "Satellite Sea Surface Temperature, Sea Ice Concentration and In situ Temperature ",
+            "and Salinity vertical Profiles are jointly assimilated.  Moreover, a 3D-VAR scheme ",
+            "provides a correction for  the slowly-evolving large-scale biases in temperature and salinity. ",
+            "Note that salinity data values are returned in Practical Salinity Units (PSUs), ",
+            "which are explicitly discouraged within the scientific community. ",
+            "Specifying PSU under `unit_of_measurement` therefore breaks dClimate's API ",
+            "due to incongruencies with the supporting libraries for unit conversion. ",
+            "For this reason we leave the `unit_of_measurement` field blank, ",
+            "although the dataset values are in fact measured in PSUs.",
+            f"More information at {_dataset_parameters(analysis_type='analysis')[2]} and {_dataset_parameters(analysis_type='reanalysis')[2]}"
     }
 }
 

@@ -29,7 +29,6 @@ class Metadata(Convenience, IPFS):
     """
 
     def __init__(self):
-        print("EHRE")
         super().__init__()
 
     @classmethod
@@ -404,9 +403,11 @@ class Metadata(Convenience, IPFS):
             **dataset[self.data_var].encoding,
         }
         rename_dict = {
-            "preferred_chunks": "Zarr chunk size",
-            "missing value": "Fill value",
-            "Conventions": "CF convention",
+            "preferred_chunks": "zarr_chunk_size",
+            "missing_value": "fill_value",
+            "Conventions": "cf_convention",
+            "Metadata_Conventions": "metadata_convention",
+
         }
         properties_dict = {rename_dict.get(key, key): all_md[key] for key in zarr_attrs if key in all_md}
         # Reformat attributes
@@ -417,6 +418,7 @@ class Metadata(Convenience, IPFS):
         if "dtype" in properties_dict:
             properties_dict["dtype"] = str(properties_dict["dtype"])
 
+        print(properties_dict)
         return properties_dict
 
     def register_stac_item(self, stac_item: dict):

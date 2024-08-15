@@ -144,6 +144,10 @@ class CopernicusOcean(Fetcher):
         # Implementation of the method
         return timespan
 
+    def prefetch(self):
+        # Implementation of the method
+        return "prefetch data"
+
     @property
     def file_type(cls):
         """
@@ -758,17 +762,6 @@ class CopernicusOceanSeaSurfaceHeight(CopernicusOcean):
 
     expected_nan_frequency = 0.4226138117283951
 
-    @property
-    def dataset_description(self):
-        return (
-            "Altimeter satellite gridded Sea Level Anomalies (SLA) computed with respect to a twenty-year 2012 mean."
-            "The sea level anomaly (SLA) is the current height of the sea (in meters) above the mean sea surface height."  # noqa: E501
-            "The SLA is estimated by Optimal Interpolation, merging the L3 along-track measurement from the different altimeter missions available."  # noqa: E501
-            "Part of the processing is fitted to the Global ocean. (see QUID document or 1 [http://duacs.cls.fr] pages for processing details)."  # noqa: E501
-            "The product gives additional variables (i.e. Absolute Dynamic Topography and geostrophic currents (absolute and anomalies))."  # noqa: E501
-            "It serves in delayed-time applications. This product is processed by the DUACS multimission altimeter data processing system. "  # noqa: E501
-            f"More information at {self._info_url('analysis')} and {self._info_url('reanalysis')}"
-        )
 
     def _dataset_parameters(self, analysis_type: str) -> tuple[str, str, str]:
         """
@@ -819,29 +812,6 @@ class CopernicusOceanGlobalPhysics(CopernicusOcean, ABC):
     Parent class for all datasets using Copernicus Ocean Global Physics datasets
     Current inheriting datasets include Temperature and Sea Water Salinity
     """
-
-    @property
-    def dataset_description(self):
-        return (
-            "The Operational Mercator global ocean analysis and forecast system at 1/12 degree includes daily mean "
-            "files of temperature from the top to the bottom over the global ocean. "
-            "The global ocean output files are displayed with a 1/12 degree horizontal "
-            "resolution with regular longitude/latitude equirectangular projection. "
-            "50 vertical levels are provided, ranging from 0 to 5500 meters. "
-            "Data is updated on a 24 hour lag at 12:01 PM every day. "
-            "Prior to January 1, 2020 data from the GLORYS12V1 reanalysis is provided. "
-            "The GLORYS12V1 product is the CMEMS global ocean eddy-resolving (1/12° horizontal resolution, "
-            "50 vertical levels) reanalysis covering the altimetry (1993 onward). "
-            "It is based largely on the current real-time global forecasting CMEMS system. "
-            "The model component is the NEMO platform driven at surface by ECMWF ERA-Interim "
-            "then ERA5 reanalyses for recent years. Observations are assimilated by means of a reduced-order "
-            "Kalman filter. Along track altimeter data (Sea Level Anomaly), Satellite Sea Surface Temperature, "
-            "Sea Ice Concentration and In situ Temperature and Salinity vertical Profiles are jointly assimilated. "
-            "Moreover, a 3D-VAR scheme provides a correction for the slowly-evolving large-scale biases "
-            "in temperature and salinity. "
-            f"More information for analysis at {self._info_url('analysis')} "
-            f"and reanalysis at {self._info_url('reanalysis')}"
-        )
 
     final_lag_in_days = 1095
 
@@ -1104,35 +1074,6 @@ class CopernicusOceanSalinity(CopernicusOceanGlobalPhysics, ABC):  # pragma: noc
 
     def relative_path(self):
         return super().relative_path() / "salinity"
-
-    @property
-    def dataset_description(self):
-        return (
-            "The Operational Mercator global ocean analysis and forecast system at 1/12 degree includes daily mean "
-            "files of temperature from the top to the bottom over the global ocean. "
-            "The global ocean output files are displayed with a 1/12 degree horizontal "
-            "resolution with regular longitude/latitude equirectangular projection. "
-            "50 vertical levels are provided, ranging from 0 to 5500 meters. "
-            "Data is updated on a 24 hour lag at 12:01 PM every day. "
-            "Prior to January 1, 2020 data from the GLORYS12V1 reanalysis is provided. "
-            "The GLORYS12V1 product is the CMEMS global ocean eddy-resolving (1/12° horizontal resolution, "
-            "50 vertical levels) reanalysis covering the altimetry (1993 onward). "
-            "It is based largely on the current real-time global forecasting CMEMS system. "
-            "The model component is the NEMO platform driven at surface by ECMWF ERA-Interim "
-            "then ERA5 reanalyses for recent years. Observations are assimilated by means of "
-            "a reduced-order Kalman filter. Along track altimeter data (Sea Level Anomaly), "
-            "Satellite Sea Surface Temperature, Sea Ice Concentration and In situ Temperature "
-            "and Salinity vertical Profiles are jointly assimilated.  Moreover, a 3D-VAR scheme "
-            "provides a correction for  the slowly-evolving large-scale biases in temperature and salinity. "
-            "Note that salinity data values are returned in Practical Salinity Units (PSUs), "
-            "which are explicitly discouraged within the scientific community. "
-            "Specifying PSU under `unit_of_measurement` therefore breaks dClimate's API "
-            "due to incongruencies with the supporting libraries for unit conversion. "
-            "For this reason we leave the `unit_of_measurement` field blank, "
-            "although the dataset values are in fact measured in PSUs."
-            f"More information for analysis at {self._info_url('analysis')} "
-            f"and reanalysis at {self._info_url('reanalysis')}"
-        )
 
     data_var = "so"
 
