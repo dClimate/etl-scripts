@@ -1,8 +1,6 @@
 # Development Environment Setup
 ## Local Environment
-First ensure the following are installed.
-+ `uv` [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv) for python packages and virtual environment creation.
-+ python >= 3.10.14
+First ensure all the requirements from README-ops.md are installed, then follow the steps below.
 
 ## Setup python virtual environment
 1. Use `uv` to instantiate the virtual environment and install packages
