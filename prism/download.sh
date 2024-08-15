@@ -52,7 +52,6 @@ $new_url"
     done
 
     echo Constructing list of all dates with grid counts and download links...
-    echo "$range_query_urls"
     local all_ranges=$(echo "$range_query_urls" | xargs --max-procs=0 -n 1 curl --silent)
     echo Writing list to "$dataset_dir/$available_for_download_txt"
     echo "$all_ranges" | sort | awk '{print $1, $4, $5 "?format=nc"}' > "$available_for_download_txt"
