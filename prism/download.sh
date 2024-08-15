@@ -37,19 +37,22 @@ generate_available() {
     while [ $year -le $latest_year ]; do
         # Get the earliest and latest date available for this year
         local dates_list_html=$(echo "$date_list_results" | grep -E "$year[0-1][0-9][0-3][0-9]_bil\.zip")
-        local dates_list=$(echo "$dates_list_html" | grep --extended-regexp 'PRISM_(?:ppt|tmax|tmin)_.*[0-9]{8}_bil\.zip' | sed -E 's/.*([1-2][0-9]{3}[0-1][0-9][0-3][0-9])_bil\.zip<.*/\1/' | sort)
+        local dates_list=$(echo "$dates_list_html" | grep -E 'PRISM_(ppt|tmax|tmin)_.*[0-9]{8}_bil\.zip' | sed -E 's/.*([1-2][0-9]{3}[0-1][0-9][0-3][0-9])_bil\.zip<.*/\1/' | sort)
         local earliest_date=$(echo "$dates_list" | head -n 1)
         local latest_date=$(echo "$dates_list" | tail -n 1)
 
         # Setup the range request with these dates
         local new_url="https://services.nacse.org/prism/data/public/releaseDate/$data_type/$earliest_date/$latest_date"
-        range_query_urls="$range_query_urls\n$new_url"
+        # Concatenate with a newline
+        range_query_urls="$range_query_urls
+$new_url"
 
         # Move to the next year
         year=$((year + 1))
     done
 
     echo Constructing list of all dates with grid counts and download links...
+    echo "$range_query_urls"
     local all_ranges=$(echo "$range_query_urls" | xargs --max-procs=0 -n 1 curl --silent)
     echo Writing list to "$dataset_dir/$available_for_download_txt"
     echo "$all_ranges" | sort | awk '{print $1, $4, $5 "?format=nc"}' > "$available_for_download_txt"
@@ -88,7 +91,8 @@ download() {
             # Unzip and extract just the nc file
             mkdir -p "$data_date"
             unzip "$zip_name" -d "$data_date"
-            mv "$data_date/*.nc" "./$nc_name"
+            nc_inside_zip_name=$(ls "$data_date" | grep -E '.*.nc$')
+            mv "$data_date/$nc_inside_zip_name" "./$nc_name"
             rm -r "$data_date"
 
             # Wait 2 seconds between each download, to avoid overwhelming the PRISM servers
