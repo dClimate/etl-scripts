@@ -7,5 +7,7 @@ download-links.txt
 
 pyrightconfig.json
 requirements.txt
+cached_data
+datasets
 .env
 __pycache__

@@ -13,6 +13,8 @@ from .cli import main
 from .fetcher import CopernicusOceanSeaSurfaceHeight
 from dc_etl.pipeline import Pipeline
 from dc_etl import component
+from .transformer import set_zarr_metadata, add_metadata
+from .ipld_loader import IPLDStacLoader
 
 
 HERE = filespec.file(pathlib.Path(__file__).parent, auto_mkdir=True)
@@ -33,9 +35,17 @@ def mainPipeline():
             identical_dims=["latitude", "latitude"],
             preprocessors=[component.combine_preprocessor("fix_fill_value", -9.96921e36)],
         ),
-        transformer=component.transformer("compress", ["sla"]),
-        loader=component.loader(
-            "ipld", time_dim="time", publisher=component.ipld_publisher("local_file", CACHE / "copernicus_ocean" / "sea_level" / "combined" / "zarr_head.cid")
+        transformer=component.transformer(
+            "composite",
+            set_zarr_metadata("sla"),
+            add_metadata("sea_level"),
+            # component.transformer("rename_dims", {"lat": "latitude", "lon": "longitude"}),
+            # component.transformer("normalize_longitudes"),
+            component.transformer("compress", ["sla"]),
+        ),
+        # transformer=component.transformer("compress", ["sla"]),
+        loader=IPLDStacLoader(
+            time_dim="time", publisher=component.ipld_publisher("local_file", CACHE / "copernicus_ocean" / "sea_level" / "combined" / "zarr_head.cid")
         ),
     )
 

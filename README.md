@@ -166,8 +166,3 @@ sh pipeline-cpc.sh precip-conus
 cat cpc/precip-conus/*.cid
 ```
 The CIDs are stored as files in the directory created for each dataset from CPC once done.
-
-# FAQ
-
-WHY DOESN'T MY ZARR PARSE PROPERLY?!?!
-- Try setting the time dimension to unlimited in the .nc file

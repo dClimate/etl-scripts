@@ -76,17 +76,17 @@ class CopernicusOcean(Fetcher):
         dict containing static fields in the metadata
         """
         static_metadata = {
-            "coordinate reference system": "EPSG:4326",
-            "update cadence": self.update_cadence,
-            "temporal resolution": self.time_resolution,
-            "spatial resolution": self.spatial_resolution,
-            "spatial precision": 0.01,
-            "provider url": "https://resources.marine.copernicus.eu/product-detail/",
-            "reanalysis data download url": self._dataset_parameters(analysis_type="reanalysis")[2],
-            "analysis data download url": self._dataset_parameters(analysis_type="analysis")[2],
+            "coordinate_reference_system": "EPSG:4326",
+            "update_cadence": self.update_cadence,
+            "temporal_resolution": self.time_resolution,
+            "spatial_resolution": self.spatial_resolution,
+            "spatial_precision": 0.01,
+            "provider_url": "https://resources.marine.copernicus.eu/product-detail/",
+            "reanalysis_data_download_url": self._dataset_parameters(analysis_type="reanalysis")[2],
+            "analysis_data_download_url": self._dataset_parameters(analysis_type="analysis")[2],
             "publisher": "Copernicus Marine Service",
             "title": "Copernicus Marine Anaylsis and Reanalysis",
-            "provider description": (
+            "provider_description": (
                 "Based on satellite and in situ observations, the"
                 " Copernicus services deliver near-real-time data on a global level which can"  # noqa: E501
                 " also be used for local and regional needs, to help us better understand our planet"  # noqa: E501
@@ -105,18 +105,18 @@ class CopernicusOcean(Fetcher):
                 " for example, of the ocean and the atmosphere. Maps are created from imagery, features"  # noqa: E501
                 " and anomalies are identified and statistical information is extracted."  # noqa: E501
             ),
-            "dataset description": self.dataset_description,
+            "dataset_description": self.dataset_description,
             "license": "Reuse allowed with attribution (custom license)",
-            "terms of service": "https://marine.copernicus.eu/user-corner/service-commitments-and-licence",
+            "terms_of_service": "https://marine.copernicus.eu/user-corner/service-commitments-and-licence",
             "name": self.dataset_name,
             "updated": str(datetime.datetime.now()),
-            "missing value": self.missing_value,
+            "missing_value": self.missing_value,
             "tags": self.tags,
-            "standard name": self.standard_name,
-            "long name": self.long_name,
-            "unit of measurement": self.unit_of_measurement,
-            "final lag in days": self.final_lag_in_days,
-            "preliminary lag in days": self.preliminary_lag_in_days,
+            "standard_name": self.standard_name,
+            "long_name": self.long_name,
+            "unit_of_measurement": self.unit_of_measurement,
+            "final_lag_in_days": self.final_lag_in_days,
+            "preliminary_lag_in_days": self.preliminary_lag_in_days,
             "expected_nan_frequency": self.expected_nan_frequency,
         }
 
@@ -716,6 +716,7 @@ class CopernicusOcean(Fetcher):
             unlimited_dims = {'time': True}
             new_ds[self.data_var].encoding.pop("scale_factor", None)
             new_ds[self.data_var].encoding.pop("add_offset", None)
+            new_ds = self.set_zarr_metadata(new_ds)
             new_ds.to_netcdf(local_file_path, format="NETCDF4", unlimited_dims=unlimited_dims)
             local_file_path.with_suffix("").unlink()
 
@@ -738,105 +739,6 @@ class CopernicusOcean(Fetcher):
 
         :param xarray.Dataset dataset: The dataset being prepared for parsing to IPLD
         """
-        dataset = super().set_zarr_metadata(dataset)
-        # Delete problematic or extraneous holdover attributes from the input files
-        # Because each Copernicus Marine dataset names fields differently
-        # ('latitude' vs 'lat') this list is long and duplicative
-        keys_to_remove = [
-            "processing_level",
-            "source",
-            "_CoordSysBuilder",
-            "FROM_ORIGINAL_FILE__platform",
-            "time_coverage_resolution",
-            "contact",
-            "keywords_vocabulary",
-            "ssalto_duacs_comment",
-            "cdm_data_type",
-            "institution",
-            "geospatial_vertical_max",
-            "date_created",
-            "summary",
-            "FROM_ORIGINAL_FILE__product_version",
-            "FROM_ORIGINAL_FILE__geospatial_lat_units",
-            "keywords",
-            "time_coverage_end",
-            "geospatial_vertical_positive",
-            "geospatial_vertical_units",
-            "provider url",
-            "FROM_ORIGINAL_FILE__Metadata_Conventions",
-            "FROM_ORIGINAL_FILE__geospatial_lon_min",
-            "FROM_ORIGINAL_FILE__geospatial_lon_max",
-            "FROM_ORIGINAL_FILE__geospatial_lon_units",
-            "FROM_ORIGINAL_FILE__geospatial_lat_min",
-            "FROM_ORIGINAL_FILE__latitude_min",
-            "FROM_ORIGINAL_FILE__geospatial_lat_max",
-            "FROM_ORIGINAL_FILE__field_type",
-            "FROM_ORIGINAL_FILE__longitude_min",
-            "FROM_ORIGINAL_FILE__longitude_max",
-            "FROM_ORIGINAL_FILE__latitude_max",
-            "FROM_ORIGINAL_FILE__geospatial_lon_resolution",
-            "FROM_ORIGINAL_FILE__geospatial_lat_resolution",
-            "FROM_ORIGINAL_FILE__software_version",
-            "date_issued",
-            "date_modified",
-            "geospatial_vertical_min",
-            "history",
-            "time_coverage_start",
-            "creator_name",
-            "time_coverage_duration",
-            "creator_url",
-            "comment",
-            "creator_email",
-            "project",
-            "standard_name_vocabulary",
-            "z_min",
-            "z_max",
-            "easting",
-            "northing",
-            "domain_name",
-            "bulletin_date",
-            "bulletin_type",
-            "forecast_type",
-            "forecast_range",
-            "field_date",
-            "field_type",
-            "julian_day_unit",
-            "field_julian_date",
-            "geospatial_vertical_resolution",
-            "references",
-            "compute_hosts",
-            "n_workers",
-            "sshcluster_timeout",
-            "product_user_manual",
-            "quality_information_document",
-            "_ChunkSizes",
-            "copernicus_marine_client_version",
-            "CDI",
-            "CDO",
-            "original_shape",
-            "chunksizes",
-            "add_offset",
-            "scale_factor",
-            "latitude_max",
-            "latitude_min",
-            "longitude_max",
-            "longitude_min",
-            "copernicusmarine_version",
-        ]
-
-        all_keys = (
-            list(dataset.attrs.keys())
-            + list(dataset[self.data_var].attrs.keys())
-            + list(dataset[self.data_var].encoding.keys())
-        )
-        for key in all_keys:
-            if key in keys_to_remove:
-                dataset.attrs.pop(key, None)
-                dataset["latitude"].attrs.pop(key, None)
-                dataset["longitude"].attrs.pop(key, None)
-                dataset[self.data_var].attrs.pop(key, None)
-                dataset[self.data_var].encoding.pop(key, None)
-
         dataset[self.data_var].encoding["units"] = self.unit_of_measurement
         # Mark the final date of reanalysis dataset and beginning of
         # Near Real Time ("analysis") data in the combined dataset
