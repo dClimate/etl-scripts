@@ -1,9 +1,7 @@
 .DS_Store
 
-*.nc
 *.zarr
 *.cid
-download-links.txt
 
 pyrightconfig.json
 requirements.txt
