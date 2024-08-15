@@ -68,63 +68,54 @@ class CopernicusOcean(Fetcher):
         self.requested_ipfs_chunker = requested_ipfs_chunker
         self._cache = cache
 
-    # METADATA
-
-    @property
-    def static_metadata(self):
-        """
-        dict containing static fields in the metadata
-        """
-        static_metadata = {
-            "coordinate_reference_system": "EPSG:4326",
-            "update_cadence": self.update_cadence,
-            "temporal_resolution": self.time_resolution,
-            "spatial_resolution": self.spatial_resolution,
-            "spatial_precision": 0.01,
-            "provider_url": "https://resources.marine.copernicus.eu/product-detail/",
-            "reanalysis_data_download_url": self._dataset_parameters(analysis_type="reanalysis")[2],
-            "analysis_data_download_url": self._dataset_parameters(analysis_type="analysis")[2],
-            "publisher": "Copernicus Marine Service",
-            "title": "Copernicus Marine Anaylsis and Reanalysis",
-            "provider_description": (
-                "Based on satellite and in situ observations, the"
-                " Copernicus services deliver near-real-time data on a global level which can"  # noqa: E501
-                " also be used for local and regional needs, to help us better understand our planet"  # noqa: E501
-                " and sustainably manage the environment we live in. "  # noqa: E501
-                "Copernicus is served by a set of dedicated satellites (the Sentinel families) and"  # noqa: E501
-                " contributing missions (existing commercial and public satellites). The Sentinel satellites"  # noqa: E501
-                " are specifically designed to meet the needs of the Copernicus services and their users. Since"  # noqa: E501
-                " the launch of Sentinel-1A in 2014, the European Union set in motion a process to place a"  # noqa: E501
-                " constellation of almost 20 more satellites in orbit before 2030. "  # noqa: E501
-                "Copernicus also collects information from in situ systems such as ground stations, which"  # noqa: E501
-                " deliver data acquired by a multitude of sensors on the ground, at sea or in the air. "  # noqa: E501
-                "The Copernicus services transform this wealth of satellite and in situ data into"  # noqa: E501
-                " value-added information by processing and analysing the data. Datasets stretching"  # noqa: E501
-                " back for years and decades are made comparable and searchable, thus ensuring the"  # noqa: E501
-                " monitoring of changes; patterns are examined and used to create better forecasts,"  # noqa: E501
-                " for example, of the ocean and the atmosphere. Maps are created from imagery, features"  # noqa: E501
-                " and anomalies are identified and statistical information is extracted."  # noqa: E501
-            ),
-            "dataset_description": self.dataset_description,
-            "license": "Reuse allowed with attribution (custom license)",
-            "terms_of_service": "https://marine.copernicus.eu/user-corner/service-commitments-and-licence",
-            "name": self.dataset_name,
-            "updated": str(datetime.datetime.now()),
-            "missing_value": self.missing_value,
-            "tags": self.tags,
-            "standard_name": self.standard_name,
-            "long_name": self.long_name,
-            "unit_of_measurement": self.unit_of_measurement,
-            "final_lag_in_days": self.final_lag_in_days,
-            "preliminary_lag_in_days": self.preliminary_lag_in_days,
-            "expected_nan_frequency": self.expected_nan_frequency,
-        }
-
-        return static_metadata
-
     # ATTRIBUTES
 
     dataset_name = "copernicus_ocean"
+
+    time_resolution = "daily"
+
+    collection_name = "Copernicus_Marine"
+    """
+    Overall collection of data. Used for filling STAC Catalogue.
+    """
+
+    protocol = "file"
+    """
+    Remote protocol string for MultiZarrToZarr and Xarray to use when opening input files.
+    'File' for local, 's3' for S3, etc.
+    See fsspec docs for more details.
+    """
+
+    identical_dimensions = ["longitude"]
+    """
+    List of dimension(s) whose values are identical in all input datasets.
+    This saves Kerchunk time by having it read these dimensions only one time, from the first input file
+    """
+
+    concat_dimensions = ["time"]
+    """
+    List of dimension(s) by which to concatenate input files' data variable(s)
+        -- usually time, possibly with some other relevant dimension
+    """
+
+    data_var_dtype = "<f8"
+
+    has_nans: bool = True
+    """If True, disable quality checks for NaN values to prevent wrongful flags"""
+
+    reanalysis_start_date = datetime.datetime(1993, 1, 1)
+    """
+    Actual dataset start date of the dataset in 1993
+    """
+
+    interim_reanalysis_start_date = datetime.datetime(2021, 7, 1)
+    """
+    Start of interim reanalysis data not covered by finalized reanalysis data
+    """
+
+    preliminary_lag_in_days = 2
+
+    rebuild_requested = True
 
     def relative_path(self):
         return pathlib.Path("copernicus_ocean")
@@ -153,17 +144,6 @@ class CopernicusOcean(Fetcher):
         # Implementation of the method
         return timespan
 
-    def prefetch(self):
-        # Implementation of the method
-        return "prefetch data"
-
-    time_resolution = "daily"
-
-    collection_name = "Copernicus_Marine"
-    """
-    Overall collection of data. Used for filling STAC Catalogue.
-    """
-
     @property
     def file_type(cls):
         """
@@ -171,30 +151,6 @@ class CopernicusOcean(Fetcher):
         Used to trigger file format-appropriate functions and methods for Kerchunking and Xarray operations.
         """
         return "NetCDF"
-
-    protocol = "file"
-    """
-    Remote protocol string for MultiZarrToZarr and Xarray to use when opening input files.
-    'File' for local, 's3' for S3, etc.
-    See fsspec docs for more details.
-    """
-
-    identical_dimensions = ["longitude"]
-    """
-    List of dimension(s) whose values are identical in all input datasets.
-    This saves Kerchunk time by having it read these dimensions only one time, from the first input file
-    """
-
-    concat_dimensions = ["time"]
-    """
-    List of dimension(s) by which to concatenate input files' data variable(s)
-        -- usually time, possibly with some other relevant dimension
-    """
-
-    data_var_dtype = "<f8"
-
-    has_nans: bool = True
-    """If True, disable quality checks for NaN values to prevent wrongful flags"""
 
     @property
     def dataset_start_date(self):
@@ -205,19 +161,6 @@ class CopernicusOcean(Fetcher):
         """
         return datetime.datetime(1950, 1, 1)
 
-    reanalysis_start_date = datetime.datetime(1993, 1, 1)
-    """
-    Actual dataset start date of the dataset in 1993
-    """
-
-    interim_reanalysis_start_date = datetime.datetime(2021, 7, 1)
-    """
-    Start of interim reanalysis data not covered by finalized reanalysis data
-    """
-
-    preliminary_lag_in_days = 2
-
-    rebuild_requested = True
 
     # DOWNLOAD METHODS
 
