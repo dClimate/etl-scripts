@@ -2,7 +2,7 @@ from dc_etl.transform import Transformer
 import xarray
 import datetime
 
-def set_zarr_metadata(variable: str) -> Transformer:
+def set_dataset_metadata(variable: str, dataset_name: str) -> Transformer:
     """Transformer to update the zarr metadata.
 
     Returns
@@ -14,7 +14,7 @@ def set_zarr_metadata(variable: str) -> Transformer:
     # Delete problematic or extraneous holdover attributes from the input files
     # Because each Copernicus Marine dataset names fields differently
     # ('latitude' vs 'lat') this list is long and duplicative
-    def set_zarr_metadata(dataset: xarray.Dataset) -> xarray.Dataset:
+    def set_dataset_metadata(dataset: xarray.Dataset) -> xarray.Dataset:
         keys_to_remove = [
             "processing_level",
             "source",
@@ -110,24 +110,25 @@ def set_zarr_metadata(variable: str) -> Transformer:
                 dataset[variable].attrs.pop(key, None)
                 dataset[variable].encoding.pop(key, None)
 
+        dataset.attrs.update(static_metadata(dataset_name))
         return dataset
 
-    return set_zarr_metadata
+    return set_dataset_metadata
 
-def add_metadata(dataset_name: str) -> Transformer:
-    """Transformer to add metadata to the dataset.
+# def add_metadata(dataset_name: str) -> Transformer:
+#     """Transformer to add metadata to the dataset.
 
-    Returns
-    -------
-    Transformer :
-        The transformer.
-    """
-    def add_metadata(dataset: xarray.Dataset) -> xarray.Dataset:
-        # Add Metadata to the dataset
-        dataset.attrs.update(static_metadata(dataset_name))
-        return dataset    
+#     Returns
+#     -------
+#     Transformer :
+#         The transformer.
+#     """
+#     def add_metadata(dataset: xarray.Dataset) -> xarray.Dataset:
+#         # Add Metadata to the dataset
+#         dataset.attrs.update(static_metadata(dataset_name))
+#         return dataset    
 
-    return add_metadata
+#     return add_metadata
 
 def _dataset_parameters(analysis_type: str) -> tuple[str, str, str]:
     """

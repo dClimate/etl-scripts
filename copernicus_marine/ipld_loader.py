@@ -5,11 +5,9 @@ import ipldstore
 import xarray
 from dc_etl.fetch import Timespan
 from dataset_manager.utils.metadata import Metadata
-from dataset_manager.utils.ipld_store import IPLDStore
 from dataset_manager.utils.store import IPLD
-from dataset_manager.utils.ipfs import IPFS
 
-class IPLDStacLoader(Loader, Metadata, IPLDStore, IPFS):
+class IPLDStacLoader(Loader, Metadata):
     """Use IPLD to store datasets."""
     collection_name = "Copernicus Marine"
     organization = "dClimate"
@@ -21,9 +19,24 @@ class IPLDStacLoader(Loader, Metadata, IPLDStore, IPFS):
         config["publisher"] = config["publisher"].as_component("ipld_publisher")
         return cls(**config)
 
+    @classmethod
+    def info(cls, message: str, **kwargs):
+        """
+        Log a message at `logging.INFO` level.
+
+        Parameters
+        ----------
+        message : str
+            Text to write to log.
+        **kwargs : dict
+            Keywords arguments passed to `logging.Logger.log`.
+
+        """
+        print(message)
+        # cls.log(message, logging.INFO, **kwargs)
+
     def __init__(self, time_dim: str, publisher: IPLDPublisher):
-        IPFS.__init__(self, host="http://127.0.0.1:5001")
-        super().__init__()
+        super().__init__(host="http://127.0.0.1:5001")
         self.time_dim = time_dim
         self.publisher = publisher
         metadata = {
@@ -39,8 +52,6 @@ class IPLDStacLoader(Loader, Metadata, IPLDStore, IPFS):
 
         self.store = IPLD(self)
         self.data_var = "sla"
-        self.custom_latest_hash = None
-
         self.host = "http://127.0.0.1:5001" 
         self.requested_ipfs_chunker = "size-10688"
         # self.collection_name = "Test"
@@ -53,14 +64,19 @@ class IPLDStacLoader(Loader, Metadata, IPLDStore, IPFS):
     def initial(self, dataset: xarray.Dataset, span: Timespan | None = None):
         """Start writing a new dataset."""
 
+        # Print the way it is chunked
+        print(dataset)
 
-
+        # Get size of dataset
+        size = dataset.nbytes / 1024 / 1024
+        print(f"Dataset size: {size:.2f} MB")
         mapper = self._mapper()
         dataset = dataset.sel(**{self.time_dim: slice(*span)})
         dataset.to_zarr(store=mapper, consolidated=True)
         cid = mapper.freeze()
 
-        self.custom_latest_hash = str(cid)
+        self.set_custom_latest_hash(str(cid))
+
         print(f"Published {cid}")
         # Create the Stack catalog
         self.create_root_stac_catalog()
@@ -99,7 +115,7 @@ class IPLDStacLoader(Loader, Metadata, IPLDStore, IPFS):
         return xarray.open_zarr(store=mapper, consolidated=True)
 
     def _mapper(self, root=None):
-        mapper = ipldstore.get_ipfs_mapper()
+        mapper = ipldstore.get_ipfs_mapper(host=self.host, chunker=self.requested_ipfs_chunker)
         if root is not None:
             mapper.set_root(root)
         return mapper

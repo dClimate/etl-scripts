@@ -11,9 +11,8 @@ from typing import Any
 from dateutil.parser import parse as parse_date
 import deprecation
 import natsort
-import numpy as np
-import pandas as pd
 import xarray as xr
+from utils.helper_functions import numpydate_to_py
 
 from .attributes import Attributes
 from .store import IPLD
@@ -247,23 +246,6 @@ class Convenience(Attributes):
         """
         return parse_date(isodate)
 
-    def numpydate_to_py(self, numpy_date: np.datetime64) -> datetime.datetime:
-        """
-        Convert a numpy datetime object to a python standard library datetime object
-
-        Parameters
-        ----------
-        np.datetime64
-            A numpy.datetime64 object to be converted
-
-        Returns
-        -------
-        datetime.datetime
-            A datetime.datetime object
-
-        """
-        return pd.Timestamp(numpy_date).to_pydatetime()
-
     @staticmethod
     def today() -> str:
         """
@@ -299,10 +281,10 @@ class Convenience(Attributes):
         if dataset[self.time_dim].size == 1:
             values = dataset[self.time_dim].values
             assert len(values) == 1
-            start = end = self.numpydate_to_py(values[0])
+            start = end = numpydate_to_py(values[0])
         else:
-            start = self.numpydate_to_py(dataset[self.time_dim][0].values)
-            end = self.numpydate_to_py(dataset[self.time_dim][-1].values)
+            start = numpydate_to_py(dataset[self.time_dim][0].values)
+            end = numpydate_to_py(dataset[self.time_dim][-1].values)
         return start, end
 
     def get_date_range_from_file(
@@ -409,7 +391,7 @@ class Convenience(Attributes):
             self.set_key_dims()
         dataset = self.store.dataset()
         time_delta = dataset[self.time_dim].values[1] - dataset[self.time_dim].values[0]
-        return self.numpydate_to_py(dataset[self.time_dim].values[-1] + time_delta)
+        return numpydate_to_py(dataset[self.time_dim].values[-1] + time_delta)
 
     def get_next_date_as_date_range(self) -> tuple[datetime.datetime, datetime.datetime]:
         """

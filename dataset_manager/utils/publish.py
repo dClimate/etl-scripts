@@ -19,6 +19,7 @@ from dask.distributed import Client, LocalCluster
 
 from .store import IPLD
 from .transform import Transform
+from utils.helper_functions import numpydate_to_py
 
 TWENTY_MINUTES = 1200
 
@@ -813,7 +814,7 @@ class Publish(Transform):
         """
         orig_ds = self.raw_file_to_dataset(file_path)
 
-        if date_range[0] <= self.numpydate_to_py(orig_ds[self.time_dim].values[0]) <= date_range[1]:
+        if date_range[0] <= numpydate_to_py(orig_ds[self.time_dim].values[0]) <= date_range[1]:
             return True
         else:
             return False

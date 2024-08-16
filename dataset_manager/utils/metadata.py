@@ -14,6 +14,7 @@ from .convenience import Convenience
 from .store import IPLD
 
 from abc import abstractmethod
+from utils.helper_functions import numpydate_to_py
 from requests.exceptions import Timeout as TimeoutError
 
 class StacType(Enum):
@@ -28,8 +29,17 @@ class Metadata(Convenience, IPFS):
     Includes STAC Metadata templates for Items, Collections, and the root Catalog
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(
+        self,
+        host: str,
+    ):
+        super().__init__(host=host)
+        self.custom_latest_hash = None
+
+    # Set custom_latest_hash
+    def set_custom_latest_hash(self, hash_string: str):
+        self.custom_latest_hash = hash_string
+
 
     @classmethod
     def default_stac_item(cls) -> dict:
@@ -265,8 +275,8 @@ class Metadata(Convenience, IPFS):
             stac_coll["extent"]["spatial"]["bbox"] = [[minx, miny, maxx, maxy]]
             stac_coll["extent"]["temporal"]["interval"] = [
                 [
-                    self.numpydate_to_py(dataset[self.time_dim].values.min()).isoformat() + "Z",
-                    self.numpydate_to_py(dataset[self.time_dim].values.max()).isoformat() + "Z",
+                    numpydate_to_py(dataset[self.time_dim].values.min()).isoformat() + "Z",
+                    numpydate_to_py(dataset[self.time_dim].values.max()).isoformat() + "Z",
                 ]
             ]
             # Create an href corresponding to the collection in order to note this in the collection and root catalog.
@@ -338,8 +348,8 @@ class Metadata(Convenience, IPFS):
         if self.time_dim == "forecast_reference_time":
             properties_dict["array_size"].update({"step": dataset.step.size})
         # Set up date items in STAC-compliant style
-        properties_dict["start_datetime"] = self.numpydate_to_py(dataset[self.time_dim].values[0]).isoformat() + "Z"
-        properties_dict["end_datetime"] = self.numpydate_to_py(dataset[self.time_dim].values[-1]).isoformat() + "Z"
+        properties_dict["start_datetime"] = numpydate_to_py(dataset[self.time_dim].values[0]).isoformat() + "Z"
+        properties_dict["end_datetime"] = numpydate_to_py(dataset[self.time_dim].values[-1]).isoformat() + "Z"
         properties_dict["updated"] = (
             datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).isoformat()[:-13] + "Z"
         )
@@ -418,7 +428,6 @@ class Metadata(Convenience, IPFS):
         if "dtype" in properties_dict:
             properties_dict["dtype"] = str(properties_dict["dtype"])
 
-        print(properties_dict)
         return properties_dict
 
     def register_stac_item(self, stac_item: dict):
@@ -520,8 +529,8 @@ class Metadata(Convenience, IPFS):
         # Update time interval
         stac_coll["extent"]["temporal"]["interval"] = [
             [
-                self.numpydate_to_py(dataset[self.time_dim].values.min()).isoformat() + "Z",
-                self.numpydate_to_py(dataset[self.time_dim].values.max()).isoformat() + "Z",
+                numpydate_to_py(dataset[self.time_dim].values.min()).isoformat() + "Z",
+                numpydate_to_py(dataset[self.time_dim].values.max()).isoformat() + "Z",
             ]
         ]
         # Publish STAC Collection with updated fields

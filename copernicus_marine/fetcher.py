@@ -8,7 +8,6 @@ import pathlib
 import glob
 import base64
 import json
-import pandas as pd
 import nest_asyncio
 import natsort
 from typing import Generator
@@ -24,6 +23,7 @@ from abc import abstractmethod, ABC
 
 from dc_etl.fetch import Fetcher, Timespan
 from dc_etl.filespec import FileSpec
+from utils.helper_functions import numpydate_to_py
 
 # "sea_surface_height", "global_physics", "ocean_temp", "ocean_global_physics", "ocean_salinity"
 
@@ -40,6 +40,24 @@ def _year(path: str) -> int:
         return int(match.group(1))
     else:
         raise ValueError(f"Year not found in path: {path}")
+
+def _get_time_from_nc(file_path: str):
+    """Extract the exact time range from the NetCDF file using xarray."""
+    with xr.open_dataset(file_path) as ds:
+        time_var = ds['time']
+        start_time = time_var.values.min()
+        end_time = time_var.values.max()
+        return start_time, end_time
+
+def _extract_dates(path: str):
+    """Extract the start and end dates from the filename."""
+    match = re.search(r'(\d{4}-\d{2}-\d{2})_to_(\d{4}-\d{2}-\d{2})\.nc', path)
+    if match:
+        start_date = match.group(1)
+        end_date = match.group(2)
+        return start_date, end_date
+    else:
+        raise ValueError(f"Dates not found in path: {path}")
 
 class CopernicusOcean(Fetcher):
     """
@@ -120,29 +138,12 @@ class CopernicusOcean(Fetcher):
     def relative_path(self):
         return pathlib.Path("copernicus_ocean")
 
-    def numpydate_to_py(self, numpy_date: np.datetime64) -> datetime.datetime:
-        """
-        Convert a numpy datetime object to a python standard library datetime object
-
-        Parameters
-        ----------
-        np.datetime64
-            A numpy.datetime64 object to be converted
-
-        Returns
-        -------
-        datetime.datetime
-            A datetime.datetime object
-
-        """
-        return pd.Timestamp(numpy_date).to_pydatetime()
 
     def get_remote_timespan(self) -> Timespan:
-        start_date = np.datetime64('2022-01-01T00:00:00')
-        end_date = np.datetime64('2022-02-15T23:59:59')
-        timespan = Timespan(start=start_date, end=end_date)
-        # Implementation of the method
-        return timespan
+        files, earliest_time, latest_time = self._get_remote_files()
+        # TODO: REMOVE, Just a limit for now
+        latest_time = np.datetime64('2022-02-15T23:59:59')
+        return Timespan(start=earliest_time, end=latest_time)
 
     def prefetch(self):
         # Implementation of the method
@@ -238,6 +239,7 @@ class CopernicusOcean(Fetcher):
         """Implementation of :meth:`Fetcher.fetch`"""
         current_datetime = span.start.astype(datetime.datetime)
         limit_datetime = span.end.astype(datetime.datetime)
+        print(current_datetime, limit_datetime)
         # self.extract((current_datetime, limit_datetime))
         # Extracting the start and end years from the timespan
         start_year = current_datetime.year
@@ -266,13 +268,44 @@ class CopernicusOcean(Fetcher):
         # self._fs.get_file(path, cache_path.open("wb"))
 
         # return cache_path
+    
+    def _get_remote_files(self):
+        files = []
+
+        for local_file_path in self.input_files():
+            string_path = str(local_file_path)
+            if not local_file_path.suffix == ".nc":
+                continue
+            if not _DATA_FILE.match(string_path):
+                continue
+
+            files.append(string_path)
+
+        # Sort files by start date extracted from the filename
+        files = sorted(files, key=lambda x: _extract_dates(x)[0])
+
+        if not files:
+            raise ValueError("No valid files found.")
+
+        # Get the first and last file after sorting
+        first_file = files[0]
+        last_file = files[-1]
+
+        # Extract the exact times from the first and last files
+        earliest_time, _ = _get_time_from_nc(first_file)
+        _, latest_time = _get_time_from_nc(last_file)
+
+        # Convert to seconds resolution
+        earliest_time = np.datetime64(earliest_time, "s")
+        latest_time = np.datetime64(latest_time, "s")
+
+        return files, earliest_time, latest_time
+
 
     def _cache_path(self, path):
         """Compute a file's path in the cache."""
         filename = path.split("/")[-1]
         # SPlit where self._cache.path stops and add everything after
-        print(self.relative_path())
-        print(filename)
         return self._cache / self.relative_path() / filename
 
     def _year_to_path(self, year):
@@ -379,8 +412,8 @@ class CopernicusOcean(Fetcher):
             username=os.getenv("COP_MARINE_USERNAME"),
             password=os.getenv("COP_MARINE_PASSWORD"),
         )
-        self.reanalysis_start_date = self.numpydate_to_py(reanalysis_ds.time[0].values)
-        self.reanalysis_end_date = self.numpydate_to_py(reanalysis_ds.time[-1].values)
+        self.reanalysis_start_date = numpydate_to_py(reanalysis_ds.time[0].values)
+        self.reanalysis_end_date = numpydate_to_py(reanalysis_ds.time[-1].values)
         self.info(f"determined reanalysis data to be final through {self.reanalysis_end_date}")
         # repeat for interim reanalysis
         reanalysis_ds = cm_client.open_dataset(
@@ -396,8 +429,8 @@ class CopernicusOcean(Fetcher):
             username=os.getenv("COP_MARINE_USERNAME"),
             password=os.getenv("COP_MARINE_PASSWORD"),
         )
-        self.interim_reanalysis_start_date = self.numpydate_to_py(reanalysis_ds.time[0].values)
-        self.interim_reanalysis_end_date = self.numpydate_to_py(reanalysis_ds.time[-1].values)
+        self.interim_reanalysis_start_date = numpydate_to_py(reanalysis_ds.time[0].values)
+        self.interim_reanalysis_end_date = numpydate_to_py(reanalysis_ds.time[-1].values)
         self.info(f"determined interim reanalysis data to be final through {self.interim_reanalysis_end_date}")
 
     def trigger_reanalysis_download(self, current_datetime: datetime.datetime) -> datetime.datetime:
@@ -421,14 +454,14 @@ class CopernicusOcean(Fetcher):
         current_dataset = self.store()
         if current_dataset:
             previous_reanalysis_finalization_date = (
-                self.numpydate_to_py(
+                numpydate_to_py(
                     datetime.datetime.strptime(current_dataset.attrs["reanalysis_end_date"], "%Y%m%d%H")
                 )
                 if "reanalysis_end_date" in current_dataset.attrs
                 else self.reanalysis_start_date
             )
             previous_interim_end_date = (
-                self.numpydate_to_py(
+                numpydate_to_py(
                     datetime.datetime.strptime(current_dataset.attrs["interim_reanalysis_end_date"], "%Y%m%d%H")
                 )
                 if "interim_reanalysis_end_date" in current_dataset.attrs

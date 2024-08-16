@@ -13,7 +13,7 @@ from .cli import main
 from .fetcher import CopernicusOceanSeaSurfaceHeight
 from dc_etl.pipeline import Pipeline
 from dc_etl import component
-from .transformer import set_zarr_metadata, add_metadata
+from .transformer import set_dataset_metadata
 from .ipld_loader import IPLDStacLoader
 
 
@@ -37,8 +37,7 @@ def mainPipeline():
         ),
         transformer=component.transformer(
             "composite",
-            set_zarr_metadata("sla"),
-            add_metadata("sea_level"),
+            set_dataset_metadata("sla", "sea_level"),
             # component.transformer("rename_dims", {"lat": "latitude", "lon": "longitude"}),
             # component.transformer("normalize_longitudes"),
             component.transformer("compress", ["sla"]),
