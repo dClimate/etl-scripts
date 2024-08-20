@@ -188,20 +188,20 @@ class Convenience(Attributes):
             # Use STAC
             metadata = self.load_stac_metadata()
             return {
-                "start": datetime.datetime.strptime(metadata["properties"]["date range"][0], date_format),
-                "end": datetime.datetime.strptime(metadata["properties"]["date range"][1], date_format),
+                "start": datetime.datetime.strptime(metadata["properties"]["date_range"][0], date_format),
+                "end": datetime.datetime.strptime(metadata["properties"]["date_range"][1], date_format),
             }
         else:
             # Use existing Zarr attrs or raise an exception if there is no usable date attribute
             if self.store.has_existing:
                 dataset = self.store.dataset()
-                if "date range" in dataset.attrs:
+                if "date_range" in dataset.attrs:
                     # Assume attr format is ['%Y%m%d%H', '%Y%m%d%H'], translate to datetime objects, then transform
                     # into a dict with "start" and "end" keys
                     return dict(  # pragma NO BRANCH, coverage is confused here for some reason
                         zip(
                             ("start", "end"),
-                            (datetime.datetime.strptime(d, date_format) for d in dataset.attrs["date range"]),
+                            (datetime.datetime.strptime(d, date_format) for d in dataset.attrs["date_range"]),
                         )
                     )
                 else:

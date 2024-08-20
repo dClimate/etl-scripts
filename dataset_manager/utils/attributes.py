@@ -71,7 +71,7 @@ class Attributes(ABC):
     The time resolution of the dataset as a string (e.g. "hourly", "daily", "monthly", etc.)
     """
 
-    update_attributes: list[str] = ["date range", "update_previous_end_date"]
+    update_attributes: list[str] = ["date_range", "update_previous_end_date"]
     """
     Certain fields of a dataset should not be overwritten until after a parse completes to avoid confusion
      if a parse fails midway.

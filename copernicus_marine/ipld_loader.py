@@ -6,6 +6,7 @@ import xarray
 from dc_etl.fetch import Timespan
 from dataset_manager.utils.metadata import Metadata
 from dataset_manager.utils.store import IPLD
+import numpy as np
 
 class IPLDStacLoader(Loader, Metadata):
     """Use IPLD to store datasets."""
@@ -54,8 +55,6 @@ class IPLDStacLoader(Loader, Metadata):
         self.data_var = "sla"
         self.host = "http://127.0.0.1:5001" 
         self.requested_ipfs_chunker = "size-10688"
-        # self.collection_name = "Test"
-        # self.organization = "dClimate"
         self.metadata = metadata
 
     def static_metadata(self):
@@ -64,21 +63,26 @@ class IPLDStacLoader(Loader, Metadata):
     def initial(self, dataset: xarray.Dataset, span: Timespan | None = None):
         """Start writing a new dataset."""
 
-        # Print the way it is chunked
-        print(dataset)
-
-        # Get size of dataset
-        size = dataset.nbytes / 1024 / 1024
-        print(f"Dataset size: {size:.2f} MB")
         mapper = self._mapper()
         dataset = dataset.sel(**{self.time_dim: slice(*span)})
+        # TODO: IMPROVE THIS Maybe?
+        # Convert numpy.datetime64 to string YYYYMMDDHH format
+        dataset.attrs["date_range"] = [
+            np.datetime_as_string(span.start, unit='h').replace('-', '').replace(':', '').replace('T', ''),
+            np.datetime_as_string(span.end, unit='h').replace('-', '').replace(':', '').replace('T', '')
+        ]
+        dataset.attrs["bbox"] = [
+            dataset.geospatial_lon_min,
+            dataset.geospatial_lat_min,
+            dataset.geospatial_lon_max,
+            dataset.geospatial_lat_max,
+        ]
         dataset.to_zarr(store=mapper, consolidated=True)
         cid = mapper.freeze()
-
-        self.set_custom_latest_hash(str(cid))
-
         print(f"Published {cid}")
-        # Create the Stack catalog
+        # Update the metadata of date_range to be the span
+        # Create the Stack catalog if not exists
+        self.set_custom_latest_hash(str(cid))
         self.create_root_stac_catalog()
         self.create_stac_collection(dataset=dataset)
         self.create_stac_item(dataset=dataset)
@@ -88,12 +92,31 @@ class IPLDStacLoader(Loader, Metadata):
     def append(self, dataset: xarray.Dataset, span: Timespan | None = None):
         """Append data to an existing dataset."""
         mapper = self._mapper(self.publisher.retrieve())
+        original_dataset = self.dataset()
         dataset = dataset.sel(**{self.time_dim: slice(*span)})
+        # Extract the start and end times from the old and new datasets
+        old_start = original_dataset[self.time_dim].values[0]
+        new_end = dataset[self.time_dim].values[-1]
+        # Update the date_range metadata using the start of the existing dataset and the end of the new data
+        dataset.attrs["date_range"] = [
+            np.datetime_as_string(old_start, unit='h').replace('-', '').replace(':', '').replace('T', ''),
+            np.datetime_as_string(new_end, unit='h').replace('-', '').replace(':', '').replace('T', '')
+        ]
+        dataset.attrs["bbox"] = [
+            dataset.geospatial_lon_min,
+            dataset.geospatial_lat_min,
+            dataset.geospatial_lon_max,
+            dataset.geospatial_lat_max,
+        ]
+        print(dataset.attrs["date_range"])
         dataset.to_zarr(store=mapper, consolidated=True, append_dim=self.time_dim)
         cid = mapper.freeze()
+        print(f"Published {cid}")
+        self.create_stac_item(dataset=dataset)
         self.publisher.publish(cid)
 
     def replace(self, replace_dataset: xarray.Dataset, span: Timespan | None = None):
+        # Print
         """Replace a contiguous span of data in an existing dataset."""
         mapper = self._mapper(self.publisher.retrieve())
         original_dataset = self.dataset()
@@ -104,10 +127,13 @@ class IPLDStacLoader(Loader, Metadata):
 
         replace_dataset = replace_dataset.sel(**{self.time_dim: slice(*span)})
         replace_dataset = replace_dataset.drop_vars([dim for dim in replace_dataset.dims if dim != self.time_dim])
+        original_dataset.attrs["bbox"] = original_dataset.attrs["bbox"]
+        original_dataset.attrs["date_range"] = original_dataset.attrs["date_range"]
         replace_dataset.to_zarr(store=mapper, consolidated=True, region={self.time_dim: slice(*region)})
 
         cid = mapper.freeze()
         self.publisher.publish(cid)
+        print(f"Published {cid}")
 
     def dataset(self) -> xarray.Dataset:
         """Convenience method to get the currently published dataset."""

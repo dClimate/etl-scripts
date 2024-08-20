@@ -1,3 +1,7 @@
+# How to Implement
+
+
+
 # FAQ
 
 WHY DOESN'T MY ZARR PARSE PROPERLY?!?!

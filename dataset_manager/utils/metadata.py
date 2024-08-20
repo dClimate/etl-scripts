@@ -388,24 +388,24 @@ class Metadata(Convenience, IPFS):
             "dtype",
             "preferred_chunks",
             "Conventions",
-            "spatial resolution",
-            "spatial precision",
-            "temporal resolution",
-            "update cadence",
-            "unit of measurement",
+            "spatial_resolution",
+            "spatial_precision",
+            "temporal_resolution",
+            "update_cadence",
+            "unit_of_measurement",
             "tags",
-            "standard name",
-            "long name",
-            "date range",
-            "dataset description",
-            "dataset download url",
+            "standard_name",
+            "long_name",
+            "date_range",
+            "dataset_description",
+            "dataset_download_url",
             "created",
             "updated",
-            "finalization date",
-            "analysis data download url",
-            "reanalysis data download url",
-            "input history cid",
-            "input history JSON documentation",
+            "finalization_date",
+            "analysis_data_download_url",
+            "reanalysis_data_download_url",
+            "input_history_cid",
+            "input_history_JSON_documentation",
         }
         all_md = {
             **dataset.attrs,
@@ -739,26 +739,26 @@ class Metadata(Convenience, IPFS):
             # Set date range. Use start from previous dataset's metadata if it exists or the input dataset if this is
             # the first run.
             if stac_metadata:
-                dataset.attrs["update_previous_end_date"] = stac_metadata["properties"]["date range"][1]
-                dataset.attrs["date range"] = (
-                    stac_metadata["properties"]["date range"][0],
+                dataset.attrs["update_previous_end_date"] = stac_metadata["properties"]["date_range"][1]
+                dataset.attrs["date_range"] = (
+                    stac_metadata["properties"]["date_range"][0],
                     f"{self.get_date_range_from_dataset(dataset)[1]:%Y%m%d%H}",
                 )
             else:
                 dataset.attrs["update_previous_end_date"] = ""
-                dataset.attrs["date range"] = self.date_range_to_string(self.get_date_range_from_dataset(dataset))
+                dataset.attrs["date_range"] = self.date_range_to_string(self.get_date_range_from_dataset(dataset))
         else:
             # Use existing Zarr if possible, otherwise get the dates from the input dataset.
             if self.store.has_existing:
-                previous_start, previous_end = self.store.dataset().attrs["date range"]
+                previous_start, previous_end = self.store.dataset().attrs["date_range"]
                 dataset.attrs["update_previous_end_date"] = previous_end
-                dataset.attrs["date range"] = (
+                dataset.attrs["date_range"] = (
                     previous_start,
                     self.date_range_to_string(self.get_date_range_from_dataset(dataset))[1],
                 )
             else:
                 dataset.attrs["update_previous_end_date"] = ""
-                dataset.attrs["date range"] = self.date_range_to_string(self.get_date_range_from_dataset(dataset))
+                dataset.attrs["date_range"] = self.date_range_to_string(self.get_date_range_from_dataset(dataset))
 
         # Write the update date range by taking the date range of the xr.Dataset submitted to this function. This
         # assumes this function is called and the metadata is written before the original xr.Dataset is combined with

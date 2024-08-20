@@ -4,11 +4,13 @@ ETL Pipeline for {name}
 Usage:
     {script} [options] init
     {script} [options] append
+    {script} [options] replace
     {script} interact
 
 Options:
     -h --help         Show this screen.
-    --timespan SPAN   How much data to load along the time axis. [default: 5Y]
+    --timespan SPAN   How much data to load along the time axis. [default: 1Y]
+    --daterange RANGE   The date range to load.
     --overwrite       Allow data to be overwritten.
     --pdb             Drop into debugger on error.
 """
@@ -49,18 +51,30 @@ def main(pipeline: Pipeline):
             if not cid:
                 raise docopt.DocoptExit("Dataset has not been initialized.")
 
+            # Get the timedelta which is like 4Y or 7Y
             timedelta = _parse_timedelta(args["--timespan"])
+            # Get the remote timespan of the dataset
             remote_span = pipeline.fetcher.get_remote_timespan()
+            # Get the existing dataset
             existing = pipeline.loader.dataset()
+            # Get the last time value of the existing dataset
             existing_end = existing.time[-1].values
+            # If the last time value of the existing dataset is greater than or equal to the last time value of the remote dataset
+            # then there is no more data to load
             if existing_end >= remote_span.end:
                 print("No more data to load.")
                 return
-
+            # Get the last time value of the existing dataset and add one day to it to get the start of the next load
             load_begin = _add_delta(existing_end, ONE_DAY)
+            # Get the end of the next load
             load_end = _add_delta(load_begin, timedelta - ONE_DAY)
+            # Get the timespan to load
             load_span = Timespan(load_begin, min(load_end, remote_span.end))
             run_pipeline(pipeline, load_span, pipeline.loader.append)
+
+        elif args["replace"]:
+            load_span = _parse_timestamp(args["--daterange"])
+            run_pipeline(pipeline, load_span, pipeline.loader.replace)
 
         else:
             dataset = pipeline.loader.dataset()
@@ -102,6 +116,19 @@ def _parse_timedelta(s: str):
 
     raise docopt.DocoptExit(f"Unable to parse timespan: {s}")
 
+def _parse_timestamp(s: str) -> Timespan:
+    # Sould be like 2022-01-01_2022-01-02
+    try:
+        # Split the string by underscore
+        s = s.split("_")
+        start = numpy.datetime64(s[0])
+        end = numpy.datetime64(s[1])
+        # Return the numpy datetime64
+        return Timespan(start=start, end=end)
+    except:  # noqa: E722
+        pass
+
+    raise docopt.DocoptExit(f"Unable to parse timestamp: {s}")
 
 def _add_delta(timestamp, delta):
     # Trying to manipulate datetimes with numpy gets pretty ridiculous

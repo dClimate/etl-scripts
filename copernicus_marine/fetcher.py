@@ -14,6 +14,7 @@ from typing import Generator
 
 import xarray as xr
 import numpy as np
+import pandas as pd
 import re
 
 import copernicusmarine as cm_client
@@ -27,8 +28,6 @@ from utils.helper_functions import numpydate_to_py
 
 # "sea_surface_height", "global_physics", "ocean_temp", "ocean_global_physics", "ocean_salinity"
 
-#         current_datetime = span.start.astype(datetime.datetime)
-#         limit_datetime = span.end.astype(datetime.datetime)
 load_dotenv()
 
 _DATA_FILE = re.compile(r".+\d{4}-\d{2}-\d{2}_to_\d{4}-\d{2}-\d{2}\.nc")
@@ -142,7 +141,8 @@ class CopernicusOcean(Fetcher):
     def get_remote_timespan(self) -> Timespan:
         files, earliest_time, latest_time = self._get_remote_files()
         # TODO: REMOVE, Just a limit for now
-        latest_time = np.datetime64('2022-02-15T23:59:59')
+        # earliest_time = np.datetime64("2022-01-01")
+        # latest_time = np.datetime64('2022-03-15')
         return Timespan(start=earliest_time, end=latest_time)
 
     def prefetch(self):
@@ -237,9 +237,8 @@ class CopernicusOcean(Fetcher):
 
     def fetch(self, span: Timespan) -> Generator[FileSpec, None, None]:
         """Implementation of :meth:`Fetcher.fetch`"""
-        current_datetime = span.start.astype(datetime.datetime)
-        limit_datetime = span.end.astype(datetime.datetime)
-        print(current_datetime, limit_datetime)
+        current_datetime = pd.to_datetime(span.start).to_pydatetime()
+        limit_datetime = pd.to_datetime(span.end).to_pydatetime()
         # self.extract((current_datetime, limit_datetime))
         # Extracting the start and end years from the timespan
         start_year = current_datetime.year
@@ -259,7 +258,6 @@ class CopernicusOcean(Fetcher):
         if self._cache.exists():
             for path in self._cache.fs.ls(self.local_input_path()):
                 if _DATA_FILE.match(path) and _year(path) == year:
-                    print("HERE", self._cache, self.local_input_path())
                     return self._cache_path(path)
 
         # Download it to the cache
@@ -746,7 +744,7 @@ class CopernicusOcean(Fetcher):
             and self.get_date_range_from_dataset(original_dataset)[1]
             > self.get_date_range_from_dataset(publish_dataset)[1]
         ):
-            publish_dataset.attrs["date range"] = original_dataset.attrs["date range"]
+            publish_dataset.attrs["date_range"] = original_dataset.attrs["date_range"]
         super().update_zarr(publish_dataset, *args, **kwargs)
 
 

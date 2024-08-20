@@ -3,6 +3,7 @@ from multiformats import CID
 from dc_etl.filespec import FileSpec
 from dc_etl.ipld.loader import IPLDPublisher
 
+# This will probably need to be modified to support custom cid publishing
 
 class LocalFileIPLDPublisher(IPLDPublisher):
     """Publishes CID of dataset to a local file."""
