@@ -65,7 +65,7 @@ download() {
         if [ ! -e $nc_name ]; then
             # Remove any older files with an older grid count if needed
             # We first check if the file exists, otherwise rm will return an error which will exit due to set -e
-            for grid_count in {1..8}
+            for grid_count in {1..7}
             do
                 older_nc_name=${data_date}_${grid_count}.nc
                 if [[ -e $rm_name ]]; then
