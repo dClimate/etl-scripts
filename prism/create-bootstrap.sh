@@ -13,7 +13,7 @@ pin_and_publish() {
         echo Processing .nc.zip files for for $dataset
         # Avoid using --max-procs=0 here on xargs, this will prevent overloading the server and stopping normal ipfs serving operations slowing down, but also alleviates errors with replication due to too many replication requests being tried at once
         ls *.nc.zip | xargs -I {} ipfs-cluster-ctl add --name "bootstrap-prism-${dataset}-{}" "{}"
-        ipfs-cluster-ctl pin ls | grep "bootstrap-prism-${dataset}" | awk -F '|' '{print $2 $1}' | sort > $output_filename
+        ipfs-cluster-ctl pin ls | grep "bootstrap-prism-${dataset}" | awk '{print $3 " " $1}' | sort > $output_filename
 
         local zip_count=$(ls *.nc.zip | wc -l)
         local pin_count=$(ipfs-cluster-ctl pin ls | grep "bootstrap-prism-${dataset}" | wc -l)
