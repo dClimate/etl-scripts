@@ -51,7 +51,7 @@ esac
 cd $dataset
 year=$start_year
 > ./download-links.txt # Clear the file first
-while (( year < end_year )); do
+while (( year <= end_year )); do
     url="${base_url}${year}.nc"
     echo $url >> ./download-links.txt
     year=$((year + 1))
