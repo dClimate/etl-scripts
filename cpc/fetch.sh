@@ -1,28 +1,10 @@
 #!/bin/bash
 set -e
 
-print_usage() {
-    echo Usage: bash "$0" "precip-conus|precip-global|tmin|tmax"
-    echo Example: bash "$0" precip-conus
-}
+source shared_functions.sh
 
-# Checks if number of arguments is exactly 1
-if (( $# != 1 )); then
-    echo "Error: Too many arguments"
-    print_usage
-    exit 1
-fi
-
-# Validate arguments are within the possibilities
-case $1 in
-    precip-conus|precip-global|tmax|tmin)
-        ;;
-    *)
-        echo "Error: Unknown argument $1" >&2
-        print_usage
-        exit 1
-        ;;
-esac
+check_there_is_one_argument $#
+check_argument_is_valid $1
 
 dataset=$1
 
