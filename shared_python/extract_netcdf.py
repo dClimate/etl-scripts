@@ -17,7 +17,7 @@ def extract_and_write_zarr_json(nc_path: Path):
     print(f"Outputting to {json_path}")
 
     # Create a SingleHdf5ToZarr object
-    h5_to_zarr = hdf.SingleHdf5ToZarr(str(nc_path), inline_threshold=300)
+    h5_to_zarr = hdf.SingleHdf5ToZarr(str(nc_path))
 
     # Translate the NetCDF file to Zarr format
     zarr_dict = h5_to_zarr.translate()
