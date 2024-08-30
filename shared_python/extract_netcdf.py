@@ -13,8 +13,8 @@ def extract_and_write_zarr_json(nc_path: Path):
     """
 
     print(f"Converting {nc_path}")
-    # Create the output JSON path
-    json_path = nc_path.with_suffix(".json")
+    # Create the output JSON path, with suffix .nc.json
+    json_path = nc_path.with_suffix(nc_path.suffix + ".json")
     print(f"Outputting to {json_path}")
 
     # Create a SingleHdf5ToZarr object
