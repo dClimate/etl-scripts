@@ -1,5 +1,5 @@
 """
-This script takes a list of zarr JSONs, and a destination folder, then writes a kerchunk multizarr to the destination folder
+This script writes a kerchunk multizarr to the destination folder by combining all .nc.json found in the dataset's folder to single Zarr kerchunk files.
 """
 
 from pathlib import Path
@@ -16,17 +16,21 @@ def combine_and_write_multizarr_json(
     print(f"Combining the following into a MultiZarr: {single_zarr_jsons}")
     json_paths = list(map(str, single_zarr_jsons))
 
+    # Only do fill value preprocessing if a fill value is actually specified
     if fill_value is not None:
 
         def fix_fill_values_preprocessor(refs):
             ref_names = set()
-            file_match_pattern = r"(.*?)/"
+            file_match_pattern = (
+                r"(.*?)/"  # only modify the Zarr files with a period at the beginning
+            )
             for ref in refs:
                 match = re.match(file_match_pattern, ref)
                 if match:
                     ref_names.add(match.group(1))
 
             for ref in ref_names:
+                # Replace the fill value in the zarr metadata
                 zarray_dict = json.decode(refs[f"{ref}/.zarray"])
                 zarray_dict["fill_value"] = fill_value
                 refs[f"{ref}/.zarray"] = json.encode(zarray_dict)

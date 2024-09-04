@@ -13,4 +13,4 @@ check_argument_is_valid $dataset
 
 echo Processing all .nc files for $dataset
 # This sends, one by one, absolute paths to the netCDF files to the extractor script
-echo "$PWD/$dataset"/*.nc | xargs -n 1 python ../shared_python/extract_netcdf.py
+echo "$PWD/$dataset"/*.nc | xargs -n 1 python ../shared_python_scripts/extract_netcdf.py
