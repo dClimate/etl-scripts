@@ -8,6 +8,8 @@ dependencies = [
     "xarray[io,parallel]",
     "kerchunk[hdf]",
     "ipldstore @ git+https://github.com/dClimate/ipldstore@v2.1.3",
+    # Used for specifying the compressor in the transform step
+    "numcodecs",
     # Used for JSON serialization and deserialization
     # Benchmarks as faster than orjson https://jcristharif.com/msgspec/examples/conda-repodata.html
     "msgspec",
