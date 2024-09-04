@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from dask.distributed import Client, LocalCluster
 from msgspec import json
 import xarray as xr
 import numcodecs
@@ -24,7 +25,9 @@ def rename_dimensions(dataset: xr.Dataset, names: dict[str, str]) -> xr.Dataset:
     return dataset.rename(names)
 
 
-def transform_and_write_zarr(multizarr_json_path: Path, destination_dir: Path):
+def transform_and_write_zarr(
+    dask_client, multizarr_json_path: Path, destination_dir: Path
+):
     print(
         f"Applying data transformations to Zarr Using kerchunk multizarr from {multizarr_json_path}"
     )
@@ -51,11 +54,14 @@ def transform_and_write_zarr(multizarr_json_path: Path, destination_dir: Path):
     # Apply compression to all data variables
     data_vars = list(ds.data_vars.keys())
     ds = compress(ds, data_vars)
+    # Set chunk sizes to be determined automatically
+    ds = ds.chunk({"time": "auto"})
 
     # Write the final Zarr
     zarr_path = multizarr_json_path.with_suffix(".zarr")
     print(f"Writing zarr to {zarr_path}")
-    ds.to_zarr(zarr_path, mode="w", consolidated=True)
+    with dask_client:
+        ds.to_zarr(zarr_path, mode="w", consolidated=True)
 
 
 if __name__ == "__main__":
@@ -115,4 +121,12 @@ if __name__ == "__main__":
         print("Quitting transforming")
         sys.exit(1)
 
-    transform_and_write_zarr(multizarr_json_path, dataset_dir)
+    # Set up a dask cluster with memory limits
+    cluster = LocalCluster(n_workers=2, threads_per_worker=1, memory_limit="6GB")
+    dask_client = Client(cluster)
+
+    try:
+        transform_and_write_zarr(dask_client, multizarr_json_path, dataset_dir)
+    finally:
+        dask_client.close()
+        cluster.close()
