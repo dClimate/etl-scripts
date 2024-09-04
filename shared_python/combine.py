@@ -28,45 +28,57 @@ def combine_and_write_multizarr_json(
 if __name__ == "__main__":
     import sys
 
-    script_call_path = sys.argv[0]
-
     def print_usage():
-        print(
-            f"Usage: python {script_call_path} zarr_json_path1... multizarr_destination"
-        )
-        print(
-            f"Example: python {script_call_path} 2007.json 2008.json cpc/precip-conus"
-        )
+        script_call_path = sys.argv[0]
+        print(f"Usage: python {script_call_path} <provider> <dataset>")
+        print(f"Example: python {script_call_path} cpc precip-conus")
 
-    # Make sure there is at least one source json and one destination folder
+    # Verify the number of arguments
     num_arguments = len(sys.argv) - 1
-    if num_arguments < 2:
+    if num_arguments != 2:
         print(
-            f"Error: Script received less than one argument, was provided {num_arguments} arguments"
+            f"Error: Script did not receive only two arguments, was provided {num_arguments} arguments"
         )
         print_usage()
         sys.exit(1)
 
-    # Verify that the first set of arguments are all kerchunk zarr JSONs that exist
-    # Get all arguments from 2nd to 2nd to last
-    source_json_args = sys.argv[1:-1]
-    source_json_paths = list(map(Path, source_json_args))
-    for p in source_json_paths:
-        if not p.is_file():
-            print(f"Error: Argument {p} is not a file that exists")
+    # Verify that the first argument is one of the valid dataset providers
+    data_provider = sys.argv[1]
+    match data_provider:
+        case "cpc":
+            pass
+        case "chirps" | "prism":
+            print(f"Data provider {data_provider} not supported yet")
+            sys.exit(1)
+        case _:
+            print(f"Invalid data provider argument {data_provider}")
             print_usage()
             sys.exit(1)
-    # TODO verify that suffix is json
 
-    # Verify that the last argument is a directory that exists
-    last_argument = sys.argv[len(sys.argv) - 1]
-    destination = Path(last_argument)
-    if not destination.is_dir():
-        print(
-            f"Error: Script received a destination directory that does not exist: {last_argument}"
-        )
-        print_usage()
+    # Verify that the second argument is one of the valid datasets in that provider
+    dataset = sys.argv[2]
+    match data_provider:
+        case "cpc":
+            match dataset:
+                case "precip-conus" | "precip-global" | "tmax" | "tmin":
+                    pass
+                case _:
+                    print(f"Invalid dataset {dataset} for provider {data_provider}")
+                    print_usage()
+                    sys.exit(1)
+        case "chirps" | "prism":
+            print(f"Data provider {data_provider} not supported yet")
+            sys.exit(1)
+
+    # Get all the .nc.jsons we need
+    current_file_dir = Path(__file__).parent
+    # The .resolve() removes the ".." from the final path
+    dataset_dir = (current_file_dir / ".." / data_provider / dataset).resolve()
+    source_json_paths = list(dataset_dir.glob("*.nc.json"))
+    if len(source_json_paths) == 0:
+        print(f"No .nc.json files found in {dataset_dir}")
+        print("Quitting combining")
         sys.exit(1)
 
     # Call the script functions
-    combine_and_write_multizarr_json(source_json_paths, destination)
+    combine_and_write_multizarr_json(source_json_paths, dataset_dir)
