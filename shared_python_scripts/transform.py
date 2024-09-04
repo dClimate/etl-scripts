@@ -48,7 +48,9 @@ def transform_and_write_zarr(multizarr_json_path: Path, destination_dir: Path):
     # Apply transformations
     ds = rename_dimensions(ds, {"lat": "latitude", "lon": "longitude"})
     ds = normalize_longitudes(ds)
-    ds = compress(ds, ["precip"])
+    # Apply compression to all data variables
+    data_vars = list(ds.data_vars.keys())
+    ds = compress(ds, data_vars)
 
     # Write the final Zarr
     zarr_path = multizarr_json_path.with_suffix(".zarr")
