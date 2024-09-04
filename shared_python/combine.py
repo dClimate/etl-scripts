@@ -3,25 +3,45 @@ This script takes a list of zarr JSONs, and a destination folder, then writes a 
 """
 
 from pathlib import Path
+import re
+from typing import List
+
 from kerchunk.combine import MultiZarrToZarr
 from msgspec import json
 
-from typing import List
-
 
 def combine_and_write_multizarr_json(
-    single_zarr_jsons: List[Path], destination_dir: Path
+    single_zarr_jsons: List[Path], destination_dir: Path, fill_value: float | None
 ):
     print(f"Combining the following into a MultiZarr: {single_zarr_jsons}")
     json_paths = list(map(str, single_zarr_jsons))
 
-    multizarr = MultiZarrToZarr(json_paths, concat_dims="time")
-    multizarr_dict = multizarr.translate()
+    if fill_value is not None:
 
+        def fix_fill_values_preprocessor(refs):
+            ref_names = set()
+            file_match_pattern = r"(.*?)/"
+            for ref in refs:
+                match = re.match(file_match_pattern, ref)
+                if match:
+                    ref_names.add(match.group(1))
+
+            for ref in ref_names:
+                zarray_dict = json.decode(refs[f"{ref}/.zarray"])
+                zarray_dict["fill_value"] = fill_value
+                refs[f"{ref}/.zarray"] = json.encode(zarray_dict)
+
+        multizarr = MultiZarrToZarr(
+            json_paths, concat_dims="time", preprocess=fix_fill_values_preprocessor
+        )
+    else:
+        multizarr = MultiZarrToZarr(json_paths, concat_dims="time")
+
+    multizarr_dict = multizarr.translate()
     multizarr_destination = destination_dir / f"{destination_dir.name}.json"
-    print(f"Writing Multizarr JSON to {multizarr_destination}")
     with open(multizarr_destination, "wb") as f:
         f_bytes = json.encode(multizarr_dict)
+        print(f"Writing Multizarr JSON to {multizarr_destination}")
         f.write(f_bytes)
 
 
@@ -81,4 +101,6 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Call the script functions
-    combine_and_write_multizarr_json(source_json_paths, dataset_dir)
+    combine_and_write_multizarr_json(
+        source_json_paths, dataset_dir, fill_value=-9.96921e36
+    )
