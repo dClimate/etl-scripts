@@ -4,14 +4,13 @@ This script writes a kerchunk multizarr to the destination folder by combining a
 
 from pathlib import Path
 import re
-from typing import List
 
 from kerchunk.combine import MultiZarrToZarr
 from msgspec import json
 
 
 def combine_and_write_multizarr_json(
-    single_zarr_jsons: List[Path], destination_dir: Path, fill_value: float | None
+    single_zarr_jsons: list[Path], destination_dir: Path, fill_value: float | None
 ):
     print(f"Combining the following into a MultiZarr: {single_zarr_jsons}")
     json_paths = list(map(str, single_zarr_jsons))
