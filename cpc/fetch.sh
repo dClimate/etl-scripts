@@ -4,9 +4,9 @@ set -e
 source shared_functions.sh
 
 check_there_is_one_argument $#
-check_argument_is_valid $1
 
 dataset=$1
+check_argument_is_valid $dataset
 
 cd $dataset
 if [[ ! -e download-links.txt ]]; then
