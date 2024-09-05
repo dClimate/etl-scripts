@@ -2,8 +2,6 @@
 __pycache__
 
 *.nc
-*.nc.json
-*.json
 *.zarr
 *.cid
 
