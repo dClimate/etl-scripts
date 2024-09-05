@@ -2,17 +2,18 @@ import sys
 import logging
 import pathlib
 
-from .attributes import Attributes
+logging.basicConfig(level = logging.INFO)
 
-
-class Logging(Attributes):
+class Logging():
     """
     A base class holding logging methods for Zarr ETLs
     """
 
-    @classmethod
+    def __init__(self, dataset_name: str):
+        self.dataset_name = dataset_name
+        self.logger = logging.getLogger(dataset_name)
     def log_to_file(
-        cls,
+        self,
         path: str = None,
         level: int = logging.INFO,
         log_format: str = "%(asctime)s <%(name)s in %(threadName)s> %(levelname)-8s %(message)s",
@@ -51,7 +52,7 @@ class Logging(Attributes):
         """
         # If no path was specified, build a path using the manager name and log level in the current directory
         if path is None:
-            path = cls.default_log_path(level)
+            path = self.default_log_path(level)
 
         formatter = logging.Formatter(log_format, time_format)
 
@@ -68,7 +69,7 @@ class Logging(Attributes):
                     and pathlib.Path(handler.baseFilename).resolve() == pathlib.Path(path).resolve()
                 ):
                     handler.setFormatter(formatter)
-                    cls.info(f"Found existing file log handler {handler}")
+                    self.info(f"Found existing file log handler {handler}")
                     return handler
 
         # Use a standard file handler from the Python module
@@ -88,9 +89,8 @@ class Logging(Attributes):
 
         return handler
 
-    @classmethod
     def log_to_console(
-        cls,
+        self,
         level: int = logging.INFO,
         log_format: str = "%(levelname)-8s <%(name)s in %(threadName)s> %(message)s",
     ):
@@ -136,7 +136,7 @@ class Logging(Attributes):
                 ):
                     # Apply requested formatting
                     handler.setFormatter(formatter)
-                    cls.info(f"Found existing console log handler {handler}")
+                    self.info(f"Found existing console log handler {handler}")
                     return handler
 
         # Uses sys.stderr as the stream to write to by default. It would also make sense to write to sys.stdout,
@@ -154,8 +154,7 @@ class Logging(Attributes):
 
         return handler
 
-    @classmethod
-    def default_log_path(cls, level: int):
+    def default_log_path(self, level: int):
         """
         Returns a default log path in a "logs" directory within the current working directory, incorporating level into
         the name. Creates the "logs" directory if it doesn't already exist. Probably only useful internally.
@@ -167,10 +166,9 @@ class Logging(Attributes):
 
         """
         pathlib.Path.mkdir(pathlib.Path("./logs"), mode=0o777, parents=False, exist_ok=True)
-        return pathlib.Path("logs") / f"{cls.dataset_name}_{logging.getLevelName(level)}.log"
+        return pathlib.Path("logs") / f"{self.dataset_name}_{logging.getLevelName(level)}.log"
 
-    @classmethod
-    def log(cls, message: str, level: int = logging.INFO, **kwargs):
+    def log(self, message: str, level: int = logging.INFO, **kwargs):
         """
         This is basically a convenience function for calling logging.getLogger.log(`level`, `message`). The only
         difference is this uses the manager name as the name of the log to enable log statements that include the name
@@ -190,10 +188,9 @@ class Logging(Attributes):
             exception information. See the logging module for all keyword arguments.
 
         """
-        logging.getLogger(cls.dataset_name).log(level, message, **kwargs)
+        self.logger.log(level, message, **kwargs)
 
-    @classmethod
-    def info(cls, message: str, **kwargs):
+    def info(self, message: str, **kwargs):
         """
         Log a message at `logging.INFO` level.
 
@@ -205,10 +202,9 @@ class Logging(Attributes):
             Keywords arguments passed to `logging.Logger.log`.
 
         """
-        cls.log(message, logging.INFO, **kwargs)
+        self.log(message, logging.INFO, **kwargs)
 
-    @classmethod
-    def debug(cls, message: str, **kwargs):
+    def debug(self, message: str, **kwargs):
         """
         Log a message at `loggging.DEBUG` level.
 
@@ -220,10 +216,9 @@ class Logging(Attributes):
             Keywords arguments passed to `logging.Logger.log`.
 
         """
-        cls.log(message, logging.DEBUG, **kwargs)
+        self.log(message, logging.DEBUG, **kwargs)
 
-    @classmethod
-    def warn(cls, message: str, **kwargs):
+    def warn(self, message: str, **kwargs):
         """
         Log a message at `loggging.WARN` level.
 
@@ -234,10 +229,9 @@ class Logging(Attributes):
         **kwargs : dict
             Keywords arguments passed to `logging.Logger.log`.
         """
-        cls.log(message, logging.WARN, **kwargs)
+        self.log(message, logging.WARN, **kwargs)
 
-    @classmethod
-    def error(cls, message: str, **kwargs):
+    def error(self, message: str, **kwargs):
         """
         Log a message at `logging.ERROR` level.
 
@@ -249,8 +243,7 @@ class Logging(Attributes):
             Keywords arguments passed to `logging.Logger.log`.
 
         """
-        cls.log(message, logging.ERROR, **kwargs)
+        self.log(message, logging.ERROR, **kwargs)
 
-    @classmethod
-    def log_except_hook(cls, exc_type, exc_value, exc_traceback):
-        cls.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    def log_except_hook(self, exc_type, exc_value, exc_traceback):
+        self.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))

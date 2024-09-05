@@ -10,7 +10,7 @@ import pathlib
 from dc_etl import filespec
 from .cli import main
 # import fetch from same directory
-from .fetcher import CopernicusOceanSeaSurfaceHeight
+from .fetcher import CopernicusOceanTemp0p5Depth
 from dc_etl.pipeline import Pipeline
 from dc_etl import component
 from .transformer import set_dataset_metadata
@@ -25,28 +25,52 @@ def mainPipeline():
     """Run the example.
     Other than how they're configured, the two examples aren't particularly different, so we use the same command
     line interface code for both."""
+    # pipeline = Pipeline(
+    #     fetcher=CopernicusOceanSeaSurfaceHeight(skip_pre_parse_nan_check=True, cache=CACHE),
+    #     extractor=component.extractor("netcdf"),
+    #     combiner=component.combiner(
+    #         "default",
+    #         output_folder=CACHE / "copernicus_ocean" / "sea_level" / "combined",
+    #         concat_dims=["time"],
+    #         identical_dims=["latitude", "latitude"],
+    #         preprocessors=[component.combine_preprocessor("fix_fill_value", -9.96921e36)],
+    #     ),
+    #     transformer=component.transformer(
+    #         "composite",
+    #         set_dataset_metadata("sla", "sea_level"),
+    #         # component.transformer("rename_dims", {"lat": "latitude", "lon": "longitude"}),
+    #         # component.transformer("normalize_longitudes"),
+    #         component.transformer("compress", ["sla"]),
+    #     ),
+    #     # transformer=component.transformer("compress", ["sla"]),
+    #     loader=IPLDStacLoader(
+    #         time_dim="time", publisher=component.ipld_publisher("local_file", CACHE / "copernicus_ocean" / "sea_level" / "combined" / "zarr_head.cid")
+    #     ),
+    # )
+
     pipeline = Pipeline(
-        fetcher=CopernicusOceanSeaSurfaceHeight(skip_pre_parse_nan_check=True, cache=CACHE),
+        fetcher=CopernicusOceanTemp0p5Depth(skip_pre_parse_nan_check=True, cache=CACHE),
         extractor=component.extractor("netcdf"),
         combiner=component.combiner(
             "default",
-            output_folder=CACHE / "copernicus_ocean" / "sea_level" / "combined",
+            output_folder=CACHE / "copernicus_ocean" / "ocean_temp_0_p_5" / "combined",
             concat_dims=["time"],
             identical_dims=["latitude", "latitude"],
             preprocessors=[component.combine_preprocessor("fix_fill_value", -9.96921e36)],
         ),
         transformer=component.transformer(
             "composite",
-            set_dataset_metadata("sla", "sea_level"),
+            set_dataset_metadata("thetao", "ocean_temp"),
             # component.transformer("rename_dims", {"lat": "latitude", "lon": "longitude"}),
             # component.transformer("normalize_longitudes"),
-            component.transformer("compress", ["sla"]),
+            component.transformer("compress", ["thetao"]),
         ),
         # transformer=component.transformer("compress", ["sla"]),
         loader=IPLDStacLoader(
-            time_dim="time", publisher=component.ipld_publisher("local_file", CACHE / "copernicus_ocean" / "sea_level" / "combined" / "zarr_head.cid")
+            time_dim="time", publisher=component.ipld_publisher("local_file", CACHE / "copernicus_ocean" / "ocean_temp_0_p_5" / "combined" / "zarr_head.cid")
         ),
     )
+
 
     main(pipeline)
 

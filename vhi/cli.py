@@ -9,7 +9,7 @@ Usage:
 
 Options:
     -h --help         Show this screen.
-    --timespan SPAN   How much data to load along the time axis. [default: 1D]
+    --timespan SPAN   How much data to load along the time axis. [default: 1M]
     --daterange RANGE   The date range to load.
     --overwrite       Allow data to be overwritten.
     --pdb             Drop into debugger on error.
@@ -45,6 +45,7 @@ def main(pipeline: Pipeline):
             remote_span = pipeline.fetcher.get_remote_timespan()
             load_end = _add_delta(remote_span.start, timedelta - ONE_DAY)
             load_span = Timespan(remote_span.start, min(load_end, remote_span.end))
+            print(load_span)
             run_pipeline(pipeline, load_span, pipeline.loader.initial)
 
         elif args["append"]:
@@ -111,9 +112,9 @@ def _parse_timedelta(s: str):
         if s.endswith("Y"):
             years = int(s[:-1])
             return relativedelta(years=years)
-        if s.endswith("D"):
-            days = int(s[:-1])
-            return relativedelta(days=days)
+        if s.endswith("M"):
+            months = int(s[:-1])
+            return relativedelta(months=months)
     except:  # noqa: E722
         pass
 

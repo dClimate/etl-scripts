@@ -1,5 +1,12 @@
 # How to Implement
 
+Add get_remote_timespan
+
+Add pre_fetch
+
+Add fetch
+
+Add info
 
 
 # FAQ

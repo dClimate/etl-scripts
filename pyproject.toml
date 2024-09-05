@@ -35,6 +35,8 @@ dependencies = [
     "cfgrib",
     "dag-cbor==0.2.2",
     "dask[array,diagnostics,distributed]",
+    "lxml",
+    "ipdb",
 ]
 
 [project.optional-dependencies]

@@ -2,7 +2,7 @@ import datetime
 
 
 
-def _dataset_parameters(analysis_type: str) -> tuple[str, str, str]:
+def _dataset_parameters(analysis_type: str, dataset_type: str, data_var: str = "") -> tuple[str, str, str]:
     """
     Convenience method to return the correct dataset_id, title, and URL for querying the CDS API
 
@@ -12,23 +12,39 @@ def _dataset_parameters(analysis_type: str) -> tuple[str, str, str]:
         A string of 'analysis' or 'reanalysis'
     """
     if analysis_type == "reanalysis":
-        dataset_id = "cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.25deg_P1D"
-        title = "GLOBAL OCEAN GRIDDED L4 SEA SURFACE HEIGHTS AND DERIVED VARIABLES REPROCESSED (1993-ONGOING)"
-        info_url = (
-            "https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_MY_008_047/description"  # noqa: E501
-        )
+        if dataset_type == "sea_level":
+            dataset_id = "cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.25deg_P1D"
+            title = "GLOBAL OCEAN GRIDDED L4 SEA SURFACE HEIGHTS AND DERIVED VARIABLES REPROCESSED (1993-ONGOING)"
+            info_url = (
+                "https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_MY_008_047/description"  # noqa: E501
+            )
+        if dataset_type == "ocean_physics":
+            dataset_id = "cmems_mod_glo_phy_my_0.083deg_P1D-m"
+            title = "Global Ocean Physics Reanalysis"
+            info_url = "https://resources.marine.copernicus.eu/product-detail/GLOBAL_MULTIYEAR_PHY_001_030/INFORMATION"
+        
     elif analysis_type == "interim-reanalysis":
-        dataset_id = "cmems_obs-sl_glo_phy-ssh_myint_allsat-l4-duacs-0.25deg_P1D"
-        title = "GLOBAL OCEAN GRIDDED L4 SEA SURFACE HEIGHTS AND DERIVED VARIABLES REPROCESSED (1993-ONGOING)"
-        info_url = (
-            "https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_MY_008_047/description"  # noqa: E501
-        )
+        if dataset_type == "sea_level":
+            dataset_id = "cmems_obs-sl_glo_phy-ssh_myint_allsat-l4-duacs-0.25deg_P1D"
+            title = "GLOBAL OCEAN GRIDDED L4 SEA SURFACE HEIGHTS AND DERIVED VARIABLES REPROCESSED (1993-ONGOING)"
+            info_url = (
+                "https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_MY_008_047/description"  # noqa: E501
+            )
+        if dataset_type == "ocean_physics":
+            dataset_id = "cmems_mod_glo_phy_myint_0.083deg_P1D-m"
+            title = "Global Ocean Physics Reanalysis (Interim)"
+            info_url = "https://resources.marine.copernicus.eu/product-detail/GLOBAL_MULTIYEAR_PHY_001_030/INFORMATION"
     elif analysis_type == "analysis":
-        dataset_id = "cmems_obs-sl_glo_phy-ssh_nrt_allsat-l4-duacs-0.25deg_P1D"
-        title = "GLOBAL OCEAN GRIDDED L4 SEA SURFACE HEIGHTS AND DERIVED VARIABLES NRT"
-        info_url = (
-            "https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_NRT_008_046/description"  # noqa: E501
-        )
+        if dataset_type == "sea_level":
+            dataset_id = "cmems_obs-sl_glo_phy-ssh_nrt_allsat-l4-duacs-0.25deg_P1D"
+            title = "GLOBAL OCEAN GRIDDED L4 SEA SURFACE HEIGHTS AND DERIVED VARIABLES NRT"
+            info_url = (
+                "https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_NRT_008_046/description"  # noqa: E501
+            )
+        if dataset_type == "ocean_physics":
+            dataset_id = f"cmems_mod_glo_phy-{data_var}_anfc_0.083deg_P1D-m"
+            title = "Global Ocean Physics Analysis and Forecast"
+            info_url = "https://resources.marine.copernicus.eu/product-detail/GLOBAL_ANALYSIS_FORECAST_PHY_001_024/INFORMATION" 
     return dataset_id, title, info_url
 
 
@@ -40,10 +56,10 @@ dataset_description = {
         "Part of the processing is fitted to the Global ocean. (see QUID document or 1 [http://duacs.cls.fr] pages for processing details)."  # noqa: E501
         "The product gives additional variables (i.e. Absolute Dynamic Topography and geostrophic currents (absolute and anomalies))."  # noqa: E501
         "It serves in delayed-time applications. This product is processed by the DUACS multimission altimeter data processing system. "  # noqa: E501
-        f"More information at {_dataset_parameters(analysis_type='analysis')[2]} and {_dataset_parameters(analysis_type='reanalysis')[2]}"
+        f"More information at {_dataset_parameters(analysis_type='analysis', dataset_type='sea_level')[2]} and {_dataset_parameters(analysis_type='reanalysis', dataset_type='sea_level')[2]}"
     },
     # TODO FIX THE ANALYSIS AND REANALYSIS LINK
-    "physics": {
+    "ocean_physics": {
          "The Operational Mercator global ocean analysis and forecast system at 1/12 degree includes daily mean ",
         "files of temperature from the top to the bottom over the global ocean. ",
             "The global ocean output files are displayed with a 1/12 degree horizontal ",
@@ -60,9 +76,8 @@ dataset_description = {
             "Sea Ice Concentration and In situ Temperature and Salinity vertical Profiles are jointly assimilated. ",
             "Moreover, a 3D-VAR scheme provides a correction for the slowly-evolving large-scale biases ",
             "in temperature and salinity. ",
-            f"More information at {_dataset_parameters(analysis_type='analysis')[2]} and {_dataset_parameters(analysis_type='reanalysis')[2]}"
+            f"More information at {_dataset_parameters(analysis_type='analysis', dataset_type='ocean_physics')[2]} and {_dataset_parameters(analysis_type='reanalysis', dataset_type='ocean_physics')[2]}"
     },
-    # TODO FIX THE ANALYSIS AND REANALYSIS LINK
     "salinity": {
             "The Operational Mercator global ocean analysis and forecast system at 1/12 degree includes daily mean ",
             "files of temperature from the top to the bottom over the global ocean. ",
@@ -86,7 +101,7 @@ dataset_description = {
             "due to incongruencies with the supporting libraries for unit conversion. ",
             "For this reason we leave the `unit_of_measurement` field blank, ",
             "although the dataset values are in fact measured in PSUs.",
-            f"More information at {_dataset_parameters(analysis_type='analysis')[2]} and {_dataset_parameters(analysis_type='reanalysis')[2]}"
+            f"More information at {_dataset_parameters(analysis_type='analysis', dataset_type='ocean_physics')[2]} and {_dataset_parameters(analysis_type='reanalysis',  dataset_type='ocean_physics')[2]}"
     }
 }
 
@@ -110,12 +125,35 @@ dataset_metadata = {
         "preliminary_lag_in_days": None,
         "expected_nan_frequency": 0.4226138117283951,
     },
+    "ocean_temp": {
+        "update_cadence": "daily",
+        "temporal_resolution": "daily",
+        "spatial_resolution": "0.25 degrees",
+        "spatial_precision": 0.01,
+        "dataset_description": str(dataset_description["ocean_physics"]),
+        "name": "copernicus_ocean_physics",
+        "updated": str(datetime.datetime.now()),
+        "missing_value": -2147483647,
+        "tags": ["Temperature, Salinity, Ocean Physics"],
+        "standard_name": "sea_water_temperature",
+        "long_name": "Sea Water Temperature",
+        "unit_of_measurement": "°C",
+        "final_lag_in_days": 150,
+        "preliminary_lag_in_days": None,
+        "expected_nan_frequency": 0.4226138117283951,
+    },
 }
 
-def static_metadata(dataset_type) -> dict:
+def static_metadata(dataset_type, variable) -> dict:
     """
     dict containing static fields in the metadata
     """
+    # Convert ocean_temp to ocean_physics
+    if dataset_type == "ocean_temp":
+        dataset_type_parameters = "ocean_physics"
+    else:
+        dataset_type_parameters = dataset_type
+
     static_metadata = {
         "coordinate_reference_system": "EPSG:4326",
         "update_cadence": dataset_metadata[dataset_type]["update_cadence"],
@@ -123,8 +161,8 @@ def static_metadata(dataset_type) -> dict:
         "spatial_resolution": dataset_metadata[dataset_type]["spatial_resolution"],
         "spatial_precision": 0.01,
         "provider_url": "https://resources.marine.copernicus.eu/product-detail/",
-        "reanalysis_data_download_url": _dataset_parameters(analysis_type="reanalysis")[2],
-        "analysis_data_download_url": _dataset_parameters(analysis_type="analysis")[2],
+        "reanalysis_data_download_url": _dataset_parameters(analysis_type="reanalysis", dataset_type=dataset_type_parameters, data_var=variable )[2],
+        "analysis_data_download_url": _dataset_parameters(analysis_type="analysis", dataset_type=dataset_type_parameters, data_var=variable)[2],
         "publisher": "Copernicus Marine Service",
         "title": "Copernicus Marine Anaylsis and Reanalysis",
         "provider_description": (

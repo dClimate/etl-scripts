@@ -110,7 +110,7 @@ def set_dataset_metadata(variable: str, dataset_name: str) -> Transformer:
                 dataset[variable].attrs.pop(key, None)
                 dataset[variable].encoding.pop(key, None)
 
-        dataset.attrs.update(static_metadata(dataset_name))
+        dataset.attrs.update(static_metadata(dataset_name, variable))
         return dataset
 
     return set_dataset_metadata

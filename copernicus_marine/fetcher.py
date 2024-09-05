@@ -139,9 +139,11 @@ class CopernicusOcean(Fetcher):
 
 
     def get_remote_timespan(self) -> Timespan:
-        files, earliest_time, latest_time = self._get_remote_files()
+        # files, earliest_time, latest_time = self._get_remote_files()
         # TODO: REMOVE, Just a limit for now
-        # earliest_time = np.datetime64("2022-01-01")
+        earliest_time = np.datetime64("1993-01-01")
+        # Get current time in np.datetime64 format
+        latest_time = np.datetime64(datetime.datetime.now())
         # latest_time = np.datetime64('2022-03-15')
         return Timespan(start=earliest_time, end=latest_time)
 
@@ -239,7 +241,7 @@ class CopernicusOcean(Fetcher):
         """Implementation of :meth:`Fetcher.fetch`"""
         current_datetime = pd.to_datetime(span.start).to_pydatetime()
         limit_datetime = pd.to_datetime(span.end).to_pydatetime()
-        # self.extract((current_datetime, limit_datetime))
+        self.extract((current_datetime, limit_datetime))
         # Extracting the start and end years from the timespan
         start_year = current_datetime.year
         end_year = limit_datetime.year
