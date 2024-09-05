@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 
 from dask.distributed import Client, LocalCluster
 from msgspec import json
@@ -6,32 +7,42 @@ import xarray as xr
 import numcodecs
 
 
-def normalize_longitudes(dataset: xr.Dataset) -> xr.Dataset:
-    dataset = dataset.assign_coords(longitude=(((dataset.longitude + 180) % 360) - 180))
+def normalize_longitudes(ds: xr.Dataset) -> xr.Dataset:
+    ds = ds.assign_coords(longitude=(((ds.longitude + 180) % 360) - 180))
 
     # After converting, the longitudes may still start at zero. This reorders the longitude coordinates from -180
     # to 180 if necessary.
-    return dataset.sortby(["latitude", "longitude"])
+    return ds.sortby(["latitude", "longitude"])
 
 
-def compress(dataset: xr.Dataset, variables: list[str]) -> xr.Dataset:
+def compress(ds: xr.Dataset, variables: list[str]) -> xr.Dataset:
     for var in variables:
-        dataset[var].encoding["compressor"] = numcodecs.Blosc()
+        ds[var].encoding["compressor"] = numcodecs.Blosc()
 
-    return dataset
-
-
-def rename_dimensions(dataset: xr.Dataset, names: dict[str, str]) -> xr.Dataset:
-    return dataset.rename(names)
+    return ds
 
 
-def transform_and_write_zarr(
-    dask_client, multizarr_json_path: Path, destination_dir: Path
-):
-    print(
-        f"Applying data transformations to Zarr Using kerchunk multizarr from {multizarr_json_path}"
-    )
+def rename_dimensions(ds: xr.Dataset, names: dict[str, str]) -> xr.Dataset:
+    return ds.rename(names)
 
+
+def perform_transformations(ds: xr.Dataset) -> xr.Dataset:
+    if "lat" in ds.dims:
+        ds = rename_dimensions(ds, {"lat": "latitude"})
+    if "lon" in ds.dims:
+        ds = rename_dimensions(ds, {"lon": "longitude"})
+
+    ds = normalize_longitudes(ds)
+    # Apply compression to all data variables
+    data_vars = list(ds.data_vars.keys())
+    ds = compress(ds, data_vars)
+    # Set chunk sizes to be determined automatically
+    ds = ds.chunk({"time": "auto", "latitude": "auto", "longitude": "auto"})
+
+    return ds
+
+
+def open_multizarr(multizarr_json_path: Path) -> xr.Dataset:
     with multizarr_json_path.open("rb") as f:
         multizarr_json = json.decode(f.read())
 
@@ -48,77 +59,27 @@ def transform_and_write_zarr(
         },
     )
 
-    # Apply transformations
-    ds = rename_dimensions(ds, {"lat": "latitude", "lon": "longitude"})
-    ds = normalize_longitudes(ds)
-    # Apply compression to all data variables
-    data_vars = list(ds.data_vars.keys())
-    ds = compress(ds, data_vars)
-    # Set chunk sizes to be determined automatically
-    ds = ds.chunk({"time": "auto"})
-
-    # Write the final Zarr
-    zarr_path = multizarr_json_path.with_suffix(".zarr")
-    print(f"Writing zarr to {zarr_path}")
-    with dask_client:
-        ds.to_zarr(zarr_path, mode="w", consolidated=True)
+    return ds
 
 
-if __name__ == "__main__":
-    import sys
+def print_usage():
+    script_call_path = sys.argv[0]
+    print(f"Usage: python {script_call_path} <path to multizarr json>")
+    print(f"Example: python {script_call_path} cpc/precip-conus/precip-conus.json")
 
-    def print_usage():
-        script_call_path = sys.argv[0]
-        print(f"Usage: python {script_call_path} <provider> <dataset>")
-        print(f"Example: python {script_call_path} cpc precip-conus")
 
+def main():
     # Verify the number of arguments
     num_arguments = len(sys.argv) - 1
-    if num_arguments != 2:
-        print(
-            f"Error: Script did not receive only two arguments, was provided {num_arguments} arguments"
-        )
+    if num_arguments != 1:
+        print("Error: Script received more than one argument")
         print_usage()
         sys.exit(1)
 
-    # Verify that the first argument is one of the valid dataset providers
-    data_provider = sys.argv[1]
-    match data_provider:
-        case "cpc":
-            pass
-        case "chirps" | "prism":
-            print(f"Data provider {data_provider} not supported yet")
-            sys.exit(1)
-        case _:
-            print(f"Invalid data provider argument {data_provider}")
-            print_usage()
-            sys.exit(1)
-
-    # Verify that the second argument is one of the valid datasets in that provider
-    dataset = sys.argv[2]
-    match data_provider:
-        case "cpc":
-            match dataset:
-                case "precip-conus" | "precip-global" | "tmax" | "tmin":
-                    pass
-                case _:
-                    print(f"Invalid dataset {dataset} for provider {data_provider}")
-                    print_usage()
-                    sys.exit(1)
-        case "chirps" | "prism":
-            print(f"Data provider {data_provider} not supported yet")
-            sys.exit(1)
-
-    # Get the multizarr jsons we need
-    current_file_dir = Path(__file__).parent
-    # The .resolve() removes the ".." from the final path
-    dataset_dir = (current_file_dir / ".." / data_provider / dataset).resolve()
-    multizarr_json_path = dataset_dir / f"{dataset}.json"
-
-    # Verify that the multizarr file exists
+    multizarr_json_path = Path(sys.argv[1])
+    # Ensure the multizarr json exists
     if not multizarr_json_path.exists():
-        print(f"Multizarr file does not exist! Located at {multizarr_json_path}")
-        print("Quitting transforming")
+        print(f"Error: Multizarr at {multizarr_json_path} does not exist!")
         sys.exit(1)
 
     # Set up a dask cluster with memory limits
@@ -126,7 +87,21 @@ if __name__ == "__main__":
     dask_client = Client(cluster)
 
     try:
-        transform_and_write_zarr(dask_client, multizarr_json_path, dataset_dir)
+        print(
+            f"Applying data transformations to Zarr Using kerchunk multizarr from {multizarr_json_path}"
+        )
+        ds = open_multizarr(multizarr_json_path)
+        ds = perform_transformations(ds)
+
+        zarr_path = multizarr_json_path.with_suffix(".zarr")
+        print(f"Writing zarr to {zarr_path}")
+        with dask_client:
+            ds.to_zarr(zarr_path, mode="w", consolidated=True)
+
     finally:
         dask_client.close()
         cluster.close()
+
+
+if __name__ == "__main__":
+    main()
