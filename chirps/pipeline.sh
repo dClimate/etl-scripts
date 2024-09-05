@@ -1,33 +1,48 @@
-#!/bin/sh
-# Exit if any command fails
+#!/bin/bash
 set -e
 
-process_dataset() {
-    local dataset_name="$1"
-    sh download.sh "$dataset_name"
-    source ../.venv/bin/activate
-    python combine_to_zarr.py "$dataset_name"
-    python zarr_to_ipld.py "$dataset_name"
+# Use separate print usage and argument validation functions in pipeline.sh compared to the other shell scripts to allow for the "all" option
+print_usage() {
+    echo Usage: bash "$0" "final-p05|final-p25|prelim-p05|all"
+    echo Example: bash "$0" all
 }
 
-for arg in "$@"; do
-    case "$arg" in
-        all)
-            process_dataset final-p05
-            process_dataset final-p25
-            process_dataset prelim-p05
-            ;;
-        final-p05)
-            process_dataset final-p05
-            ;;
-        final-p25)
-            process_dataset final-p25
-            ;;
-        prelim-p05)
-            process_dataset prelim-p05
-            ;;
-        *)
-            echo "Unknown argument: $arg" >&2
-            ;;
-    esac
-done
+num_arguments=$#
+
+# Checks if number of arguments is exactly 1
+if (( num_arguments != 1 )); then
+    echo "Error: Too many arguments"
+    print_usage
+    exit 1
+fi
+
+script_dir=$(dirname "$0")
+cd "$script_dir"
+
+pipeline() {
+    dataset=$1
+
+    source ../.venv/bin/activate
+
+    bash prefetch.sh $dataset
+    bash fetch.sh $dataset
+    bash transform.sh $dataset
+    bash load_to_ipld.sh $dataset
+    bash update_ipns.sh $dataset
+}
+
+case $1 in
+    final-p05|final-p25|prelim-p05)
+        pipeline $1
+        ;;
+    all)
+        pipeline final-p05
+        pipeline final-p25
+        pipeline prelim-p05
+        ;;
+    *)
+        echo "Error: Unknown argument $arg" >&2
+        print_usage
+        exit 1
+        ;;
+esac

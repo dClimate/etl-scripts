@@ -11,4 +11,6 @@ check_there_is_one_argument $#
 dataset=$1
 check_argument_is_valid $dataset
 
-python ../shared_python_scripts/transform_nc.py "$PWD/$dataset/" false
+cd $dataset
+echo "Downloading all datasets from: $dir_name"
+cat download-links.txt | xargs --max-procs=0 -n 1 wget --timestamping
