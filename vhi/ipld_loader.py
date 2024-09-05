@@ -71,12 +71,6 @@ class IPLDStacLoader(Loader, Metadata):
             np.datetime_as_string(span.start, unit='h').replace('-', '').replace(':', '').replace('T', ''),
             np.datetime_as_string(span.end, unit='h').replace('-', '').replace(':', '').replace('T', '')
         ]
-        dataset.attrs["bbox"] = [
-            dataset.geospatial_lon_min,
-            dataset.geospatial_lat_min,
-            dataset.geospatial_lon_max,
-            dataset.geospatial_lat_max,
-        ]
         dataset.to_zarr(store=mapper, consolidated=True)
         cid = mapper.freeze()
         print(f"Published {cid}")
@@ -102,13 +96,6 @@ class IPLDStacLoader(Loader, Metadata):
             np.datetime_as_string(old_start, unit='h').replace('-', '').replace(':', '').replace('T', ''),
             np.datetime_as_string(new_end, unit='h').replace('-', '').replace(':', '').replace('T', '')
         ]
-        dataset.attrs["bbox"] = [
-            dataset.geospatial_lon_min,
-            dataset.geospatial_lat_min,
-            dataset.geospatial_lon_max,
-            dataset.geospatial_lat_max,
-        ]
-        print(dataset.attrs["date_range"])
         dataset.to_zarr(store=mapper, consolidated=True, append_dim=self.time_dim)
         cid = mapper.freeze()
         print(f"Published {cid}")

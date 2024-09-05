@@ -1,6 +1,5 @@
 from dc_etl.transform import Transformer
 import xarray
-from .metadata import static_metadata
 import pandas as pd
 import numpy as np
 import dask.array as da
@@ -8,7 +7,7 @@ from dask import delayed
 import datetime
 from utils.helper_functions import numpydate_to_py
 
-def set_dataset_metadata(variable: str, dataset_name: str) -> Transformer:
+def DatasetTransformer() -> Transformer:
     """Transformer to update the zarr metadata.
 
     Returns
@@ -302,91 +301,7 @@ def set_dataset_metadata(variable: str, dataset_name: str) -> Transformer:
         # return the dataset w/ empty NaN arrays inserted for missing time periods.
         return populate_missing_weeks(dataset=merged_dataset)
 
+    def dataset_transformer(dataset: xarray.Dataset) -> xarray.Dataset:
+        return postprocess_zarr(dataset=dataset)
 
-    # Delete problematic or extraneous holdover attributes from the input files
-    # Because each Copernicus Marine dataset names fields differently
-    # ('latitude' vs 'lat') this list is long and duplicative
-    def set_dataset_metadata(dataset: xarray.Dataset) -> xarray.Dataset:
-
-        dataset = postprocess_zarr(dataset=dataset)
-        keys_to_remove = [
-            "scale_factor",
-            "add_offset",
-            "cdm_data_type",
-            "ANCILLARY_FILES",
-            "CITATION_TO_DOCUMENTS",
-            "CONFIGURE_FILE_CONTENT",
-            "CONTACT",
-            "DAYS_PER_PERIOD",
-            "FILENAME",
-            "INPUT_FILENAMES",
-            "INPUT_FILES",
-            "INSTRUMENT",
-            "DATE_BEGIN",
-            "DATE_END",
-            "DAYS PER PERIOD",
-            "Metadata_Conventions",
-            "PERIOD_OF_YEAR",
-            "PRODUCT_NAME",
-            "PROJECTION",
-            "SATELLITE",
-            "START_LATITUDE_RANGE",
-            "START_LONGITUDE_RANGE",
-            "END_LATITUDE_RANGE",
-            "END_LONGITUDE_RANGE",
-            "TIME_BEGIN",
-            "TIME_END",
-            "VERSION",
-            "YEAR",
-            "time_coverage_start",
-            "time_coverage_end",
-            "satellite_name",
-            "standard_name_vocabulary",
-            "version",
-            "created",
-            "creator_name",
-            "creator_email",
-            "creator_url",
-            "date_created",
-            "geospatial_lat_units",
-            "geospatial_lon_units",
-            # "geospatial_lat_min",
-            # "geospatial_lon_min",
-            # "geospatial_lat_max",
-            # "geospatial_lon_max",
-            "geospatial_lat_resolution",
-            "geospatial_lon_resolution",
-            "history",
-            "id",
-            "institution",
-            "instrument_name",
-            "naming_authority",
-            "process",
-            "processing_level",
-            "project",
-            "publisher_name",
-            "publisher_email",
-            "publisher_url",
-            "references",
-            "source",
-            "summary",
-        ]
-
-        all_keys = (
-            list(dataset.attrs.keys())
-            + list(dataset[variable].attrs.keys())
-            + list(dataset[variable].encoding.keys())
-        )
-
-        for key in all_keys:
-            if key in keys_to_remove:
-                dataset.attrs.pop(key, None)
-                dataset["latitude"].attrs.pop(key, None)
-                dataset["longitude"].attrs.pop(key, None)
-                dataset[variable].attrs.pop(key, None)
-                dataset[variable].encoding.pop(key, None)
-
-        dataset.attrs.update(static_metadata())
-        return dataset
-
-    return set_dataset_metadata
+    return dataset_transformer

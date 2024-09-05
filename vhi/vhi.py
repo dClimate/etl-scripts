@@ -13,7 +13,9 @@ from .cli import main
 from .fetcher import VHI
 from dc_etl.pipeline import Pipeline
 from dc_etl import component
-from .transformer import set_dataset_metadata
+from .metadata import MetadataTransformer
+from .transformer import DatasetTransformer
+
 from .ipld_loader import IPLDStacLoader
 from .extractor import VHINetCDFExtractor
 from .combiner import VHICombiner
@@ -40,9 +42,8 @@ def mainPipeline():
         # ),
         transformer=component.transformer(
             "composite",
-            set_dataset_metadata("VHI", "vhi"),
-            # component.transformer("rename_dims", {"lat": "latitude", "lon": "longitude"}),
-            # component.transformer("normalize_longitudes"),
+            DatasetTransformer(),
+            MetadataTransformer("VHI", "vhi"),
             component.transformer("compress", ["VHI"]),
         ),
         loader=IPLDStacLoader(
