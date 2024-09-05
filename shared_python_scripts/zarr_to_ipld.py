@@ -44,7 +44,10 @@ def load_zarr_to_ipld(zarr_path: Path):
     # Unpin the old CID
     if previous_cid:
         print("Unpinning previous CID")
-        subprocess.run(["ipfs-cluster-ctl", "pin", "rm", previous_cid], check=True)
+        try:
+            subprocess.run(["ipfs-cluster-ctl", "pin", "rm", previous_cid], check=True)
+        except:  # noqa E722
+            pass
 
 
 if __name__ == "__main__":
