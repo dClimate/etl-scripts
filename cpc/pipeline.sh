@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+# Use separate print usage and argument validation functions in pipeline.sh compared to the other shell scripts to allow for the "all" option
 print_usage() {
     echo Usage: bash "$0" "precip-conus|precip-global|tmin|tmax|all"
     echo Example: bash "$0" all
@@ -15,7 +16,6 @@ if (( num_arguments != 1 )); then
     exit 1
 fi
 
-
 script_dir=$(dirname "$0")
 cd "$script_dir"
 
@@ -26,8 +26,6 @@ pipeline() {
 
     bash prefetch.sh $dataset
     bash fetch.sh $dataset
-    bash extract.sh $dataset
-    bash combine.sh $dataset
     bash transform.sh $dataset
     bash load_to_ipld.sh $dataset
     bash update_ipns.sh $dataset
