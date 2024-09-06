@@ -9,7 +9,7 @@ def load_zarr_to_ipld(zarr_path: Path):
     ipld_store = get_ipfs_mapper(host="http://127.0.0.1:5001")
     ds = xr.open_zarr(zarr_path)
 
-    print("Writing zarr to IPLD")
+    print(f"Writing zarr {zarr_path} to IPLD")
     ds.to_zarr(ipld_store, mode="w")
 
     print("Writing CID and unpinning old one if it exists")
