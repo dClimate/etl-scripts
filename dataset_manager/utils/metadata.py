@@ -101,7 +101,7 @@ class Metadata(Convenience, IPFS):
                     "description": self.metadata["provider_description"],
                     "roles": ["producer"],
                     "url": self.metadata["provider_url"],
-                    "terms of service": self.metadata["terms_of_service"],
+                    "terms_of_service": self.metadata["terms_of_service"],
                 },
             ],
             "summaries": {"proj:epsg": self.metadata["coordinate_reference_system"]},

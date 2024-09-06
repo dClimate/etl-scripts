@@ -16,7 +16,7 @@ from dc_etl import component
 from .metadata import MetadataTransformer
 from .transformer import DatasetTransformer
 
-from .ipld_loader import IPLDStacLoader
+from .ipld_stac_loader import IPLDStacLoader
 from .extractor import VHINetCDFExtractor
 from .combiner import VHICombiner
 
