@@ -59,18 +59,15 @@ def fix_fill_missing_value(ds: xr.Dataset) -> tuple[xr.Dataset, dict]:
 
 def print_usage():
     script_call_path = sys.argv[0]
-    print(
-        f"Usage: python {script_call_path} <path to directory containing .nc files> <whether or not to fix fill values: true|false>"
-    )
-    print(f"Example: python {script_call_path} cpc/precip-conus/ false")
-    print(f"Example: python {script_call_path} chirps/final-p25/ true")
+    print(f"Usage: python {script_call_path} <path to directory containing .nc files>")
+    print(f"Example: python {script_call_path} cpc/precip-conus/")
 
 
 def main():
     # Verify the number of arguments
     num_arguments = len(sys.argv) - 1
-    if num_arguments != 2:
-        print("Error: Script did not receive two arguments")
+    if num_arguments != 1:
+        print("Error: Script did not receive only one argument")
         print_usage()
         sys.exit(1)
 
@@ -85,20 +82,6 @@ def main():
     if not nc_files:
         print(f"Error: No .nc files found in {nc_directory_path}")
         sys.exit(1)
-
-    should_fix_fill_missing_arg = sys.argv[2]
-    should_fix_fill_missing = False
-    match should_fix_fill_missing_arg:
-        case "true":
-            should_fix_fill_missing = True
-        case "false":
-            should_fix_fill_missing = False
-        case _:
-            print(
-                "Error: Argument can only be 'true' or 'false' for whether or not to fix fill values"
-            )
-            print_usage()
-            sys.exit(1)
 
     dataset_name = nc_directory_path.stem
     zarr_path = nc_directory_path / f"{dataset_name}.zarr"
@@ -115,7 +98,7 @@ def main():
         return
 
     # Set up a dask cluster with memory limits before computing
-    cluster = LocalCluster(n_workers=2, threads_per_worker=1, memory_limit="6GB")
+    cluster = LocalCluster(n_workers=1, threads_per_worker=1, memory_limit="16GB")
     dask_client = Client(cluster)
 
     try:
@@ -142,15 +125,11 @@ def main():
         chunk_sizes = {"time": "auto", "latitude": "auto", "longitude": "auto"}
         ds = ds.chunk(chunk_sizes)
 
-        if should_fix_fill_missing:
-            ds, encoding = fix_fill_missing_value(ds)
+        ds, encoding = fix_fill_missing_value(ds)
 
         print(f"Writing zarr to {zarr_path}")
         with dask_client:
-            if should_fix_fill_missing:
-                ds.to_zarr(zarr_path, mode="w", consolidated=True, encoding=encoding)
-            else:
-                ds.to_zarr(zarr_path, mode="w", consolidated=True)
+            ds.to_zarr(zarr_path, mode="w", consolidated=True, encoding=encoding)
 
     finally:
         dask_client.close()
