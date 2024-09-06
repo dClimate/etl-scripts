@@ -57,6 +57,39 @@ def fix_fill_missing_value(ds: xr.Dataset) -> tuple[xr.Dataset, dict]:
     return (ds, encoding)
 
 
+def perform_transformations(ds: xr.Dataset) -> tuple[xr.Dataset, dict]:
+    # Rename dimensions if needed
+    if "lat" in ds.dims:
+        ds = ds.rename({"lat": "latitude"})
+    if "lon" in ds.dims:
+        ds = ds.rename({"lon": "longitude"})
+
+    ds = normalize_longitudes(ds)
+
+    # Apply compression to all data variables
+    data_vars = list(ds.data_vars.keys())
+    for var in data_vars:
+        ds[var].encoding["compressor"] = numcodecs.Blosc()
+
+    # Rechunk
+    chunk_sizes = {"time": "auto", "latitude": "auto", "longitude": "auto"}
+    ds = ds.chunk(chunk_sizes)
+
+    ds, encoding = fix_fill_missing_value(ds)
+
+    return (ds, encoding)
+
+
+def should_zarr_be_regenerated(zarr_path: Path, nc_files: list[Path]) -> bool:
+    # If Zarr store already exists and is cached, get its modification time
+    zarr_mtime = os.path.getmtime(zarr_path) if os.path.exists(zarr_path) else 0
+
+    # Get the most recent modification time of .nc files
+    latest_nc_mtime = max(os.path.getmtime(file) for file in nc_files)
+
+    return zarr_mtime < latest_nc_mtime
+
+
 def print_usage():
     script_call_path = sys.argv[0]
     print(f"Usage: python {script_call_path} <path to directory containing .nc files>")
@@ -86,14 +119,8 @@ def main():
     dataset_name = nc_directory_path.stem
     zarr_path = nc_directory_path / f"{dataset_name}.zarr"
 
-    # If Zarr store already exists and is cached, get its modification time
-    zarr_mtime = os.path.getmtime(zarr_path) if os.path.exists(zarr_path) else 0
-
-    # Get the most recent modification time of .nc files
-    latest_nc_mtime = max(os.path.getmtime(file) for file in nc_files)
-
     # If Zarr store doesn't exist or any of the data is newer than the last time we created the zarr, generate the zarr
-    if zarr_mtime >= latest_nc_mtime:
+    if not should_zarr_be_regenerated(zarr_path, nc_files):
         print(f"Skipping generation of Zarr {zarr_path}, it is newer than .nc files")
         return
 
@@ -108,25 +135,7 @@ def main():
             parallel=True,
         )
 
-        # Rename dimensions if needed
-        if "lat" in ds.dims:
-            ds = ds.rename({"lat": "latitude"})
-        if "lon" in ds.dims:
-            ds = ds.rename({"lon": "longitude"})
-
-        ds = normalize_longitudes(ds)
-
-        # Apply compression to all data variables
-        data_vars = list(ds.data_vars.keys())
-        for var in data_vars:
-            ds[var].encoding["compressor"] = numcodecs.Blosc()
-
-        # Rechunk
-        chunk_sizes = {"time": "auto", "latitude": "auto", "longitude": "auto"}
-        ds = ds.chunk(chunk_sizes)
-
-        ds, encoding = fix_fill_missing_value(ds)
-
+        ds, encoding = perform_transformations(ds)
         print(f"Writing zarr to {zarr_path}")
         with dask_client:
             ds.to_zarr(zarr_path, mode="w", consolidated=True, encoding=encoding)
