@@ -11,5 +11,10 @@ check_there_is_one_argument $#
 dataset=$1
 check_argument_is_valid $dataset
 
-zarr_path="$PWD/${dataset}/${dataset}.zarr"
-python ../shared_python_scripts/zarr_to_ipld.py "$zarr_path"
+source ../.venv/bin/activate
+
+bash prefetch.sh $dataset
+bash fetch.sh $dataset
+bash transform.sh $dataset
+bash load_to_ipld.sh $dataset
+bash update_ipns.sh $dataset
