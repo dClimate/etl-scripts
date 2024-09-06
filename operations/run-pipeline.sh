@@ -2,7 +2,7 @@
 set -e
 
 print_usage() {
-    echo Usage: bash "$0" "cpc|chirps"
+    echo Usage: bash "$0" "cpc|chirps|prism"
     echo Example: bash "$0" cpc
 }
 
@@ -32,6 +32,11 @@ case $provider in
         bash pipeline.sh final-p25
         bash pipeline.sh prelim-p05
         ;;
+    prism)
+        cd ../prism
+        bash pipeline.sh precip-4km
+        bash pipeline.sh tmax-4km
+        bash pipeline.sh tmin-4km
     *)
         echo "Error: Unknown argument $provider" >&2
         print_usage
