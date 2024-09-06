@@ -28,18 +28,20 @@ def load_zarr_to_ipld(zarr_path: Path):
         f.write("\n")
 
     # Unpin old CID
-    dataset_name = zarr_path.stem
-    subprocess.run(
-        [
-            "ipfs-cluster-ctl",
-            "pin",
-            "add",
-            "--name",
-            f"cpc-{dataset_name}",
-            str(root_cid),
-        ],
-        check=True,
-    )
+    ipns_key_name_path = cid_path.parent / "ipns-key-name.txt"
+    with ipns_key_name_path.open("r") as f:
+        ipns_key_name = f.read()
+        subprocess.run(
+            [
+                "ipfs-cluster-ctl",
+                "pin",
+                "add",
+                "--name",
+                ipns_key_name,
+                str(root_cid),
+            ],
+            check=True,
+        )
 
     # Unpin the old CID
     if previous_cid:
