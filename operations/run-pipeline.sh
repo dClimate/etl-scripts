@@ -37,6 +37,7 @@ case $provider in
         bash pipeline.sh precip-4km
         bash pipeline.sh tmax-4km
         bash pipeline.sh tmin-4km
+        ;;
     *)
         echo "Error: Unknown argument $provider" >&2
         print_usage

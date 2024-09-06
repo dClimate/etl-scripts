@@ -26,13 +26,6 @@ cd $dataset
 while read data_date upstream_grid_count raw_dl_url; do
     nc_name="${data_date}_${upstream_grid_count}.nc"
 
-    # Temporary stop until PRISM resolves issue with their backend
-    # PRISM's netCDF converter for 2024-02-01 returns errors
-    if [[ $data_date == 2024-02-01 ]]; then
-        echo "Date 2024-02-01 found in data_date. Exiting fetch script early."
-        exit
-    fi
-
     # ! -e = Condition is true if file does not exist
     if [[ ! -e $nc_name ]]; then
         # Remove any older files with an older grid count if needed
@@ -47,7 +40,7 @@ while read data_date upstream_grid_count raw_dl_url; do
 
         # Download and overwrite
         zip_name="${nc_name}.zip"
-        # wget -O "$zip_name" "$raw_dl_url"
+        wget -O "$zip_name" "$raw_dl_url"
 
         # Unzip and extract just the nc file
         mkdir -p $data_date
