@@ -27,7 +27,7 @@ def load_zarr_to_ipld(zarr_path: Path):
         f.write(str(root_cid))
         f.write("\n")
 
-    # Unpin old CID
+    # Pin new CID across the cluster
     ipns_key_name_path = cid_path.parent / "ipns-key-name.txt"
     with ipns_key_name_path.open("r") as f:
         ipns_key_name = f.read()
