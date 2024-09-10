@@ -1,12 +1,22 @@
-# Development Environment Setup
-## Local Environment
-First ensure all the requirements from README-ops.md are installed, then follow the steps below.
+# How to setup your development environment
+## Install system environment packages
+Ensure the following are installed in the local environment, manually or through your package manager.
++ `git` Both for downloading this repository's code and for downloading the `ipldstore` python dependency.
++ `uv` https://github.com/astral-sh/uv
+  + For installing python packages and creating a python virtual environment
++ `kubo` the go ipfs daemon. https://dist.ipfs.tech/#kubo
++ `ipfs-cluster-service` for running the ipfs-cluster daemon. https://dist.ipfs.tech/#ipfs-cluster-service
+  + There is another daemon available called ipfs-cluster-follow, this can follow pinsets but not modify them, so it is not useful in our case.
++ `ipfs-cluster-ctl` for interfacing with the ipfs-cluster. https://dist.ipfs.tech/#ipfs-cluster-ctl
++ `wget` For downloading dataset files for CPC, CHIRPS, PRISM
++ `curl` For querying html pages for CHIRPS, PRISM
++ `unzip` Unzips .nc.zip files downloaded for PRISM
++ Standard POSIX tools like bash, grep, sed, awk
 
-## Setup python virtual environment
+## Create python virtual environment
+Now, create your python environment.
 1. Use `uv` to instantiate the virtual environment and install packages
 ```sh
-$ pwd
-"..."/etl-scripts
 $ uv venv
 $ uv pip compile --all-extras pyproject.toml -o requirements.txt
 $ uv pip sync requirements.txt
@@ -20,52 +30,39 @@ To deactivate once done working, just run
 $ deactivate
 ```
 
-## Install Commit Hooks
+## Start ipfs-cluster
++ First, ensure your ipfs daemon is running. See documentation here https://docs.ipfs.tech/how-to/command-line-quick-start/
++ Now ensure that your ipfs-cluster-service daemon is running. See documentation here https://ipfscluster.io/documentation/deployment/setup/
+
+To check that your ipfs cluster on your machine is running and can talk to your ipfs daemon, run
+```sh
+$ ipfs-cluster-ctl id
+```
+
+# Install Commit Hooks
+This commit hook just checks formatting and linting before you commit. You can inspect the config in the `.pre-commit-config.yaml` file.
 ```sh
 $ source .venv/bin/activate
 (venv) $ pre-commit install
 ```
 
-## Formatting and Linting
+# Formatting and Linting
 Just run the pre-commit hook using
 ```sh
-pre-commit run --all-files
+(venv) $ pre-commit run --all-files
 ```
-This will reformat all files, and lint them as well.
+This will reformat and lint all files.
 
-### Manually Formatting
+## Manually Formatting
 ```sh
-$ ruff format
+(venv) $ ruff format
 ```
-This command automatically reformats any files as needed. To only do a check, run `ruff format --check`
+This command automatically reformats. To only do a check, do `ruff format --check`
 
-### Manually Linting
+## Manually Linting
 ```sh
-$ pwd
-"..."/etl-scripts
-$ ruff check
+(venv) $ ruff check
 ```
 
-## Changing python requirements
-### Add dependency
-Pretend we are intalling the package `foo`.
-1. Change `pyproject.toml` file.
-```diff
-diff --git a/pyproject.toml b/pyproject.toml
-index 1234567..8901234 100644
---- a/pyproject.toml
-+++ b/pyproject.toml
-@@ -1,4 +1,5 @@
- dependencies = [
-+    "foo",
-     "ipldstore @ git+https://github.com/dClimate/ipldstore",
- ]
-```
-2. Now just rerun the steps to install packages. `uv` will automatically compute what to uninstall and reinstall for us.
-```sh
-$ uv pip compile --all-extras pyproject.toml -o requirements.txt
-$ uv pip sync requirements.txt
-```
-
-### Remove a dependency
-It's the same steps adding a dependency, after changing the `pyproject.toml` file, you rerun the steps to install packages.
+# Final Words
+You're now ready to get developing! We recommend looking at the ETLs for CPC in `cpc/` as a good starting point.
