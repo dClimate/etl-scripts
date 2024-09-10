@@ -16,3 +16,6 @@ dev = [
     "ruff",
     "pre-commit"
 ]
+monitoring = [
+    "multiformats"
+]
