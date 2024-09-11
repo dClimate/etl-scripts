@@ -37,7 +37,7 @@ generate_available() {
     echo Writing list of all dates from $earliest_date to $latest_date to "$dataset_dir/$available_for_download_txt"
     local range_query_url="https://services.nacse.org/prism/data/public/releaseDate/$data_type/$earliest_date/$latest_date"
 
-    cd "$dataset_dir" # cd to the dataset's directory
+    cd "$dataset_dir"
     curl --silent $range_query_url | awk '{print $1 " " $4 " " $5 "?format=nc"}' > "$available_for_download_txt"
 }
 
