@@ -9,9 +9,9 @@ The following is a an example of how the ETL for precip-conus runs. ETLs for the
 ```mermaid
 graph LR
 
-subgraph Machine Daemons
+subgraph Machine Processes
 ipfs[IPFS Daemon]
-cluster[IPFS Cluster]
+cluster[IPFS Cluster Daemon]
 end
 
 subgraph shared_python_scripts
