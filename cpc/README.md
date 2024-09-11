@@ -6,6 +6,10 @@
 
 # ETL Diagram
 The following is a an example of how the ETL for precip-conus runs. ETLs for the other 3 datasets run very similarly, so you can substitute `precip-conus/` in the diagram for one of the other datasets.
+
+> [!NOTE]
+> GitHub's mermaid diagram viewer elides nodes with long text, so will need to cross reference the mermaid source code in the markdown to see the descriptions for each step.
+
 ```mermaid
 graph LR
 

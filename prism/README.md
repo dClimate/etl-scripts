@@ -14,6 +14,10 @@ As for the climate variables, we ETL precipitation `precip`, maximum temperature
 
 # ETL Diagram
 This is an overview of PRISM's ETL, using precip-4km as an example. The transform step is different than CPC and CHIRPS since PRISM provides a .nc file per day, with no time coordinate attached that we must create ourselves in xarray. Thus, there is a `transform_prism.py` file that imports a lot of functionality from `transform_nc.py`.
+
+> [!NOTE]
+> GitHub's mermaid diagram viewer elides nodes with long text, so will need to cross reference the mermaid source code in the markdown to see the descriptions for each step.
+
 ```mermaid
 graph LR
 
