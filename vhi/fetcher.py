@@ -151,10 +151,8 @@ class VHI(Fetcher, Logging):
         """Implementation of :meth:`Fetcher.fetch`"""
         current_datetime = pd.to_datetime(span.start).to_pydatetime()
         limit_datetime = pd.to_datetime(span.end).to_pydatetime()
-        # self.extract((current_datetime, limit_datetime))
-        # self.prepare_input_files(keep_originals=False)
-        # start_date = span.start.astype(datetime.datetime)
-        # end_date = span.end.astype(datetime.datetime)
+        self.extract((current_datetime, limit_datetime))
+        self.prepare_input_files(keep_originals=False)
         # Extracting the start and end years from the timespan
         self.info(f"Fetching data for the timespan from {span.start} to {span.end}")
         start_year = current_datetime.year
