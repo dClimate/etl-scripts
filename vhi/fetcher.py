@@ -5,7 +5,6 @@ import datetime
 
 import pandas as pd
 import numpy as np
-import xarray as xr
 import glob
 
 import requests
@@ -27,30 +26,9 @@ class VHI(Fetcher, Logging):
     """
     VHI is a gridded dataset of vegetation health published in netCDF format that's updated every week.
     """
-
-    MIN_LAT = -55.152
-
-    MAX_LAT = 75.024
-
-    MIN_LON = -180
-
-    MAX_LON = 180
-
-    RESOLUTION = 360 / 10000  # this says there are 10000 points in 360 latitude/longitude
-
     def __init__(
         self,
         *args,
-        # dataset size is 2100+, 3616, 10000
-        requested_dask_chunks={"time": 200, "latitude": 226, "longitude": -1},  # 1.8 GB
-        requested_zarr_chunks={
-            "time": 200,
-            "latitude": 113,
-            "longitude": 250,
-        },  # 5.65 MB
-        requested_ipfs_chunker="size-113000",
-        skip_pre_parse_nan_check=True,
-        skip_post_parse_qc=True,
         cache: FileSpec | None = None,
         dataset_name: str = "vhi",
         **kwargs,
@@ -60,87 +38,25 @@ class VHI(Fetcher, Logging):
         """
         super().__init__(dataset_name)
          # Initialize properties directly
-        self.requested_dask_chunks = requested_dask_chunks
-        self.requested_zarr_chunks = requested_zarr_chunks
-        self.requested_ipfs_chunker = requested_ipfs_chunker
         self._cache = cache
         self.converter = NCtoNetCDF4Converter(dataset_name)
 
     data_download_url = "https://www.star.nesdis.noaa.gov/data/pub0018/VHPdata4users/data/Blended_VH_4km/VH"
 
-    dataset_start_date = datetime.datetime(1981, 8, 27, 0)
-
-    standard_name = "vegetation"
-
-    long_name = "Vegetation Health Index"
-
-    unit_of_measurement = "vegetative health score"
-
-    tags = ["index", "vegetation"]
-
-    collection_name = "VHI"
-    """
-    Overall collection of data. Used for filling STAC Catalogue.
-    """
+    # dataset_start_date = datetime.datetime(1981, 8, 27, 0)
+    dataset_start_date = datetime.datetime(2019, 1, 1, 0)
 
     dataset_name = "vhi"
-
-    file_type = "NetCDF"
-
-    protocol = "file"
-    """
-    Remote protocol string for MultiZarrToZarr and Xarray to use when opening input files.
-    'File' for local, 's3' for S3, etc.
-    See fsspec docs for more details.
-    """
-
-    identical_dimensions = ["HEIGHT", "WIDTH"]
-    """
-    List of dimension(s) whose values are identical in all input datasets.
-    This saves Kerchunk time by having it read these dimensions only one time, from the first input file
-    """
-
-    concat_dimensions = ["time", "sat"]
-    """
-    List of dimension(s) by which to concatenate input files' data variable(s)
-        -- usually time, possibly with some other relevant dimension
-    """
-
     data_var = "VHI"
-
-    bbox_rounding_value = 3
-    """Value to round bbox values by"""
-
-    time_resolution = "weekly"
-
-    update_cadence_bounds = [np.timedelta64(7, "D"), np.timedelta64(9, "D")]
-    """
-    VHI's odd update schedule means that 8 or 9 day gaps can appear around
-     the turn of the year (the latter for leap years)
-    Therefore we have to enforce contiguousness within a range instead of a set expected timedelta
-    """
-
-    missing_value = -999
-
-    has_nans: bool = True
-    """Since VHI has variable amounts of NaNs, disable quality checks for NaN values to prevent false negatives"""
-
-    final_lag_in_days = 21
-
-    expected_nan_frequency = 1  # VHI NaNs vary by the # and overlap of satellites, so are impossible to test
-
 
     def relative_path(self):
         return pathlib.Path("vhi")
 
 
     def get_remote_timespan(self) -> Timespan:
-        # files, earliest_time, latest_time = self._get_remote_files()
-        # TODO: REMOVE, Just a limit for now
-        earliest_time = np.datetime64("2024-01-01")
+        earliest_time = np.datetime64(self.dataset_start_date)
         # Get current time in np.datetime64 format
         latest_time = np.datetime64(datetime.datetime.now())
-        # latest_time = np.datetime64('2022-03-15')
         return Timespan(start=earliest_time, end=latest_time)
 
     def prefetch(self):
@@ -151,10 +67,10 @@ class VHI(Fetcher, Logging):
         """Implementation of :meth:`Fetcher.fetch`"""
         current_datetime = pd.to_datetime(span.start).to_pydatetime()
         limit_datetime = pd.to_datetime(span.end).to_pydatetime()
+        self.info(f"Fetching data for the timespan from {span.start} to {span.end}")
         self.extract((current_datetime, limit_datetime))
         self.prepare_input_files(keep_originals=False)
         # Extracting the start and end years from the timespan
-        self.info(f"Fetching data for the timespan from {span.start} to {span.end}")
         start_year = current_datetime.year
         end_year = limit_datetime.year
         for year in range(start_year, end_year + 1):
@@ -212,7 +128,6 @@ class VHI(Fetcher, Logging):
         bool
             True if new data found, false otherwise
         """
-        # super().extract()  # Initialize an empty list of new files
         # define request dates (must be in weekly format)
         start_date, start_week, end_date = self.define_request_dates(date_range)
         # Prepare a session
@@ -365,7 +280,6 @@ class VHI(Fetcher, Logging):
         return year, week
 
     # TRANSFORM STEPS
-
     def prepare_input_files(self, keep_originals: bool = False):
         """
         Command line tools converting raw downloaded data to daily / hourly data
@@ -487,132 +401,3 @@ class VHI(Fetcher, Logging):
             # don't make a entry for it
             date_range = date_range.union(pd.date_range(year_start, year_end, freq="7D"))
         return date_range
-
-    def get_date_range_from_file(self, path: str) -> tuple[datetime.datetime, datetime.datetime]:
-        """
-        Open file and return the start and end date of the data.
-        The dimension name used to store dates should be passed as `dimension`
-
-        Parameters
-        ----------
-        path : str
-            The location of the file
-
-        Returns
-        -------
-        tuple
-            tuple of datetime.datetime.date, datetime.datetime.date
-            the first and last days (inclusive) covered by the netcdf
-        """
-        year, week = self.return_year_week_from_path(path)
-        # There are 52 weeks in a year, but 365 is not dividible by 7,
-        # we will end up missing 1-2 days of data a year at the tail end.
-        start_date = datetime.datetime(year, 1, 1) + datetime.timedelta(days=(7 * (week - 1)))
-        end_date = start_date + datetime.timedelta(days=6)
-        return start_date, end_date
-
-    def input_date_range(self) -> tuple[datetime.datetime, datetime.datetime]:
-        """
-        Get the beginning and end of the range of dates in the list of files in `self.input_files()`
-
-        Returns
-        -------
-        tuple
-            tuple of datetime.datetimes containing (start date, end date)
-        """
-        input_files = list(self.input_files())
-        return (
-            self.get_date_range_from_file(input_files[0])[0],
-            self.get_date_range_from_file(input_files[-1])[1],
-        )
-
-    def set_zarr_metadata(self, dataset: xr.Dataset) -> xr.Dataset:
-        """
-        Function to append to or update key metadata information to the attributes and encoding of the output Zarr.
-        Extends existing class method to create attributes or encoding specific to ERA5.
-
-        Parameters
-        ----------
-        dataset: xr.Dataset
-            The dataset prepared for parsing
-
-        Returns
-        -------
-        dataset : xr.Dataset
-            The dataset with metadata formatted correctly for parsing
-        """
-        dataset = super().set_zarr_metadata(dataset)
-        # Newer satellites have different attributes we must accommodate to prevent update ETL failure
-        try:
-            dataset.attrs["preferred citation"] = dataset.attrs["CITATION_TO_DOCUMENTS"]
-        except KeyError:
-            dataset.attrs["preferred citation"] = dataset.attrs["summary"] + " from " + dataset.attrs["creator_name"]
-        # Delete problematic or extraneous holdover attributes from the input files
-        keys_to_remove = [
-            "scale_factor",
-            "add_offset",
-            "cdm_data_type",
-            "ANCILLARY_FILES",
-            "CITATION_TO_DOCUMENTS",
-            "CONFIGURE_FILE_CONTENT",
-            "CONTACT",
-            "DAYS_PER_PERIOD",
-            "FILENAME",
-            "INPUT_FILENAMES",
-            "INPUT_FILES",
-            "INSTRUMENT",
-            "DATE_BEGIN",
-            "DATE_END",
-            "DAYS PER PERIOD",
-            "Metadata_Conventions",
-            "PERIOD_OF_YEAR",
-            "PRODUCT_NAME",
-            "PROJECTION",
-            "SATELLITE",
-            "START_LATITUDE_RANGE",
-            "START_LONGITUDE_RANGE",
-            "END_LATITUDE_RANGE",
-            "END_LONGITUDE_RANGE",
-            "TIME_BEGIN",
-            "TIME_END",
-            "VERSION",
-            "YEAR",
-            "time_coverage_start",
-            "time_coverage_end",
-            "satellite_name",
-            "standard_name_vocabulary",
-            "version",
-            "created",
-            "creator_name",
-            "creator_email",
-            "creator_url",
-            "date_created",
-            "geospatial_lat_units",
-            "geospatial_lon_units",
-            "geospatial_lat_min",
-            "geospatial_lon_min",
-            "geospatial_lat_max",
-            "geospatial_lon_max",
-            "geospatial_lat_resolution",
-            "geospatial_lon_resolution",
-            "history",
-            "id",
-            "institution",
-            "instrument_name",
-            "naming_authority",
-            "process",
-            "processing_level",
-            "project",
-            "publisher_name",
-            "publisher_email",
-            "publisher_url",
-            "references",
-            "source",
-            "summary",
-        ]
-        for key in keys_to_remove:
-            dataset.attrs.pop(key, None)
-            dataset[self.data_var].attrs.pop(key, None)
-            if key != "dtype":
-                dataset[self.data_var].encoding.pop(key, None)
-        return dataset
