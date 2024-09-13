@@ -33,13 +33,6 @@ def mainPipeline():
         fetcher=VHI(skip_pre_parse_nan_check=True, cache=CACHE),
         extractor=VHINetCDFExtractor(),
         combiner=VHICombiner(),
-        # combiner=component.combiner(
-        #     "default",
-        #     output_folder=CACHE / "vhi" / "combined",
-        #     concat_dims=["time"],
-        #     identical_dims=["latitude", "latitude"],
-        #     preprocessors=[component.combine_preprocessor("fix_fill_value", -9.96921e36)],
-        # ),
         transformer=component.transformer(
             "composite",
             DatasetTransformer(),

@@ -384,7 +384,7 @@ class Metadata(Convenience, IPFS):
         """
         # Filter down and name correctly needed attributes
         zarr_attrs = {
-            "missing value",
+            "missing_value",
             "dtype",
             "preferred_chunks",
             "Conventions",
@@ -465,7 +465,7 @@ class Metadata(Convenience, IPFS):
                         "href": str(
                             old_stac_item["assets"]["zmetadata"]["href"].set(base=self._default_base)
                         ),  # convert CID object back to hash str
-                        "metadata href": {"/": old_item_ipfs_hash},
+                        "metadata_href": {"/": old_item_ipfs_hash},
                         "type": "application/geo+json",
                         "title": stac_item["assets"]["zmetadata"]["title"],
                     }
@@ -642,7 +642,7 @@ class Metadata(Convenience, IPFS):
             The dataset being published, pre-metadata update
         """
         # Encode fields for the data variable in the main encoding dict and the data var's own encoding dict (for
-        # thoroughness)
+        # thoroughness)  
         dataset.encoding = {
             self.data_var: {
                 "dtype": self.data_var_dtype,
@@ -721,6 +721,7 @@ class Metadata(Convenience, IPFS):
         if isinstance(self.store, IPLD):
             try:
                 stac_metadata = self.load_stac_metadata()
+                print("FOUND STAC METADATA")
             except (KeyError, TimeoutError):
                 pass
 

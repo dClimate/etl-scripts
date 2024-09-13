@@ -10,4 +10,5 @@ requirements.txt
 cached_data
 datasets
 .env
+test.py
 __pycache__

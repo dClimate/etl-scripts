@@ -18,36 +18,16 @@ def DatasetTransformer() -> Transformer:
 
     data_var = "VHI"
 
+    # THIS IS DIFFERENT THAN THE BBOX BECAUSE BBOX IS JUST THE UPPER AND LOWER MOST VALUES. WHEN YOU APPLY THE RESOLUTION YOU GET THESE LIMITS
     MIN_LAT = -55.152
-
     MAX_LAT = 75.024
-
     MIN_LON = -180
-
     MAX_LON = 180
-
+    
     time_dim="time"
 
     RESOLUTION = 360 / 10000  # this says there are 10000 points in 360 latitude/longitude
 
-    identical_dimensions = ["HEIGHT", "WIDTH"]
-    """
-    List of dimension(s) whose values are identical in all input datasets.
-    This saves Kerchunk time by having it read these dimensions only one time, from the first input file
-    """
-
-    concat_dimensions = ["time", "sat"]
-    """
-    List of dimension(s) by which to concatenate input files' data variable(s)
-        -- usually time, possibly with some other relevant dimension
-    """
-
-    protocol = "file"
-    """
-    Remote protocol string for MultiZarrToZarr and Xarray to use when opening input files.
-    'File' for local, 's3' for S3, etc.
-    See fssp
-    """
 
     def preprocess_zarr(dataset: xarray.Dataset) -> xarray.Dataset:
         """
@@ -74,7 +54,11 @@ def DatasetTransformer() -> Transformer:
         dataset = dataset.drop_vars(unwanted_vars)
         dti = pd.to_datetime(dataset.time.values, format="%Y%m%d%H%M%S%f")
         dhi = [MAX_LAT - (val + 0.5) * RESOLUTION for val in dataset.HEIGHT.values]
+        # Truncate anything after 3 decimal places
+        dhi = [round(val, 3) for val in dhi]
         dwi = [MIN_LON + (val + 0.5) * RESOLUTION for val in dataset.WIDTH.values]
+        # Truncate anything after 3 decimal places
+        dwi = [round(val, 3) for val in dwi]
         dataset = dataset.rename_dims({"HEIGHT": "latitude", "WIDTH": "longitude"})
         dataset = dataset.assign_coords({"time": dti, "latitude": dhi, "longitude": dwi})
         return dataset

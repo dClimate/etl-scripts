@@ -8,6 +8,7 @@ from dataset_manager.utils.metadata import Metadata
 from dataset_manager.utils.store import IPLD
 from dataset_manager.utils.logging import Logging
 import numpy as np
+import datetime
 
 class IPLDStacLoader(Loader, Metadata, Logging):
     """Use IPLD to store datasets."""
@@ -16,6 +17,17 @@ class IPLDStacLoader(Loader, Metadata, Logging):
     organization = "dClimate"
     dataset_name = "vhi"
     time_resolution = "weekly"
+    use_compression = True
+    unit_of_measurement = "vegetative health score"
+    requested_zarr_chunks={
+            "time": 200,
+            "latitude": 113,
+            "longitude": 250,
+    }
+    dataset_start_date = datetime.datetime(1981, 1, 1)
+    encryption_key = None
+    missing_value = -999
+
 
     @classmethod
     def _from_config(cls, config):
@@ -43,7 +55,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         self.host = "http://127.0.0.1:5001" 
         self.requested_ipfs_chunker = "size-113000"
         self.metadata = metadata
-
+        self.requested_dask_chunks = {"time": 200, "latitude": 226, "longitude": -1}  # 1.8 GB
 
     def static_metadata(self):
         return self.metadata
@@ -58,7 +70,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
 
     def initial(self, dataset: xarray.Dataset, span: Timespan | None = None):
         """Start writing a new dataset."""
-
+        print(span)
         mapper = self._mapper()
         dataset = dataset.sel(**{self.time_dim: slice(*span)})
         # Convert numpy.datetime64 to string YYYYMMDDHH format
@@ -66,6 +78,20 @@ class IPLDStacLoader(Loader, Metadata, Logging):
             np.datetime_as_string(span.start, unit='h').replace('-', '').replace(':', '').replace('T', ''),
             np.datetime_as_string(span.end, unit='h').replace('-', '').replace(':', '').replace('T', '')
         ]
+        # print(dataset)
+        # data_point = dataset.sel(
+        #     time="2024-01-01", 
+        #     latitude=44.982, 
+        #     longitude=44.982, 
+        #     # method="nearest"
+        # )
+
+        # # Access the VHI variable at the selected point
+        # vhi_value = data_point['VHI'].values
+        # print(vhi_value)
+        dataset = self.set_zarr_metadata(dataset)
+        # Chunk the dataset to the requested dask chunks
+        dataset = dataset.chunk(self.requested_dask_chunks)
         dataset.to_zarr(store=mapper, consolidated=True)
         cid = mapper.freeze()
         self.info("Preparing Stac Metadata")
@@ -86,6 +112,8 @@ class IPLDStacLoader(Loader, Metadata, Logging):
             np.datetime_as_string(old_start, unit='h').replace('-', '').replace(':', '').replace('T', ''),
             np.datetime_as_string(new_end, unit='h').replace('-', '').replace(':', '').replace('T', '')
         ]
+        # Chunk the dataset to the requested dask chunks
+        dataset = dataset.chunk(self.requested_dask_chunks)
         dataset.to_zarr(store=mapper, consolidated=True, append_dim=self.time_dim)
         cid = mapper.freeze()
         self.info("Preparing Stac Metadata")

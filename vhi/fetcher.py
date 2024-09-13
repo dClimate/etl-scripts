@@ -137,7 +137,7 @@ class VHI(Fetcher, Logging):
     def get_remote_timespan(self) -> Timespan:
         # files, earliest_time, latest_time = self._get_remote_files()
         # TODO: REMOVE, Just a limit for now
-        earliest_time = np.datetime64("2020-01-01")
+        earliest_time = np.datetime64("2024-01-01")
         # Get current time in np.datetime64 format
         latest_time = np.datetime64(datetime.datetime.now())
         # latest_time = np.datetime64('2022-03-15')
