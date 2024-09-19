@@ -6,6 +6,8 @@ cd "$script_dir"
 
 source shared_functions.sh
 
+check_python_virtualenv_activated
+
 check_there_is_one_argument $#
 
 dataset=$1
