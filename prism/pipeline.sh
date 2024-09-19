@@ -15,6 +15,7 @@ source ../.venv/bin/activate
 
 bash prefetch.sh $dataset
 bash fetch.sh $dataset
+bash combine.sh $dataset
 bash transform.sh $dataset
 bash load_to_ipld.sh $dataset
 bash update_ipns.sh $dataset
