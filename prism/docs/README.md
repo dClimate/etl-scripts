@@ -16,70 +16,9 @@ As for the climate variables, we ETL precipitation `precip`, maximum temperature
 This is an overview of PRISM's ETL, using precip-4km as an example. The transform step is different than CPC and CHIRPS since PRISM provides a .nc file per day, with no time coordinate attached that we must create ourselves in xarray. Thus, there is a `transform_prism.py` file that imports a lot of functionality from `transform_nc.py`.
 
 > [!NOTE]
-> GitHub's mermaid diagram viewer elides nodes with long text, so will need to cross reference the mermaid source code in the markdown to see the descriptions for each step.
+> GitHub's mermaid diagram viewer cannot handle nodes with long text. This is why we have separated the mermaid diagram into `./etl-diagram.mmd`. To generate the svg yourself while editing documentation, use the [mermaid cli](https://github.com/mermaid-js/mermaid-cli) and run `mmdc -i etl-diagram.mmd -o etl-diagram.svg`.
 
-```mermaid
-graph LR
-
-subgraph Machine Processes
-ipfs[IPFS Daemon]
-cluster[IPFS Cluster Daemon]
-end
-
-subgraph shared_python_scripts
-transform_nc[transform_nc.py]
-transform_prism[transform_prism.py]
-zarr_to_ipld[zarr_to_ipld.py]
-
-transform_nc -->|imports functions from| transform_prism
-end
-
-subgraph precip-4km/ directory
-available_for_download[available-for-download.txt]
-daily_nc_files[1981-01-01_8.nc 1981-01-02_8.nc ... 1982-01-01_8.nc 1982-01-02_8.nc ...]
-yearly_nc_files[1981.nc 1982.nc ...]
-zarr[precip-4km.zarr]
-cid[precip-4km.zarr.cid]
-ipns_txt[ipns-key-name.txt]
-end
-
-subgraph PRISM Web Service
-prism_range((PRISM data range query service))
-prism_nc((PRISM netCDF converter service))
-end
-
-
-subgraph Prefetch
-prefetch_description[[This step queries PRISM's web service to find all available daily data files, and then writes that list of downloadable files.]]
-prefetch[bash prefetch.sh precip-4km] --> prism_range --> available_for_download
-end
-
-subgraph Fetch
-fetch_description[[This step downloads the netCDF .nc files form PRISM's conversion step. This step is idempotent, and will only download files that are either missing or have updateed grid counts.]]
-fetch[bash fetch.sh precip-4km]
-available_for_download --> fetch --> prism_nc --> daily_nc_files
-end
-
-subgraph Transform
-transform_description[[This step first combines data from each year, while adding a time dimension. e.g. 1981-01-01_8.nc to 1981-12-31_8.nc are all merged into 1981.nc. This step then combines the yearly files into the Zarr, and writes that to disk. Because of this, this functionality lives in a separate python file that imports shared logic from transform_nc.py. This step is also idempotent, and will not act if the .nc files have not changed.]]
-transform[bash transform.sh precip-4km]
-daily_nc_files --> transform --> transform_prism --> yearly_nc_files --> transform_prism --> zarr
-end
-
-subgraph Load to IPLD
-load_to_ipld_description[[This step puts the zarr onto IPFS using ipldstore. Once done, it writes the CID of the HAMT root to the dataset directory, and pins it to the cluster.]]
-load_to_ipld[bash load_to_ipld.sh precip-conus]
-zarr --> load_to_ipld --> zarr_to_ipld --> cid
-load_to_ipld -->|pin cid| cluster
-end
-
-subgraph Update IPNS
-update_ipns_description[[This step pins publishes the CID to the IPNS record for the specified dataset. That way, consumers of this data only need to store and resolve IPNS records instead of keeping track of changing CIDs.]]
-update_ipns[bash update_ipns.sh precip-conus]
-ipns_txt --> update_ipns -->|publish cid to ipns| ipfs
-cid --> update_ipns
-end
-```
+![Rendered mermaid diagram](./etl-diagram.svg)
 
 # bil vs nc, and FTP vs HTTPS
 PRISM provides both FTP and HTTPS services for retrieving their data.
