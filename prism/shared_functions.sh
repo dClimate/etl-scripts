@@ -1,3 +1,14 @@
+cd_to_script_dir() {
+    cd $(dirname "$1")
+}
+
+check_python_virtualenv_activated() {
+    if [[ -z "$VIRTUAL_ENV" ]]; then
+        echo "No python virtual environment detected, exiting immediately"
+        exit 1
+    fi
+}
+
 print_usage() {
     echo Usage: bash "$0" "precip-4km|tmax-4km|tmin-4km"
     echo Example: bash "$0" precip-4km
