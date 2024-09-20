@@ -88,7 +88,7 @@ class VHI(Fetcher, Logging):
                 if path.endswith(".nc4"):
                     file_year, file_week = self.return_year_week_from_path(path)
                     if file_year == year and file_week == week:
-                        print(f"Found file in cache: {path}")
+                        # print(f"Found file in cache: {path}")
                         return self._cache_path(path)
     
     def _cache_path(self, path):

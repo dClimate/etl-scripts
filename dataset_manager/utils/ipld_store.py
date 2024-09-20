@@ -211,7 +211,6 @@ class IPLDStore(StoreInterface):
         ipldstore.IPLDStore
             An IPLD `MutableMapping`, usable, for example, to open a Zarr with `xr.open_zarr`
         """
-        print(self.requested_ipfs_chunker)
         if refresh or not hasattr(self, "_mapper"):
             if self.requested_ipfs_chunker:
                 self._mapper = ipldstore.get_ipfs_mapper(host=self._host, chunker=self.requested_ipfs_chunker)

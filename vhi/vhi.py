@@ -29,6 +29,7 @@ def mainPipeline():
     """Run the example.
     Other than how they're configured, the two examples aren't particularly different, so we use the same command
     line interface code for both."""
+
     pipeline = Pipeline(
         fetcher=VHI(skip_pre_parse_nan_check=True, cache=CACHE),
         extractor=VHINetCDFExtractor(),
