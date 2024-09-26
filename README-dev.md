@@ -1,6 +1,7 @@
 # How to setup your development environment
 ## Install system environment packages
 Ensure the following are installed in the local environment, manually or through your package manager.
++ `bash` version 4 or greater, for use of new builtins in like mapfile. Checking your bash version is important for macOS systems which are stuck on bash 3.
 + `git` Both for downloading this repository's code and for downloading the `ipldstore` python dependency.
 + `uv` https://github.com/astral-sh/uv
   + For installing python packages and creating a python virtual environment
