@@ -5,5 +5,9 @@ __pycache__
 *.zarr
 *.cid
 
+.env
+
 pyrightconfig.json
 requirements.txt
+
+etl-scripts-cyclops
