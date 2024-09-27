@@ -33,6 +33,7 @@ from .base_values import (
     ERA5LandWindUValues, 
     ERA5LandWindVValues
 )
+import datetime
 
 
 class MetadataTransformer():
@@ -43,7 +44,7 @@ class MetadataTransformer():
         pass
 
 
-    def set_metadata(self, dataset: xarray.Dataset) -> xarray.Dataset:
+    def set_metadata(self, dataset: xarray.Dataset, pipeline_info: dict) -> xarray.Dataset:
         """
         Function to append to or update key metadata information to the attributes and encoding of the output Zarr.
         Extends existing class method to create attributes or encoding specific to ERA5.
@@ -71,34 +72,35 @@ class MetadataTransformer():
         # Finally, if there is no existing data, set the date attribute to an empty string.
         # If a new finalization date exists, format it to %Y%m%d%H.
         # Record the date the new fin date was discovered to prevent wasteful checking
-        # TODO:
-        # if hasattr(self, "finalization_date") and self.finalization_date is not None:
-        #     dataset.attrs["finalization_date"] = datetime.datetime.strftime(self.finalization_date, "%Y%m%d%H")
-        #     dataset.attrs["last_finalization_date_change"] = datetime.datetime.today().date().isoformat()
-        # else:
-        #     if (
-        #         self.store.has_existing
-        #         and not self.rebuild_requested
-        #         and "finalization_date" in self.store.dataset().attrs
-        #     ):
-        #         dataset.attrs["finalization_date"] = self.store.dataset().attrs["finalization_date"]
-        #         self.info(
-        #             "Finalization date not set previously, setting to existing finalization date: "
-        #             f"{dataset.attrs['finalization_date']}"
-        #         )
-        #         if "last_finalization_date_change" in self.store.dataset().attrs:
-        #             dataset.attrs["last_finalization_date_change"] = self.store.dataset().attrs[
-        #                 "last finalization date change"
-        #             ]
-        #     else:
-        #         dataset.attrs["finalization_date"] = ""
-        #         self.info("Finalization date not set previously, setting to empty string")
-
+        finalization_date = pipeline_info["finalization_date"]
+        existing_dataset = pipeline_info["existing_dataset"]
+        existing_properties = existing_dataset.get("properties", {}) if existing_dataset else {}
+        existing_finalizating_date = existing_properties.get("finalization_date", None)
+        existing_last_finalization_date_change = existing_properties.get("last_finalization_date_change", None)
+        if finalization_date is not None:
+            dataset.attrs["finalization_date"] = finalization_date
+            dataset.attrs["last_finalization_date_change"] = datetime.datetime.today().date().isoformat()
+        else:
+            if (
+                existing_finalizating_date
+                and not self.rebuild_requested
+            ):
+                dataset.attrs["finalization_date"] = existing_finalizating_date
+                print(
+                    "Finalization date not set previously, setting to existing finalization date: "
+                    f"{dataset.attrs['finalization_date']}"
+                )
+                if existing_last_finalization_date_change:
+                    dataset.attrs["last_finalization_date_change"] = existing_last_finalization_date_change
+            else:
+                dataset.attrs["finalization_date"] = ""
+                print("Finalization date not set previously, setting to empty string")
+        dataset.attrs.update(self.static_metadata)
         return dataset
 
-        dataset.attrs.update(self.static_metadata())
-    def metadata_transformer(self, dataset: xarray.Dataset) -> xarray.Dataset:
-        return self.set_metadata(dataset=dataset)
+
+    def metadata_transformer(self, dataset: xarray.Dataset, pipeline_info: dict) -> tuple[xarray.Dataset, dict]:
+        return self.set_metadata(dataset=dataset, pipeline_info=pipeline_info), pipeline_info
 
 
 class ERA5FamilyMetadataTransformer(MetadataTransformer, ERA5Family):

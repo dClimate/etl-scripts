@@ -4,6 +4,9 @@ from .base_values import ERA5Family
 
 class ERA5FamilyDatasetTransformer(ERA5Family):
 
+    def __init__(self, data_var):
+        self.data_var = data_var  # Set data_var for this instance
+
     def standardize_longitudes(cls, dataset: xarray.Dataset) -> xarray.Dataset:
         """
         Convert the longitude coordinates of a dataset from 0 - 360 to -180 to 180.
@@ -24,7 +27,7 @@ class ERA5FamilyDatasetTransformer(ERA5Family):
         # to 180 if necessary.
         return dataset.sortby(["latitude", "longitude"])
 
-    def postprocess_zarr(cls, dataset: xarray.Dataset) -> xarray.Dataset:
+    def postprocess_zarr(cls, dataset: xarray.Dataset, data_var: str) -> xarray.Dataset:
         """
         Perform any necessary pre-processing to the dataset on load.
         Change the lat/lon coordinate names to the dClimate standard "latitude" and "longitude".
@@ -42,17 +45,16 @@ class ERA5FamilyDatasetTransformer(ERA5Family):
         dataset["time"].encoding["missing_value"] = cls.missing_value
         dataset = dataset.rename({"lat": "latitude", "lon": "longitude"})
         dataset = dataset.sortby("latitude")
-
         # Some datasets come packaged with different coordinates which break parses and require renaming. if its needed it will do it
         # Otherwise it will just return the dataset
         dataset = dataset.rename_vars(
-            {[key for key in dataset.data_vars][0]: "ssrd"}
+            {[key for key in dataset.data_vars][0]: data_var}
         )  # GRIB CDO process seems to remove the variable name
 
         return cls.standardize_longitudes(dataset)
 
-    def dataset_transformer(self, dataset: xarray.Dataset) -> xarray.Dataset:
-        return self.postprocess_zarr(dataset=dataset)
+    def dataset_transformer(self, dataset: xarray.Dataset, metadata_info: dict) -> tuple[xarray.Dataset, dict]:
+        return self.postprocess_zarr(dataset=dataset, data_var=self.data_var), metadata_info
 
 class ERA5SeaDatasetTransformer(ERA5FamilyDatasetTransformer):
 
@@ -69,8 +71,8 @@ class ERA5SeaDatasetTransformer(ERA5FamilyDatasetTransformer):
         )  # GRIB CDO process seems to remove the variable name
         return dataset
     
-    def dataset_transformer(self, dataset: xarray.Dataset) -> xarray.Dataset:
-        return self.postprocess_zarr(dataset=dataset)
+    def dataset_transformer(self, dataset: xarray.Dataset, metadata_info: dict) -> tuple[xarray.Dataset, dict]:
+        return self.postprocess_zarr(dataset=dataset), metadata_info
 
 
 class ERA5VolumetricSoilWaterTransformer(ERA5FamilyDatasetTransformer):
@@ -92,7 +94,7 @@ class ERA5VolumetricSoilWaterTransformer(ERA5FamilyDatasetTransformer):
         dataset = dataset.drop_vars(["depth", "depth_bnds"])  # now remove the unwanted dimensions and data vars
         return dataset
 
-    def dataset_transformer(self, dataset: xarray.Dataset) -> xarray.Dataset:
-        return self.postprocess_zarr(dataset=dataset)
+    def dataset_transformer(self, dataset: xarray.Dataset, metadata_info: dict) -> tuple[xarray.Dataset, dict]:
+        return self.postprocess_zarr(dataset=dataset), metadata_info
 
 

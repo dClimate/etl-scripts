@@ -12,7 +12,7 @@ import random
 import natsort
 import time  # noqa: F401
 from datetime import timedelta
-# from .utils.ipfs import IPFS
+from multiprocess.pool import ThreadPool
 
 
 
@@ -21,17 +21,9 @@ from typing import Generator
 from dc_etl.filespec import FileSpec
 import os
 from dataset_manager.utils.logging import Logging
-from multiprocess.pool import ThreadPool
 from abc import abstractmethod
 from dataset_manager.utils.converter import NCtoNetCDF4Converter
 
-
-# TODO: 
-# The fetcher only fetches the data. We need to add a class prior to manage if the data should be updated. shouldn't be done in the fetcher
-
-# Define MissingDimensionsError
-class MissingDimensionsError(Exception):
-    pass
 
 class ERA5Family(Fetcher, Logging):
     """
@@ -64,8 +56,6 @@ class ERA5Family(Fetcher, Logging):
             **kwargs,
             dataset_name=dataset_name,
         )
-        # self.store = TempStore()
-        # self.ipfsAccess = IPFS(host="http://127.0.0.1:5001")
         self.standard_dims = ["latitude", "longitude", "valid_time"]
         self.skip_prepare_input_files = skip_prepare_input_files
         self.era5_latest_possible_date = datetime.datetime.utcnow() - datetime.timedelta(days=6)
@@ -125,7 +115,7 @@ class ERA5Family(Fetcher, Logging):
         -- usually time, possibly with some other relevant dimension
     """
 
-    dataset_start_date = datetime.datetime(1940, 1, 1, 1)
+    dataset_start_date = datetime.datetime(1950, 1, 1, 1)
 
     preliminary_lag_in_days = 6
 
@@ -135,25 +125,28 @@ class ERA5Family(Fetcher, Logging):
 
     def get_remote_timespan(self) -> Timespan:
         # Get current time in np.datetime64 format
-        print(self.dataset_start_date)
         earliest_time = np.datetime64(self.dataset_start_date)
         latest_time = np.datetime64(self.era5_latest_possible_date)
+        # Make it an even day without any hours
+        latest_time = np.datetime64(latest_time, "D")
+        # minus one day for latest_time
+        latest_time -= np.timedelta64(1, "D")
         return Timespan(start=earliest_time, end=latest_time)
 
-    def fetch(self, span: Timespan) -> Generator[FileSpec, None, None]:
+    def fetch(self, span: Timespan, pipeline_info: dict) -> Generator[FileSpec, None, None]:
         """Implementation of :meth:`Fetcher.fetch`"""
         self.info(f"Fetching data for the timespan from {span.start} to {span.end}")
         current_datetime = pd.to_datetime(span.start).to_pydatetime()
         limit_datetime = pd.to_datetime(span.end).to_pydatetime()
-        self.extract(date_range=[current_datetime, limit_datetime], enable_caching=True)
-        self.prepare_input_files(keep_originals=False)
+        # self.extract(date_range=[current_datetime, limit_datetime], enable_caching=True)
+        # self.prepare_input_files(keep_originals=False)
         cumulative_hour = 0
-        while current_datetime <= limit_datetime + timedelta(hours=23):
+        while current_datetime <= limit_datetime:
             # Generate file spec for the current hour
             year = current_datetime.year
             month = current_datetime.month
             cumulative_hour += 1
-            file_name = f"era5_surface_solar_radiation_downwards_{year:04}{month:02}{cumulative_hour:06}.nc4"
+            file_name = f"{self.dataset_name}_{year:04}{month:02}{cumulative_hour:06}.nc4"
             yield self._get_file_by_name(file_name)
             # Increment the current_datetime by one hour
             current_datetime += timedelta(hours=1)
@@ -364,7 +357,7 @@ class ERA5(ERA5Family):
 
     era5_dataset = "reanalysis-era5-single-levels"
 
-    dataset_start_date = datetime.datetime(2000, 1, 1, 0)
+    dataset_start_date = datetime.datetime(1950, 1, 1, 0)
 
     spatial_resolution = 0.25
 

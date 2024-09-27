@@ -15,7 +15,6 @@ Options:
     --pdb             Drop into debugger on error.
 """
 
-import code
 import datetime
 import itertools
 import pdb
@@ -23,6 +22,7 @@ import sys
 
 import docopt
 import numpy
+import numpy as np
 
 from dateutil.relativedelta import relativedelta
 
@@ -31,6 +31,16 @@ from dc_etl.pipeline import Pipeline
 
 ONE_DAY = relativedelta(days=1)
 
+
+def adjust_span_to_end_hour_23(span):
+    # Check if the end time already ends at hour 23
+    end_hour = span.end.astype('datetime64[h]').astype(int) % 24  # Extract the hour
+    if end_hour != 23:
+        # Adjust the span so it ends at hour 23 of the same day
+        end_of_day = np.datetime64(span.end, 'D') + np.timedelta64(23, 'h')
+        span = Timespan(start=span.start, end=end_of_day)
+    
+    return span
 
 def main(pipeline: Pipeline):
     args = _parse_args()
@@ -45,13 +55,14 @@ def main(pipeline: Pipeline):
             remote_span = pipeline.fetcher.get_remote_timespan()
             load_end = _add_delta(remote_span.start, timedelta - ONE_DAY)
             load_span = Timespan(remote_span.start, min(load_end, remote_span.end))
+            load_span = adjust_span_to_end_hour_23(load_span)
             print(load_span)
-            run_pipeline(pipeline, load_span, pipeline.loader.initial)
+            run_pipeline(pipeline, load_span, pipeline.loader.initial, args, manual_override=True)
+            return
 
         elif args["append"]:
             if not cid:
                 raise docopt.DocoptExit("Dataset has not been initialized.")
-
             # Get the timedelta which is like 4Y or 7Y
             timedelta = _parse_timedelta(args["--timespan"])
             # Get the remote timespan of the dataset
@@ -71,15 +82,16 @@ def main(pipeline: Pipeline):
             load_end = _add_delta(load_begin, timedelta - ONE_DAY)
             # Get the timespan to load
             load_span = Timespan(load_begin, min(load_end, remote_span.end))
-            run_pipeline(pipeline, load_span, pipeline.loader.append)
+            run_pipeline(pipeline, load_span, pipeline.loader.append, args, manual_override=True)
+            return
 
         elif args["replace"]:
             load_span = _parse_timestamp(args["--daterange"])
-            run_pipeline(pipeline, load_span, pipeline.loader.replace)
+            run_pipeline(pipeline, load_span, pipeline.loader.replace, args, manual_override=True)
+            return
 
-        else:
-            dataset = pipeline.loader.dataset()
-            code.interact("Interactive Python shell. The dataset is available as 'ds'.", local={"ds": dataset})
+        # If nothing is specified, run the pipeline for the entire date range
+        run_pipeline(pipeline, None, pipeline.loader.replace, args, manual_override=False)
 
     except:
         if args["--pdb"]:
@@ -87,15 +99,55 @@ def main(pipeline: Pipeline):
         raise
 
 
-def run_pipeline(pipeline, span, load):
-    print(
-        f"Loading {span.start.astype('<M8[s]').astype(object):%Y-%m-%d} "
-        f"to {span.end.astype('<M8[s]').astype(object):%Y-%m-%d}"
-    )
-    sources = pipeline.fetcher.fetch(span)
-    extracted = list(itertools.chain(*[pipeline.extractor(source) for source in sources]))
-    combined = pipeline.transformer(pipeline.combiner(extracted))
-    load(combined, span)
+def run_pipeline(pipeline, span, load, args, manual_override=False):
+    if span is not None:
+        print(
+            f"Loading {span.start.astype('<M8[s]').astype(object):%Y-%m-%d} "
+            f"to {span.end.astype('<M8[s]').astype(object):%Y-%m-%d}"
+        )
+    # If nothing exists, run the start for the entire date range
+    new_span, pipeline_info = pipeline.assessor.start(args=args)
+    existing_dataset = pipeline_info.get("existing_dataset", None)
+
+    start, end, new_finalization_date_start, new_finalization_date_end = new_span
+
+    # If there is a manual override, fetch, extract, transform, and load the data based on manual ovveride
+    if manual_override:
+        sources = pipeline.fetcher.fetch(span, pipeline_info)
+        extracted = list(itertools.chain(*[pipeline.extractor(source) for source in sources]))
+        combined, pipeline_info = pipeline.transformer(pipeline.combiner(extracted), pipeline_info)
+        load(combined, span)
+        return
+    
+    # If there is a start and end date and there is no existing data, fetch, extract, transform, and load the data
+    # Any finalization data will be passed via the pipeline info
+    if (start and end and not existing_dataset):
+        new_span = Timespan(start=start, end=end)
+        loader = pipeline.loader.initial
+        sources = pipeline.fetcher.fetch(new_span, pipeline_info)
+        extracted = list(itertools.chain(*[pipeline.extractor(source) for source in sources]))
+        combined, pipeline_info = pipeline.transformer(pipeline.combiner(extracted), pipeline_info)
+        loader(combined, new_span)
+        return
+        
+    # If something exists already append it first
+    if existing_dataset:
+        append_span = Timespan(start=start, end=end)
+        loader = pipeline.loader.append
+        sources = pipeline.fetcher.fetch(append_span, pipeline_info)
+        extracted = list(itertools.chain(*[pipeline.extractor(source) for source in sources]))
+        combined, pipeline_info = pipeline.transformer(pipeline.combiner(extracted), pipeline_info)
+        loader(combined, append_span)
+
+    # If there is a new finalization date, replace the data
+    if (new_finalization_date_start and new_finalization_date_end):
+        replace_span = Timespan(start=new_finalization_date_start, end=new_finalization_date_end)
+        loader = pipeline.loader.replace
+        sources = pipeline.fetcher.fetch(replace_span, pipeline_info)
+        extracted = list(itertools.chain(*[pipeline.extractor(source) for source in sources]))
+        combined, pipeline_info = pipeline.transformer(pipeline.combiner(extracted), pipeline_info)
+        loader(combined, replace_span)
+
 
 
 def _parse_args():

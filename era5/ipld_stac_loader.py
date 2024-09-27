@@ -8,7 +8,7 @@ from dataset_manager.utils.metadata import Metadata
 from dataset_manager.utils.store import IPLD
 from dataset_manager.utils.logging import Logging
 import numpy as np
-from .base_values import ERA5SurfaceSolarRadiationDownwardsValues
+from .base_values import ERA5SurfaceSolarRadiationDownwardsValues, ERA5PrecipValues
 
 class IPLDStacLoader(Loader, Metadata, Logging):
     """Use IPLD to store datasets."""
@@ -50,11 +50,11 @@ class IPLDStacLoader(Loader, Metadata, Logging):
     def static_metadata(self):
         return self.metadata
 
-    def prepare_publish_stac_metadata(self, cid, dataset: xarray.Dataset):
+    def prepare_publish_stac_metadata(self, cid, dataset: xarray.Dataset, rebuild=False):
         """Prepare the STAC metadata for the dataset."""
         self.set_custom_latest_hash(str(cid))
         self.create_root_stac_catalog()
-        self.create_stac_collection(dataset=dataset)
+        self.create_stac_collection(dataset=dataset, rebuild=rebuild)
         self.create_stac_item(dataset=dataset)
         return dataset
 
@@ -67,13 +67,13 @@ class IPLDStacLoader(Loader, Metadata, Logging):
             np.datetime_as_string(span.start, unit='h').replace('-', '').replace(':', '').replace('T', ''),
             np.datetime_as_string(span.end, unit='h').replace('-', '').replace(':', '').replace('T', '')
         ]
-        dataset = self.set_zarr_metadata(dataset)
+        dataset = self.set_zarr_metadata(dataset, overwrite=True)
         # Chunk the dataset to the requested dask chunks
         dataset = dataset.chunk(self.requested_dask_chunks)
         dataset.to_zarr(store=mapper, consolidated=True)
         cid = mapper.freeze()
         self.info("Preparing Stac Metadata")
-        self.prepare_publish_stac_metadata(cid, dataset)
+        self.prepare_publish_stac_metadata(cid, dataset, rebuild=True)
         self.publisher.publish(cid)
         self.info(f"Published {cid}")
 
@@ -107,13 +107,8 @@ class IPLDStacLoader(Loader, Metadata, Logging):
             self._time_to_integer(original_dataset, span.start),
             self._time_to_integer(original_dataset, span.end) + 1,
         )
-
-        replace_dataset = replace_dataset.sel(**{self.time_dim: slice(*span)})
         replace_dataset = replace_dataset.drop_vars([dim for dim in replace_dataset.dims if dim != self.time_dim])
-        original_dataset.attrs["bbox"] = original_dataset.attrs["bbox"]
-        original_dataset.attrs["date_range"] = original_dataset.attrs["date_range"]
         replace_dataset.to_zarr(store=mapper, consolidated=True, region={self.time_dim: slice(*region)})
-
         cid = mapper.freeze()
         self.publisher.publish(cid)
         self.info(f"Published {cid}")
@@ -142,3 +137,10 @@ class ERA5SurfaceSolarRadiationDownwardsStacLoader(IPLDStacLoader, ERA5SurfaceSo
         super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
         Logging.__init__(self, dataset_name=self.dataset_name)
         
+class ERA5PrecipStacLoader(IPLDStacLoader, ERA5PrecipValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        # Initialize the logger with the dataset_name from ERA5PrecipValues
+        ERA5PrecipValues.__init__(self)
+        # Initialize the parent class IPLDStacLoader
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)

@@ -574,7 +574,7 @@ class Metadata(Convenience, IPFS):
         """
         self.metadata = self.static_metadata
 
-    def set_zarr_metadata(self, dataset: xr.Dataset) -> xr.Dataset:
+    def set_zarr_metadata(self, dataset: xr.Dataset, overwrite=False) -> xr.Dataset:
         """
         Function to append to or update key metadata information to the attributes and encoding of the output Zarr.
         Additionally filters out unwanted or invalid keys and fields.
@@ -599,7 +599,8 @@ class Metadata(Convenience, IPFS):
         self.encode_vars(dataset)
 
         # Merge in relevant static / STAC metadata and create additional attributes
-        self.merge_in_outside_metadata(dataset)
+        if not overwrite:
+            self.merge_in_outside_metadata(dataset)
 
         # Xarray cannot export dictionaries or None as attributes (lists and tuples are OK)
         self.suppress_invalid_attributes(dataset)
