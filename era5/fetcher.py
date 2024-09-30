@@ -138,8 +138,8 @@ class ERA5Family(Fetcher, Logging):
         self.info(f"Fetching data for the timespan from {span.start} to {span.end}")
         current_datetime = pd.to_datetime(span.start).to_pydatetime()
         limit_datetime = pd.to_datetime(span.end).to_pydatetime()
-        # self.extract(date_range=[current_datetime, limit_datetime], enable_caching=True)
-        # self.prepare_input_files(keep_originals=False)
+        self.extract(date_range=[current_datetime, limit_datetime], enable_caching=True)
+        self.prepare_input_files(keep_originals=False)
         cumulative_hour = 0
         while current_datetime <= limit_datetime:
             # Generate file spec for the current hour

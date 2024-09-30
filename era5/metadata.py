@@ -1,10 +1,9 @@
 import xarray
 
 from .base_values import (
-    ERA5Values, 
     ERA5Family, 
     ERA5LandValues, 
-    ERA5SeaValues, 
+    ERA5Values, 
     ERA5LandWindValues, 
     ERA5PrecipValues,
     ERA52mTempValues, 
@@ -112,7 +111,7 @@ class ERA5MetadataTransformer(ERA5FamilyMetadataTransformer, ERA5Values):
 class ERA5LandValuesMetadataTransformer(ERA5FamilyMetadataTransformer, ERA5LandValues):
     pass
 
-class ERA5SeaValuesMetadataTransformer(ERA5MetadataTransformer, ERA5SeaValues):
+class ERA5SeaValuesMetadataTransformer(ERA5MetadataTransformer, ERA5Values):
     pass
 
 class ERA5LandWindValuesMetadataTransformer(ERA5LandValuesMetadataTransformer, ERA5LandWindValues):

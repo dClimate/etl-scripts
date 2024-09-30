@@ -13,12 +13,14 @@ Options:
     --daterange RANGE   The date range to load.
     --overwrite       Allow data to be overwritten.
     --pdb             Drop into debugger on error.
+    --dataset DATASET    The dataset to run (e.g., "precip", "solar"). [default: precip]
 """
 
 import datetime
 import itertools
 import pdb
 import sys
+import time
 
 import docopt
 import numpy
@@ -90,6 +92,8 @@ def main(pipeline: Pipeline):
             run_pipeline(pipeline, load_span, pipeline.loader.replace, args, manual_override=True)
             return
 
+        print("HERE")
+        time.sleep(10)
         # If nothing is specified, run the pipeline for the entire date range
         run_pipeline(pipeline, None, pipeline.loader.replace, args, manual_override=False)
 

@@ -8,7 +8,7 @@ from dataset_manager.utils.metadata import Metadata
 from dataset_manager.utils.store import IPLD
 from dataset_manager.utils.logging import Logging
 import numpy as np
-from .base_values import ERA5SurfaceSolarRadiationDownwardsValues, ERA5PrecipValues
+from .base_values import ERA5PrecipValues, ERA52mTempValues, ERA5SurfaceSolarRadiationDownwardsValues, ERA5VolumetricSoilWaterLayer1Values, ERA5VolumetricSoilWaterLayer2Values, ERA5VolumetricSoilWaterLayer3Values, ERA5VolumetricSoilWaterLayer4Values, ERA5InstantaneousWindGust10mValues, ERA5WindU10mValues, ERA5WindV10mValues, ERA5WindU100mValues, ERA5WindV100mValues, ERA5SeaSurfaceTemperatureValues, ERA5SeaSurfaceTemperatureDailyValues, ERA5SeaLevelPressureValues, ERA5LandPrecipValues, ERA5LandDewpointTemperatureValues, ERA5LandSnowfallValues, ERA5Land2mTempValues, ERA5LandSurfaceSolarRadiationDownwardsValues, ERA5LandSurfacePressureValues, ERA5LandWindUValues, ERA5LandWindVValues
 
 class IPLDStacLoader(Loader, Metadata, Logging):
     """Use IPLD to store datasets."""
@@ -142,5 +142,131 @@ class ERA5PrecipStacLoader(IPLDStacLoader, ERA5PrecipValues):
         # Initialize the logger with the dataset_name from ERA5PrecipValues
         ERA5PrecipValues.__init__(self)
         # Initialize the parent class IPLDStacLoader
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA52mTempStacLoader(IPLDStacLoader, ERA52mTempValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA52mTempValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5VolumetricSoilWaterLayer1StacLoader(IPLDStacLoader, ERA5VolumetricSoilWaterLayer1Values):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5VolumetricSoilWaterLayer1Values.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5VolumetricSoilWaterLayer2StacLoader(IPLDStacLoader, ERA5VolumetricSoilWaterLayer2Values):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5VolumetricSoilWaterLayer2Values.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5VolumetricSoilWaterLayer3StacLoader(IPLDStacLoader, ERA5VolumetricSoilWaterLayer3Values):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5VolumetricSoilWaterLayer3Values.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5VolumetricSoilWaterLayer4StacLoader(IPLDStacLoader, ERA5VolumetricSoilWaterLayer4Values):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5VolumetricSoilWaterLayer4Values.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5InstantaneousWindGust10mStacLoader(IPLDStacLoader, ERA5InstantaneousWindGust10mValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5InstantaneousWindGust10mValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5WindU10mStacLoader(IPLDStacLoader, ERA5WindU10mValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5WindU10mValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5WindV10mStacLoader(IPLDStacLoader, ERA5WindV10mValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5WindV10mValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5WindU100mStacLoader(IPLDStacLoader, ERA5WindU100mValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5WindU100mValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5WindV100mStacLoader(IPLDStacLoader, ERA5WindV100mValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5WindV100mValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5SeaSurfaceTemperatureStacLoader(IPLDStacLoader, ERA5SeaSurfaceTemperatureValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5SeaSurfaceTemperatureValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5SeaSurfaceTemperatureDailyStacLoader(IPLDStacLoader, ERA5SeaSurfaceTemperatureDailyValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5SeaSurfaceTemperatureDailyValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5SeaLevelPressureStacLoader(IPLDStacLoader, ERA5SeaLevelPressureValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5SeaLevelPressureValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5LandPrecipStacLoader(IPLDStacLoader, ERA5LandPrecipValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5LandPrecipValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5LandDewpointTemperatureStacLoader(IPLDStacLoader, ERA5LandDewpointTemperatureValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5LandDewpointTemperatureValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5LandSnowfallStacLoader(IPLDStacLoader, ERA5LandSnowfallValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5LandSnowfallValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5Land2mTempStacLoader(IPLDStacLoader, ERA5Land2mTempValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5Land2mTempValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5LandSurfaceSolarRadiationDownwardsStacLoader(IPLDStacLoader, ERA5LandSurfaceSolarRadiationDownwardsValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5LandSurfaceSolarRadiationDownwardsValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5LandSurfacePressureStacLoader(IPLDStacLoader, ERA5LandSurfacePressureValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5LandSurfacePressureValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5LandWindUStacLoader(IPLDStacLoader, ERA5LandWindUValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5LandWindUValues.__init__(self)
+        super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
+        Logging.__init__(self, dataset_name=self.dataset_name)
+
+class ERA5LandWindVStacLoader(IPLDStacLoader, ERA5LandWindVValues):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+        ERA5LandWindVValues.__init__(self)
         super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
         Logging.__init__(self, dataset_name=self.dataset_name)

@@ -11,12 +11,10 @@ import tempfile
 import dateutil
 import pathlib
 from multiprocess.pool import ThreadPool
-from .base_values import (
-    ERA5SurfaceSolarRadiationDownwardsValues,
-    ERA5PrecipValues,
-)
 from xarray.core.variable import MissingDimensionsError
 from typing import Optional
+from .base_values import ERA5PrecipValues, ERA52mTempValues, ERA5SurfaceSolarRadiationDownwardsValues, ERA5VolumetricSoilWaterLayer1Values, ERA5VolumetricSoilWaterLayer2Values, ERA5VolumetricSoilWaterLayer3Values, ERA5VolumetricSoilWaterLayer4Values, ERA5InstantaneousWindGust10mValues, ERA5WindU10mValues, ERA5WindV10mValues, ERA5WindU100mValues, ERA5WindV100mValues, ERA5SeaSurfaceTemperatureValues, ERA5SeaSurfaceTemperatureDailyValues, ERA5SeaLevelPressureValues, ERA5LandPrecipValues, ERA5LandDewpointTemperatureValues, ERA5LandSnowfallValues, ERA5Land2mTempValues, ERA5LandSurfaceSolarRadiationDownwardsValues, ERA5LandSurfacePressureValues, ERA5LandWindUValues, ERA5LandWindVValues
+
 
 from dataset_manager.utils.ipfs import IPFS
 
@@ -490,7 +488,7 @@ class ERA5SeaAssessor(ERA5Assessor):
 
 
 # init the class, and run start
-class ERA5SurfaceSolarRadiationDownwardsValuesAssessor(ERA5LandAssessor, ERA5SurfaceSolarRadiationDownwardsValues):
+class ERA5SurfaceSolarRadiationDownwardsValuesAssessor(ERA5Assessor, ERA5SurfaceSolarRadiationDownwardsValues):
 
     # Init the class
     def __init__(self, *args, **kwargs):
@@ -502,4 +500,109 @@ class ERA5PrecipValuesAssessor(ERA5Assessor, ERA5PrecipValues):
     def __init__(self, *args, **kwargs):
         ERA5PrecipValues.__init__(self)
         ERA5Assessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA52mTempValuesAssessor(ERA5Assessor, ERA52mTempValues):
+    def __init__(self, *args, **kwargs):
+        ERA52mTempValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5VolumetricSoilWaterLayer1ValuesAssessor(ERA5Assessor, ERA5VolumetricSoilWaterLayer1Values):
+    def __init__(self, *args, **kwargs):
+        ERA5VolumetricSoilWaterLayer1Values.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5VolumetricSoilWaterLayer2ValuesAssessor(ERA5Assessor, ERA5VolumetricSoilWaterLayer2Values):
+    def __init__(self, *args, **kwargs):
+        ERA5VolumetricSoilWaterLayer2Values.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5VolumetricSoilWaterLayer3ValuesAssessor(ERA5Assessor, ERA5VolumetricSoilWaterLayer3Values):
+    def __init__(self, *args, **kwargs):
+        ERA5VolumetricSoilWaterLayer3Values.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5VolumetricSoilWaterLayer4ValuesAssessor(ERA5Assessor, ERA5VolumetricSoilWaterLayer4Values):
+    def __init__(self, *args, **kwargs):
+        ERA5VolumetricSoilWaterLayer4Values.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5InstantaneousWindGust10mValuesAssessor(ERA5Assessor, ERA5InstantaneousWindGust10mValues):
+    def __init__(self, *args, **kwargs):
+        ERA5InstantaneousWindGust10mValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5WindU10mValuesAssessor(ERA5Assessor, ERA5WindU10mValues):
+    def __init__(self, *args, **kwargs):
+        ERA5WindU10mValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5WindV10mValuesAssessor(ERA5Assessor, ERA5WindV10mValues):
+    def __init__(self, *args, **kwargs):
+        ERA5WindV10mValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5WindU100mValuesAssessor(ERA5Assessor, ERA5WindU100mValues):
+    def __init__(self, *args, **kwargs):
+        ERA5WindU100mValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5WindV100mValuesAssessor(ERA5Assessor, ERA5WindV100mValues):
+    def __init__(self, *args, **kwargs):
+        ERA5WindV100mValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5SeaSurfaceTemperatureValuesAssessor(ERA5SeaAssessor, ERA5SeaSurfaceTemperatureValues):
+    def __init__(self, *args, **kwargs):
+        ERA5SeaSurfaceTemperatureValues.__init__(self)
+        ERA5SeaAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5SeaSurfaceTemperatureDailyValuesAssessor(ERA5SeaAssessor, ERA5SeaSurfaceTemperatureDailyValues):
+    def __init__(self, *args, **kwargs):
+        ERA5SeaSurfaceTemperatureDailyValues.__init__(self)
+        ERA5SeaAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5SeaLevelPressureValuesAssessor(ERA5SeaAssessor, ERA5SeaLevelPressureValues):
+    def __init__(self, *args, **kwargs):
+        ERA5SeaLevelPressureValues.__init__(self)
+        ERA5SeaAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5LandPrecipValuesAssessor(ERA5LandAssessor, ERA5LandPrecipValues):
+    def __init__(self, *args, **kwargs):
+        ERA5LandPrecipValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5LandDewpointTemperatureValuesAssessor(ERA5LandAssessor, ERA5LandDewpointTemperatureValues):
+    def __init__(self, *args, **kwargs):
+        ERA5LandDewpointTemperatureValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5LandSnowfallValuesAssessor(ERA5LandAssessor, ERA5LandSnowfallValues):
+    def __init__(self, *args, **kwargs):
+        ERA5LandSnowfallValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5Land2mTempValuesAssessor(ERA5LandAssessor, ERA5Land2mTempValues):
+    def __init__(self, *args, **kwargs):
+        ERA5Land2mTempValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5LandSurfaceSolarRadiationDownwardsValuesAssessor(ERA5LandAssessor, ERA5LandSurfaceSolarRadiationDownwardsValues):
+    def __init__(self, *args, **kwargs):
+        ERA5LandSurfaceSolarRadiationDownwardsValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5LandSurfacePressureValuesAssessor(ERA5LandAssessor, ERA5LandSurfacePressureValues):
+    def __init__(self, *args, **kwargs):
+        ERA5LandSurfacePressureValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5LandWindUValuesAssessor(ERA5LandAssessor, ERA5LandWindUValues):
+    def __init__(self, *args, **kwargs):
+        ERA5LandWindUValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
+
+class ERA5LandWindVValuesAssessor(ERA5LandAssessor, ERA5LandWindVValues):
+    def __init__(self, *args, **kwargs):
+        ERA5LandWindVValues.__init__(self)
+        ERA5LandAssessor.__init__(self, dataset_name=self.dataset_name, time_resolution=self.time_resolution, dataset_start_date=self.dataset_start_date)
 

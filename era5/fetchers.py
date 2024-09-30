@@ -5,24 +5,7 @@ import xarray as xr
 import s3fs
 
 from .fetcher import ERA5, ERA5Land
-from .base_values import ERA5LandWindValues, ERA5PrecipValues, ERA52mTempValues, ERA5SurfaceSolarRadiationDownwardsValues, ERA5VolumetricSoilWaterValues, ERA5VolumetricSoilWaterLayer1Values, ERA5VolumetricSoilWaterLayer2Values, ERA5VolumetricSoilWaterLayer3Values, ERA5VolumetricSoilWaterLayer4Values, ERA5Wind10mValues, ERA5InstantaneousWindGust10mValues, ERA5WindU10mValues, ERA5WindV10mValues, ERA5Wind100mValues, ERA5WindU100mValues, ERA5WindV100mValues, ERA5SeaSurfaceTemperatureValues, ERA5SeaSurfaceTemperatureDailyValues, ERA5SeaLevelPressureValues, ERA5LandPrecipValues, ERA5LandDewpointTemperatureValues, ERA5LandSnowfallValues, ERA5Land2mTempValues, ERA5LandSurfaceSolarRadiationDownwardsValues, ERA5LandSurfacePressureValues, ERA5LandWindUValues, ERA5LandWindVValues
-
-class ERA5Sea(ERA5):  # pragma: nocover
-    """Abstract base class for ERA5 sea datasets"""
-    
-
-class ERA5LandWind(ERA5Land, ERA5LandWindValues):  # pragma: nocover
-    """
-    Base class for ERA5Land wind datasets
-    """
-    def __init__(self, *args, **kwargs):
-        # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
-        ERA5LandWindValues.__init__(self)
-
-    # Use ERA5LandWindValues properties directly
-    # era5_dataset = ERA5LandWindValues.era5_dataset
-    # era5_request_name = ERA5LandWindValues.era5_request_name
+from .base_values import ERA5PrecipValues, ERA52mTempValues, ERA5SurfaceSolarRadiationDownwardsValues, ERA5VolumetricSoilWaterLayer1Values, ERA5VolumetricSoilWaterLayer2Values, ERA5VolumetricSoilWaterLayer3Values, ERA5VolumetricSoilWaterLayer4Values, ERA5InstantaneousWindGust10mValues, ERA5WindU10mValues, ERA5WindV10mValues, ERA5WindU100mValues, ERA5WindV100mValues, ERA5SeaSurfaceTemperatureValues, ERA5SeaSurfaceTemperatureDailyValues, ERA5SeaLevelPressureValues, ERA5LandPrecipValues, ERA5LandDewpointTemperatureValues, ERA5LandSnowfallValues, ERA5Land2mTempValues, ERA5LandSurfaceSolarRadiationDownwardsValues, ERA5LandSurfacePressureValues, ERA5LandWindUValues, ERA5LandWindVValues
 
 # Regular ERA5
 class ERA5Precip(ERA5, ERA5PrecipValues):  # pragma: nocover
@@ -31,8 +14,9 @@ class ERA5Precip(ERA5, ERA5PrecipValues):  # pragma: nocover
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5PrecipValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
+        
     
     # Use ERA5PrecipValues properties directly
     era5_dataset = ERA5PrecipValues.era5_dataset
@@ -49,8 +33,8 @@ class ERA52mTemp(ERA5, ERA52mTempValues):  # pragma: nocover
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA52mTempValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
     
     # Use ERA52mTempValues properties directly
     era5_dataset = ERA52mTempValues.era5_dataset
@@ -79,35 +63,16 @@ class ERA5SurfaceSolarRadiationDownwards(ERA5, ERA5SurfaceSolarRadiationDownward
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5SurfaceSolarRadiationDownwardsValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
 
     # Use ERA5SurfaceSolarRadiationDownwardsValues properties directly
     era5_dataset = ERA5SurfaceSolarRadiationDownwardsValues.era5_dataset
     era5_request_name = ERA5SurfaceSolarRadiationDownwardsValues.era5_request_name
 
-class ERA5VolumetricSoilWater(ERA5, ERA5VolumetricSoilWaterValues):  # pragma: nocover
-    """
-    Data for volumetric soil moisture from ECMWF. From ECMWF:
 
-    The ECMWF Integrated Forecasting System (IFS) has a four-layer representation of soil:
-    Layer 1: 0 - 7cm, Layer 2: 7 - 28cm, Layer 3: 28 - 100cm, Layer 4: 100 - 289cm.
-    Soil water is defined over the whole globe, even over ocean.
-    Regions with a water surface can be masked out by only considering grid points
-     where the land-sea mask has a value greater than 0.5.
-    The volumetric soil water is associated with the soil texture (or classification),
-     soil depth, and the underlying groundwater level
-    """
-    def __init__(self, *args, **kwargs):
-        # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
-        ERA5VolumetricSoilWaterValues.__init__(self)
-    
-    # Use ERA5VolumetricSoilWaterValues properties directly
-    era5_dataset = ERA5VolumetricSoilWaterValues.era5_dataset
-    era5_request_name = ERA5VolumetricSoilWaterValues.era5_request_name
 
-class ERA5VolumetricSoilWaterLayer1(ERA5VolumetricSoilWater, ERA5VolumetricSoilWaterLayer1Values):  # pragma: nocover
+class ERA5VolumetricSoilWaterLayer1(ERA5, ERA5VolumetricSoilWaterLayer1Values):  # pragma: nocover
     """
     Data for volumetric soil moisture layer 1 from ECMWF. From ECMWF:
 
@@ -121,14 +86,14 @@ class ERA5VolumetricSoilWaterLayer1(ERA5VolumetricSoilWater, ERA5VolumetricSoilW
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5VolumetricSoilWaterLayer1Values.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
     
     # Use ERA5VolumetricSoilWaterLayer1Values properties directly
     era5_dataset = ERA5VolumetricSoilWaterLayer1Values.era5_dataset
     era5_request_name = ERA5VolumetricSoilWaterLayer1Values.era5_request_name
 
-class ERA5VolumetricSoilWaterLayer2(ERA5VolumetricSoilWater, ERA5VolumetricSoilWaterLayer2Values):  # pragma: nocover
+class ERA5VolumetricSoilWaterLayer2(ERA5, ERA5VolumetricSoilWaterLayer2Values):  # pragma: nocover
     """
     Data for volumetric soil moisture layer 2 from ECMWF. From ECMWF:
 
@@ -142,14 +107,14 @@ class ERA5VolumetricSoilWaterLayer2(ERA5VolumetricSoilWater, ERA5VolumetricSoilW
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5VolumetricSoilWaterLayer2Values.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
     
     # Use ERA5VolumetricSoilWaterLayer2Values properties directly
     era5_dataset = ERA5VolumetricSoilWaterLayer2Values.era5_dataset
     era5_request_name = ERA5VolumetricSoilWaterLayer2Values.era5_request_name
 
-class ERA5VolumetricSoilWaterLayer3(ERA5VolumetricSoilWater, ERA5VolumetricSoilWaterLayer3Values):  # pragma: nocover
+class ERA5VolumetricSoilWaterLayer3(ERA5, ERA5VolumetricSoilWaterLayer3Values):  # pragma: nocover
     """
     Data for volumetric soil moisture layer 3 from ECMWF. From ECMWF:
 
@@ -163,14 +128,14 @@ class ERA5VolumetricSoilWaterLayer3(ERA5VolumetricSoilWater, ERA5VolumetricSoilW
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5VolumetricSoilWaterLayer3Values.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
     
     # Use ERA5VolumetricSoilWaterLayer3Values properties directly
     era5_dataset = ERA5VolumetricSoilWaterLayer3Values.era5_dataset
     era5_request_name = ERA5VolumetricSoilWaterLayer3Values.era5_request_name
 
-class ERA5VolumetricSoilWaterLayer4(ERA5VolumetricSoilWater, ERA5VolumetricSoilWaterLayer4Values):  # pragma: nocover
+class ERA5VolumetricSoilWaterLayer4(ERA5, ERA5VolumetricSoilWaterLayer4Values):  # pragma: nocover
     """
     Data for volumetric soil moisture layer 4 from ECMWF. From ECMWF:
 
@@ -184,106 +149,81 @@ class ERA5VolumetricSoilWaterLayer4(ERA5VolumetricSoilWater, ERA5VolumetricSoilW
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5VolumetricSoilWaterLayer4Values.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
+        
     
     # Use ERA5VolumetricSoilWaterLayer4Values properties directly
     era5_dataset = ERA5VolumetricSoilWaterLayer4Values.era5_dataset
     era5_request_name = ERA5VolumetricSoilWaterLayer4Values.era5_request_name
 
-class ERA5Wind10m(ERA5, ERA5Wind10mValues):  # pragma: nocover
+class ERA5InstantaneousWindGust10m(ERA5, ERA5InstantaneousWindGust10mValues):  # pragma: nocover
     """
     Base class for wind U and V components at 10m height on ERA5
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
-        ERA5Wind10mValues.__init__(self)
-    
-    # Use ERA5Wind10mValues properties directly
-    # era5_dataset = ERA5Wind10mValues.era5_dataset
-    # era5_request_name = ERA5Wind10mValues.era5_request_name
-
-class ERA5InstantaneousWindGust10m(ERA5Wind10m, ERA5InstantaneousWindGust10mValues):  # pragma: nocover
-    """
-    Base class for wind U and V components at 10m height on ERA5
-    """
-    def __init__(self, *args, **kwargs):
-        # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5InstantaneousWindGust10mValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
     
     # Use ERA5InstantaneousWindGust10mValues properties directly
     era5_dataset = ERA5InstantaneousWindGust10mValues.era5_dataset
     era5_request_name = ERA5InstantaneousWindGust10mValues.era5_request_name
 
-class ERA5WindU10m(ERA5Wind10m, ERA5WindU10mValues):  # pragma: nocover
+class ERA5WindU10m(ERA5, ERA5WindU10mValues):  # pragma: nocover
     """
     U-component of wind at 10m height on ERA5
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5WindU10mValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
     
     # Use ERA5WindU10mValues properties directly
     era5_dataset = ERA5WindU10mValues.era5_dataset
     era5_request_name = ERA5WindU10mValues.era5_request_name
 
-class ERA5WindV10m(ERA5Wind10m, ERA5WindV10mValues):  # pragma: nocover
+class ERA5WindV10m(ERA5, ERA5WindV10mValues):  # pragma: nocover
     """
     V-component of wind at 10m height on ERA5
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5WindV10mValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
     
     # Use ERA5WindV10mValues properties directly
     era5_dataset = ERA5WindV10mValues.era5_dataset
     era5_request_name = ERA5WindV10mValues.era5_request_name
 
-class ERA5Wind100m(ERA5, ERA5Wind100mValues):  # pragma: nocover
-    """
-    Abstract base class for 100m wind component parameters in ERA5
-    """
-    def __init__(self, *args, **kwargs):
-        # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
-        ERA5Wind100mValues.__init__(self)
-    
-    # Use ERA5Wind100mValues properties directly
-    # era5_dataset = ERA5Wind100mValues.era5_dataset
-    # era5_request_name = ERA5Wind100mValues.era5_request_name
-
-class ERA5WindU100m(ERA5Wind100m, ERA5WindU100mValues):  # pragma: nocover
+class ERA5WindU100m(ERA5, ERA5WindU100mValues):  # pragma: nocover
     """
     U-component of 100m height wind data on ERA5
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5WindU100mValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
     
     # Use ERA5WindU100mValues properties directly
     era5_dataset = ERA5WindU100mValues.era5_dataset
     era5_request_name = ERA5WindU100mValues.era5_request_name
 
-class ERA5WindV100m(ERA5Wind100m, ERA5WindV100mValues):  # pragma: nocover
+class ERA5WindV100m(ERA5, ERA5WindV100mValues):  # pragma: nocover
     """
     V-component of 100m height wind data on ERA5
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5WindV100mValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
     
     # Use ERA5WindV100mValues properties directly
     era5_dataset = ERA5WindV100mValues.era5_dataset
     era5_request_name = ERA5WindV100mValues.era5_request_name
 
 # SEA datasets
-class ERA5SeaSurfaceTemperature(ERA5Sea, ERA5SeaSurfaceTemperatureValues):
+class ERA5SeaSurfaceTemperature(ERA5, ERA5SeaSurfaceTemperatureValues):
     """
     Class for Mean Sea Surface (0-10m) Temperature dataset
     """
@@ -291,8 +231,8 @@ class ERA5SeaSurfaceTemperature(ERA5Sea, ERA5SeaSurfaceTemperatureValues):
     FINALIZATION_LON = -130
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5SeaSurfaceTemperatureValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
     
 
 # TODO: Implement the ERA5SeaSurfaceTemperatureDaily class
@@ -447,14 +387,15 @@ class ERA5SeaSurfaceTemperatureDaily(ERA5SeaSurfaceTemperature, ERA5SeaSurfaceTe
         pass
 
 
-class ERA5SeaLevelPressure(ERA5Sea, ERA5SeaLevelPressureValues):  # pragma: nocover
+class ERA5SeaLevelPressure(ERA5, ERA5SeaLevelPressureValues):  # pragma: nocover
     """
     Class for Mean Sea Level Pressure dataset
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5SeaLevelPressureValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
+
     
     # Use ERA5SeaLevelPressureValues properties directly
     era5_dataset = ERA5SeaLevelPressureValues.era5_dataset
@@ -467,8 +408,9 @@ class ERA5LandPrecip(ERA5Land, ERA5LandPrecipValues):  # pragma: nocover
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5LandPrecipValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
+
     
     # Use ERA5LandPrecipValues properties directly
     era5_dataset = ERA5LandPrecipValues.era5_dataset
@@ -489,8 +431,9 @@ class ERA5LandDewpointTemperature(ERA5Land, ERA5LandDewpointTemperatureValues): 
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5LandDewpointTemperatureValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
+
     
     # Use ERA5LandDewpointTemperatureValues properties directly
     era5_dataset = ERA5LandDewpointTemperatureValues.era5_dataset
@@ -532,8 +475,9 @@ class ERA5Land2mTemp(ERA5Land, ERA5Land2mTempValues):  # pragma: nocover
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5Land2mTempValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
+
     
     # Use ERA5Land2mTempValues properties directly
     era5_dataset = ERA5Land2mTempValues.era5_dataset
@@ -561,8 +505,8 @@ class ERA5LandSurfaceSolarRadiationDownwards(ERA5Land, ERA5LandSurfaceSolarRadia
     """  # noqa: E501
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5LandSurfaceSolarRadiationDownwardsValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
     
     # Use ERA5LandSurfaceSolarRadiationDownwardsValues properties directly
     era5_dataset = ERA5LandSurfaceSolarRadiationDownwardsValues.era5_dataset
@@ -581,30 +525,36 @@ class ERA5LandSurfacePressure(ERA5Land, ERA5LandSurfacePressureValues):  # pragm
     """  # noqa: E501
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5LandSurfacePressureValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
+        
     
     # Use ERA5LandSurfacePressureValues properties directly
     era5_dataset = ERA5LandSurfacePressureValues.era5_dataset
     era5_request_name = ERA5LandSurfacePressureValues.era5_request_name
 
-class ERA5LandWindU(ERA5LandWind, ERA5LandWindUValues):  # pragma: nocover
+class ERA5LandWindU(ERA5Land, ERA5LandWindUValues):  # pragma: nocover
     """
     U-component of 10m height wind data on ERA5Land
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5LandWindUValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
+        
+    
+    # Use ERA5LandWindUValues properties directly
+    era5_dataset = ERA5LandWindUValues.era5_dataset
+    era5_request_name = ERA5LandWindUValues.era5_request_name
 
-class ERA5LandWindV(ERA5LandWind, ERA5LandWindVValues):  # pragma: nocover
+class ERA5LandWindV(ERA5Land, ERA5LandWindVValues):  # pragma: nocover
     """
     V-component of 10m height wind data on ERA5Land
     """
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
-        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
         ERA5LandWindVValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
     
     # Use ERA5LandWindVValues properties directly
     era5_dataset = ERA5LandWindVValues.era5_dataset
