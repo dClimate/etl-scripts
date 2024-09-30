@@ -8,7 +8,6 @@ from .base_values import (
     ERA5PrecipValues,
     ERA52mTempValues, 
     ERA5SurfaceSolarRadiationDownwardsValues, 
-    ERA5VolumetricSoilWaterValues, 
     ERA5VolumetricSoilWaterLayer1Values, 
     ERA5VolumetricSoilWaterLayer2Values, 
     ERA5VolumetricSoilWaterLayer3Values, 
@@ -111,9 +110,6 @@ class ERA5MetadataTransformer(ERA5FamilyMetadataTransformer, ERA5Values):
 class ERA5LandValuesMetadataTransformer(ERA5FamilyMetadataTransformer, ERA5LandValues):
     pass
 
-class ERA5SeaValuesMetadataTransformer(ERA5MetadataTransformer, ERA5Values):
-    pass
-
 class ERA5LandWindValuesMetadataTransformer(ERA5LandValuesMetadataTransformer, ERA5LandWindValues):
     pass
 
@@ -126,19 +122,16 @@ class ERA52mTempValuesMetadataTransformer(ERA5MetadataTransformer, ERA52mTempVal
 class ERA5SurfaceSolarRadiationDownwardsValuesMetadataTransformer(ERA5MetadataTransformer, ERA5SurfaceSolarRadiationDownwardsValues):
     pass
 
-class ERA5VolumetricSoilWaterValuesMetadataTransformer(ERA5MetadataTransformer, ERA5VolumetricSoilWaterValues):
+class ERA5VolumetricSoilWaterLayer1ValuesMetadataTransformer(ERA5MetadataTransformer, ERA5VolumetricSoilWaterLayer1Values):
     pass
 
-class ERA5VolumetricSoilWaterLayer1ValuesMetadataTransformer(ERA5VolumetricSoilWaterValuesMetadataTransformer, ERA5VolumetricSoilWaterLayer1Values):
+class ERA5VolumetricSoilWaterLayer2ValuesMetadataTransformer(ERA5MetadataTransformer, ERA5VolumetricSoilWaterLayer2Values):
     pass
 
-class ERA5VolumetricSoilWaterLayer2ValuesMetadataTransformer(ERA5VolumetricSoilWaterValuesMetadataTransformer, ERA5VolumetricSoilWaterLayer2Values):
+class ERA5VolumetricSoilWaterLayer3ValuesMetadataTransformer(ERA5MetadataTransformer, ERA5VolumetricSoilWaterLayer3Values):
     pass
 
-class ERA5VolumetricSoilWaterLayer3ValuesMetadataTransformer(ERA5VolumetricSoilWaterValuesMetadataTransformer, ERA5VolumetricSoilWaterLayer3Values):
-    pass
-
-class ERA5VolumetricSoilWaterLayer4ValuesMetadataTransformer(ERA5VolumetricSoilWaterValuesMetadataTransformer, ERA5VolumetricSoilWaterLayer4Values):
+class ERA5VolumetricSoilWaterLayer4ValuesMetadataTransformer(ERA5MetadataTransformer, ERA5VolumetricSoilWaterLayer4Values):
     pass
 
 class ERA5Wind10mValuesMetadataTransformer(ERA5MetadataTransformer, ERA5Wind10mValues):
@@ -163,13 +156,13 @@ class ERA5WindV100mValuesMetadataTransformer(ERA5Wind100mValuesMetadataTransform
     pass
 
 # SEA TRANSFORMERS
-class ERA5SeaSurfaceTemperatureValuesMetadataTransformer(ERA5SeaValuesMetadataTransformer, ERA5SeaSurfaceTemperatureValues):
+class ERA5SeaSurfaceTemperatureValuesMetadataTransformer(ERA5MetadataTransformer, ERA5SeaSurfaceTemperatureValues):
     pass
 
-class ERA5SeaSurfaceTemperatureDailyValuesMetadataTransformer(ERA5SeaValuesMetadataTransformer, ERA5SeaSurfaceTemperatureDailyValues):
+class ERA5SeaSurfaceTemperatureDailyValuesMetadataTransformer(ERA5MetadataTransformer, ERA5SeaSurfaceTemperatureDailyValues):
     pass
 
-class ERA5SeaLevelPressureValuesMetadataTransformer(ERA5SeaValuesMetadataTransformer, ERA5SeaLevelPressureValues):
+class ERA5SeaLevelPressureValuesMetadataTransformer(ERA5MetadataTransformer, ERA5SeaLevelPressureValues):
     pass
 
 # LAND TRANSFORMERS
