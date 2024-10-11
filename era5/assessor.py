@@ -225,9 +225,9 @@ class ERA5FamilyAssessor(Assessor, Logging, IPFS):
 
         # If finalization is needed, set the start date to the finalization date and just replace everything from that date
         if not self.skip_finalization:
-            # self.load_finalization_date()
+            self.load_finalization_date()
             # TODO: TEMPORARY FIX
-            self.finalization_date = "2024091723"
+            # self.finalization_date = "2024091723"
             finalization_date_obj = datetime.datetime.strptime(self.finalization_date, "%Y%m%d%H")
             if "finalization_date" in props:
                 previous_finalization_date = datetime.datetime.strptime(props["finalization_date"], "%Y%m%d%H")
