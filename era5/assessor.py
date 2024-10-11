@@ -192,9 +192,9 @@ class ERA5FamilyAssessor(Assessor, Logging, IPFS):
         # Rebuild requested or no existing dataset
         if self.rebuild_requested or not original_dataset:
             self.info("Starting new dataset")
-            # self.load_finalization_date()
-            # TODO: TEMPORARY FIX
-            self.finalization_date = "2024091723"
+            self.load_finalization_date()
+            # # TODO: TEMPORARY FIX
+            # self.finalization_date = "2024091723"
             current_date = self.dataset_start_date
             return current_date, end, new_finalization_date_start, new_finalization_date_end
 
@@ -225,13 +225,16 @@ class ERA5FamilyAssessor(Assessor, Logging, IPFS):
 
         # If finalization is needed, set the start date to the finalization date and just replace everything from that date
         if not self.skip_finalization:
-            self.load_finalization_date()
+            # self.load_finalization_date()
+            # TODO: TEMPORARY FIX
+            self.finalization_date = "2024091723"
+            finalization_date_obj = datetime.datetime.strptime(self.finalization_date, "%Y%m%d%H")
             if "finalization_date" in props:
                 previous_finalization_date = datetime.datetime.strptime(props["finalization_date"], "%Y%m%d%H")
             print(f"Previous finalization date: {previous_finalization_date}")
-            if previous_finalization_date and previous_finalization_date < self.finalization_date:
+            if previous_finalization_date and previous_finalization_date < finalization_date_obj:
                 new_finalization_date_start = previous_finalization_date + datetime.timedelta(hours=1)
-                new_finalization_date_end = datetime.datetime.strptime(self.finalization_date, "%Y%m%d%H")
+                new_finalization_date_end = finalization_date_obj
                 self.allow_overwrite = True
 
         # The first portion is the append date range and the second portion is the finalization date range which will be replaced

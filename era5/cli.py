@@ -3,6 +3,7 @@ ETL Pipeline for {name}
 
 Usage:
     {script} [options] init
+    {script} [options] init-stepped
     {script} [options] append
     {script} [options] replace
     {script} interact
@@ -20,7 +21,6 @@ import datetime
 import itertools
 import pdb
 import sys
-import time
 
 import docopt
 import numpy
@@ -58,7 +58,6 @@ def main(pipeline: Pipeline):
             load_end = _add_delta(remote_span.start, timedelta - ONE_DAY)
             load_span = Timespan(remote_span.start, min(load_end, remote_span.end))
             load_span = adjust_span_to_end_hour_23(load_span)
-            print(load_span)
             run_pipeline(pipeline, load_span, pipeline.loader.initial, args, manual_override=True)
             return
 
@@ -92,8 +91,54 @@ def main(pipeline: Pipeline):
             run_pipeline(pipeline, load_span, pipeline.loader.replace, args, manual_override=True)
             return
 
-        print("HERE")
-        time.sleep(10)
+        elif args["init-stepped"]:
+            # Get the timescale to use (like 1 month, or any timedelta)
+            timedelta = _parse_timedelta(args["--timespan"])
+            
+            # Get the remote timespan of the dataset (the full available time range)
+            remote_span = pipeline.fetcher.get_remote_timespan()
+            
+
+            if not cid:
+                # If the dataset does not exist, initialize the first timespan
+                print("Dataset not found. Initializing dataset...")
+                load_end = _add_delta(remote_span.start, timedelta - ONE_DAY)
+                load_span = Timespan(remote_span.start, min(load_end, remote_span.end))
+                load_span = adjust_span_to_end_hour_23(load_span)
+                run_pipeline(pipeline, load_span, pipeline.loader.initial, args, manual_override=True)
+                
+                # Update the CID to mark the dataset as initialized
+                cid = pipeline.loader.dataset()
+
+                load_begin = _add_delta(load_span.end, ONE_DAY)
+                
+            else:
+                # If the dataset exists, pick up from where it left off
+                print("Dataset exists. Resuming append process...")
+                existing = pipeline.loader.dataset()
+                existing_end = existing.time[-1].values
+                
+                # Check if there's more data to load
+                if existing_end >= remote_span.end:
+                    print("No more data to load.")
+                    return
+                
+                # Calculate where to start appending from
+                load_begin = _add_delta(existing_end, ONE_DAY)
+
+            # Continue appending in steps until the remote dataset end is reached
+            while load_begin < remote_span.end:
+                load_end = _add_delta(load_begin, timedelta - ONE_DAY)
+                load_span = Timespan(load_begin, min(load_end, remote_span.end))
+                print(load_span, remote_span.end)
+                load_span = adjust_span_to_end_hour_23(load_span)
+                run_pipeline(pipeline, load_span, pipeline.loader.append, args, manual_override=True)
+                
+                # Update load_begin for the next step (next month)
+                load_begin = _add_delta(load_end, ONE_DAY)
+            
+            return
+
         # If nothing is specified, run the pipeline for the entire date range
         run_pipeline(pipeline, None, pipeline.loader.replace, args, manual_override=False)
 

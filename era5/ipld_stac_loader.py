@@ -216,6 +216,110 @@ class ERA5SeaSurfaceTemperatureDailyStacLoader(IPLDStacLoader, ERA5SeaSurfaceTem
         ERA5SeaSurfaceTemperatureDailyValues.__init__(self)
         super().__init__(time_dim=time_dim, publisher=publisher, dataset_name=self.dataset_name, time_resolution=self.time_resolution)
         Logging.__init__(self, dataset_name=self.dataset_name)
+    
+    def initial(self, dataset: xarray.Dataset, span: Timespan | None = None, resample_freq: str = "1D"):
+        """Start writing a new dataset, with an optional resampling step."""
+        mapper = self._mapper()
+        
+        # Select the time range from the dataset
+        dataset = dataset.sel(**{self.time_dim: slice(*span)})
+        
+        # Convert numpy.datetime64 to string YYYYMMDDHH format for the date range attribute
+        dataset.attrs["date_range"] = [
+            np.datetime_as_string(span.start, unit='h').replace('-', '').replace(':', '').replace('T', ''),
+            np.datetime_as_string(span.end, unit='h').replace('-', '').replace(':', '').replace('T', '')
+        ]
+        
+        # Optionally resample the dataset by the specified frequency (e.g., daily, weekly)
+        dataset = dataset.resample({self.time_dim: resample_freq}).mean(skipna=True)
+        
+        # Set Zarr metadata and chunk the dataset with requested Dask chunks
+        dataset = self.set_zarr_metadata(dataset, overwrite=True)
+        dataset = dataset.chunk(self.requested_dask_chunks)
+        
+        # Write the dataset to Zarr format
+        dataset.to_zarr(store=mapper, consolidated=True)
+        
+        # Freeze the Zarr store and prepare the STAC metadata
+        cid = mapper.freeze()
+        self.info("Preparing Stac Metadata")
+        self.prepare_publish_stac_metadata(cid, dataset, rebuild=True)
+        
+        # Publish the dataset and log the CID
+        self.publisher.publish(cid)
+        self.info(f"Published {cid}")
+
+    def append(self, dataset: xarray.Dataset, span: Timespan | None = None, resample_freq: str = "1D"):
+        """Append data to an existing dataset, with optional resampling support."""
+        # Retrieve the Zarr mapper for the existing dataset
+        mapper = self._mapper(self.publisher.retrieve())
+        
+        # Load the original dataset
+        original_dataset = self.dataset()
+
+        # Select the time range for the new data to be appended
+        dataset = dataset.sel(**{self.time_dim: slice(*span)})
+
+        # Extract the start and end times from the old and new datasets
+        old_start = original_dataset[self.time_dim].values[0]
+        new_end = dataset[self.time_dim].values[-1]
+
+        # Update the date_range metadata using the start of the existing dataset and the end of the new data
+        dataset.attrs["date_range"] = [
+            np.datetime_as_string(old_start, unit='h').replace('-', '').replace(':', '').replace('T', ''),
+            np.datetime_as_string(new_end, unit='h').replace('-', '').replace(':', '').replace('T', '')
+        ]
+
+        # Resample the dataset if resample_freq is provided (e.g., daily resampling)
+        dataset = dataset.resample({self.time_dim: resample_freq}).mean(skipna=True)
+        
+        # Chunk the dataset to the requested Dask chunks
+        dataset = dataset.chunk(self.requested_dask_chunks)
+        
+        # Append the new dataset to the existing Zarr store
+        dataset.to_zarr(store=mapper, consolidated=True, append_dim=self.time_dim)
+
+        # Freeze the updated Zarr store and create STAC metadata
+        cid = mapper.freeze()
+        self.info("Preparing Stac Metadata")
+        self.create_stac_item(dataset=dataset)
+
+        # Publish the updated dataset with the new CID
+        self.publisher.publish(cid)
+        self.info(f"Published {cid}")
+
+
+    def replace(self, replace_dataset: xarray.Dataset, span: Timespan | None = None, resample_freq: str = "1D"):
+        """Replace a contiguous span of data in an existing dataset, with an optional resampling step."""
+        # Retrieve the Zarr mapper for the existing dataset
+        mapper = self._mapper(self.publisher.retrieve())
+        
+        # Load the original dataset
+        original_dataset = self.dataset()
+        
+        # Determine the region to be replaced in the time dimension
+        region = (
+            self._time_to_integer(original_dataset, span.start),
+            self._time_to_integer(original_dataset, span.end) + 1,
+        )
+        
+        # Optionally resample the replacement dataset by the specified frequency (e.g., daily)
+        replace_dataset = replace_dataset.resample({self.time_dim: resample_freq}).mean(skipna=True)
+        
+        # Drop any dimensions that are not part of the time dimension in the replacement dataset
+        replace_dataset = replace_dataset.drop_vars([dim for dim in replace_dataset.dims if dim != self.time_dim])
+        
+        # Write the resampled replacement dataset to the existing Zarr store, updating the specified region
+        replace_dataset.to_zarr(store=mapper, consolidated=True, region={self.time_dim: slice(*region)})
+        
+        # Freeze the updated Zarr store and publish the new content ID (CID)
+        cid = mapper.freeze()
+        self.publisher.publish(cid)
+        
+        # Log the publication of the new CID
+        self.info(f"Published {cid}")
+
+
 
 class ERA5SeaLevelPressureStacLoader(IPLDStacLoader, ERA5SeaLevelPressureValues):
     def __init__(self, time_dim: str, publisher: IPLDPublisher):

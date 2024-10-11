@@ -67,6 +67,7 @@ if __name__ == "__main__":
 
     Usage:
         {script} [options] init
+        {script} [options] init-stepped
         {script} [options] append
         {script} [options] replace
         {script} [options] interact

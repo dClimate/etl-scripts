@@ -141,15 +141,24 @@ class ERA5Family(Fetcher, Logging):
         self.extract(date_range=[current_datetime, limit_datetime], enable_caching=True)
         self.prepare_input_files(keep_originals=False)
         cumulative_hour = 0
+        previous_month = None  # Initialize to track the month change
         while current_datetime <= limit_datetime:
-            # Generate file spec for the current hour
+            # Get the current year and month
             year = current_datetime.year
             month = current_datetime.month
-            cumulative_hour += 1
+
+            # Check if the month has changed
+            if previous_month is None or month != previous_month:
+                cumulative_hour = 1  # Reset the cumulative hour when the month changes
+            else:
+                cumulative_hour += 1  # Continue incrementing if the month is the same
+            # Generate file spec for the current hour
             file_name = f"{self.dataset_name}_{year:04}{month:02}{cumulative_hour:06}.nc4"
             yield self._get_file_by_name(file_name)
             # Increment the current_datetime by one hour
             current_datetime += timedelta(hours=1)
+            # Update the previous_month for the next iteration
+            previous_month = month
 
     def _get_file_by_name(self, file_name: str) -> FileSpec:
         """Get a FileSpec for the file, using the cache if configured."""
@@ -274,12 +283,12 @@ class ERA5Family(Fetcher, Logging):
             start_date = end.replace(day=1).date()
             end_date = end.date()
             day_range = f"{start_date}/{end_date}"
-        else:
+        else:   
             last_day_of_month = calendar.monthrange(current_date.year, current_date.month)[1]
             start_date = current_date.replace(day=1).date()
             end_date = start_date.replace(day=last_day_of_month)
             day_range = f"{start_date}/{end_date}"
-
+        print(day_range)
         request = {"date": day_range, "time": self.get_list_of_times(), "format": "grib"}
 
         self.info(f"queuing request to ERA5 Copernicus for {current_date}, days {day_range}")

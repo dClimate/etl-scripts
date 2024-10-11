@@ -187,7 +187,6 @@ DATASET_CONFIG = {
         "metadata_transformer_class": ERA5SeaSurfaceTemperatureValuesMetadataTransformer,
         "transformer_class": ERA5FamilyDatasetTransformer,
     },
-    # TOOD: DAILY
     "sea-surface-temperature-daily": {
         "dataset_values_class": ERA5SeaSurfaceTemperatureDailyValues,
         "assessor_class": ERA5SeaSurfaceTemperatureDailyValuesAssessor,

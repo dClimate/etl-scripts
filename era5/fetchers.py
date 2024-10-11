@@ -1,8 +1,4 @@
-import datetime
 
-import xarray as xr
-
-import s3fs
 
 from .fetcher import ERA5, ERA5Land
 from .base_values import ERA5PrecipValues, ERA52mTempValues, ERA5SurfaceSolarRadiationDownwardsValues, ERA5VolumetricSoilWaterLayer1Values, ERA5VolumetricSoilWaterLayer2Values, ERA5VolumetricSoilWaterLayer3Values, ERA5VolumetricSoilWaterLayer4Values, ERA5InstantaneousWindGust10mValues, ERA5WindU10mValues, ERA5WindV10mValues, ERA5WindU100mValues, ERA5WindV100mValues, ERA5SeaSurfaceTemperatureValues, ERA5SeaSurfaceTemperatureDailyValues, ERA5SeaLevelPressureValues, ERA5LandPrecipValues, ERA5LandDewpointTemperatureValues, ERA5LandSnowfallValues, ERA5Land2mTempValues, ERA5LandSurfaceSolarRadiationDownwardsValues, ERA5LandSurfacePressureValues, ERA5LandWindUValues, ERA5LandWindVValues
@@ -227,166 +223,27 @@ class ERA5SeaSurfaceTemperature(ERA5, ERA5SeaSurfaceTemperatureValues):
     """
     Class for Mean Sea Surface (0-10m) Temperature dataset
     """
-    # need to shift the longitude west so it's over the ocean (pacific)
-    FINALIZATION_LON = -130
     def __init__(self, *args, **kwargs):
         # Ensure the dataset_name is passed to constructor
         ERA5SeaSurfaceTemperatureValues.__init__(self)
         super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
-    
 
-# TODO: Implement the ERA5SeaSurfaceTemperatureDaily class
-class ERA5SeaSurfaceTemperatureDaily(ERA5SeaSurfaceTemperature, ERA5SeaSurfaceTemperatureDailyValues):
-    """
-    Class for resampling ERA5 Sea Surface Temperature hourly data to daily data for ENSO calculations
-    """
+    era5_dataset = ERA5SeaSurfaceTemperatureValues.era5_dataset
+    era5_request_name = ERA5SeaSurfaceTemperatureValues.era5_request_name
 
+
+class ERA5SeaSurfaceTemperatureDaily(ERA5, ERA5SeaSurfaceTemperatureValues):
+    """
+    Class for Mean Sea Surface (0-10m) Temperature dataset
+    """
     def __init__(self, *args, **kwargs):
-        """
-        Initialize a new ERA5 object with appropriate chunking parameters.
-        """
-        super().__init__(
-            *args,
-            skip_post_parse_qc=True,
-            skip_post_parse_api_check=True,
-            dataset_name=self.dataset_name,
-            **kwargs,
-        )
-        self.standard_dims = ["latitude", "longitude", "valid_time"]
-        self.era5_latest_possible_date = datetime.datetime.utcnow() - datetime.timedelta(days=6)
-        self.dask_use_process_scheduler = True
-        self.dask_scheduler_protocol = "tcp://"
+        # Ensure the dataset_name is passed to constructor
+        ERA5SeaSurfaceTemperatureDailyValues.__init__(self)
+        super().__init__(*args, dataset_name=self.dataset_name, **kwargs)
 
-    @property
-    def file_type(cls) -> str:
-        """
-        File type of raw data.
-        Used to trigger file format-appropriate functions and methods for Kerchunking and Xarray operations.
-        """
-        return "Zarr"
-
-    @property
-    def reference_dataset_url(self) -> str:
-        return "s3://arbol-gridded-prod/datasets/era5_sea_surface_temperature-hourly.zarr/"
-
-    #####################
-    # OPERATIONAL METHODS
-    #####################
-
-    def extract(self, date_range: list[datetime.datetime, datetime.datetime] = None, *args, **kwargs) -> bool:
-        """
-        Override parent extraction method to instead extract from Arbol's internal copy of the ERA5 SST dataset
-        """
-        if date_range and date_range[0] < self.dataset_start_date:
-            raise ValueError(
-                f"First datetime requested {date_range[0]} is before "
-                "the start of the dataset in question. Please request a valid datetime."
-            )
-        start_date, end_date = self.define_request_dates(date_range)
-        self.reference_dataset_extract = self.extract_from_reference_dataset(start_date, end_date)
-        if len(self.reference_dataset_extract.time):
-            return True
-        else:
-            self.info("No new days' data found to resample, exiting ETL script")
-            return False
-
-    def reference_dataset(self, **kwargs: dict) -> xr.Dataset:
-        """
-        Pull a reference dataset from an S3 bucket so that it can be manipulated in Xarray
-
-        Returns
-        -------
-        reference_dataset : xr.Dataset
-            An Xarray Dataset for the reference dataset in Arbol's gridded prod bucket
-        """
-        if hasattr(self, "reference_dataset_url"):
-            if self.store.fs().exists(self.reference_dataset_url):
-                mapper = s3fs.S3Map(root=self.reference_dataset_url, s3=self.store.fs(), **kwargs)
-                return xr.open_zarr(mapper)
-            else:
-                raise FileNotFoundError(f"Reference dataset not found at {self.reference_dataset_url}")
-        else:
-            raise ValueError(
-                "reference_dataset_url member variable undefined. "
-                "Please define a reference dataset before continuing."
-            )
-
-    def extract_from_reference_dataset(self, start_date: datetime.datetime, end_date: datetime.datetime) -> xr.Dataset:
-        """
-        Extract a partial dataset from the reference dataset using a date range as the filter
-
-        Parameters
-        ----------
-        start_date : datetime.datetime
-            The desired start date for data from the reference dataset
-
-        end_date : datetime.datetime
-            The desired end date for data from the reference dataset
-
-        Returns
-        -------
-        xr.Dataset
-            A selection of the reference dataset between start_date and end_date
-        """
-        if self.dataset_category == "forecast":
-            return self.reference_dataset().sel(forecast_reference_time=slice(start_date, end_date))
-        else:
-            return self.reference_dataset().sel(time=slice(start_date, end_date))
-
-    def define_request_dates(self, date_range: list = None) -> tuple[datetime.datetime, datetime.datetime]:
-        """
-        Define start and end dates to be used when requesting files
-
-        Parameters
-        ----------
-        date_range : list, optional
-            A list of start and end datetimes for retrieval. Defaults to None.
-
-        Returns
-        -------
-        tuple[datetime.datetime, datetime.datetime]
-            A tuple of start and end datetimes for retrival
-        """
-        # Use the start/end dates specified, if provided
-        if date_range:
-            request_start_date, request_end_date = date_range
-        # Otherwise start from the last update in the metadata.
-        # Fall back to the dataset_start_date property if no metadata available.
-        else:
-            try:
-                self.info("Calculating new start date based on end date in metadata or existing file")
-                request_start_date = self.get_metadata_date_range()["end"] + datetime.timedelta(days=1)
-            except (KeyError, ValueError):
-                self.info(
-                    "No existing metadata or file found; "
-                    f"extracting from Arbol's specified start date of {self.dataset_start_date.date().isoformat()}"
-                )
-                request_start_date = self.dataset_start_date
-            request_end_date = datetime.datetime.today()
-
-        return request_start_date, request_end_date
-
-    def transform_data_on_disk(self):
-        """
-        Resample the hourly dataset to a daily dataset
-        """
-        self.populate_metadata()
-
-    def load_dataset_from_disk(self):
-        """
-        Override parent method to pass the resampled dataset into normal parsing operations
-        """
-        resampled_dataset = self.reference_dataset_extract.resample(time="1D").mean(skipna=True)
-        return resampled_dataset
-
-    def postprocess_zarr(self):
-        """
-        Override postprocessing routine for load_dataset_from_disk
-        intended for data read from NetCDFs, not processed Zarrs
-        """
-        pass
-
-
+    era5_dataset = ERA5SeaSurfaceTemperatureDailyValues.era5_dataset
+    era5_request_name = ERA5SeaSurfaceTemperatureDailyValues.era5_request_name
+    
 class ERA5SeaLevelPressure(ERA5, ERA5SeaLevelPressureValues):  # pragma: nocover
     """
     Class for Mean Sea Level Pressure dataset

@@ -559,8 +559,6 @@ class ERA5SeaSurfaceTemperatureValues(ERA5Values):  # pragma: nocover
     def era5_request_name(self) -> str:
         return "sea_surface_temperature"
 
-
-# TODO: Not sure if this is right, double check
 class ERA5SeaSurfaceTemperatureDailyValues(ERA5SeaSurfaceTemperatureValues):
     """
     Class for resampling ERA5 Sea Surface Temperature hourly data to daily data for ENSO calculations
@@ -568,12 +566,13 @@ class ERA5SeaSurfaceTemperatureDailyValues(ERA5SeaSurfaceTemperatureValues):
 
     def __init__(self):
         # If you want to ensure dataset_name is an instance attribute
-        self.dataset_name = f"{ERA5SeaSurfaceTemperatureValues.dataset_name}_resample"
+        self.dataset_name = "era5_sea_surface_temperature_daily_resample"
         self.data_var = "sst"
         self.standard_name = "sea_surface_temperature"
         self.long_name = "Sea Surface Temperature"
         self.tags = ["Sea", "Temperature"]
         self.unit_of_measurement = "K"
+        self.dataset_info_url = "https://codes.ecmwf.int/grib/param-db/?id=34"
         self.requested_zarr_chunks={"time": 5000, "latitude": 32, "longitude": 32}
         self.requested_dask_chunks={"time": 5000, "latitude": 32, "longitude": -1}
         self.requested_ipfs_chunker = "size-4096"
@@ -593,7 +592,7 @@ class ERA5SeaSurfaceTemperatureDailyValues(ERA5SeaSurfaceTemperatureValues):
         """
         static_metadata = super().static_metadata
         static_metadata["dataset_description"] = (
-            "Internal resampling of hourly ERA5 SST data into daily data for analytical purposes \n"
+            "Internal resampling of hourly ERA5 SST data into daily data for analytical purposes. \n"
             + static_metadata["dataset_description"]
         )
         return static_metadata
@@ -649,7 +648,7 @@ class ERA5LandPrecipValues(ERA5LandValues):  # pragma: nocover
         self.requested_zarr_chunks={"time": 1000, "latitude": 15, "longitude": 40}
         self.requested_dask_chunks={"time": 1000, "latitude": 15, "longitude": -1}
         self.requested_ipfs_chunker = "size-57600"
-        self.dataset_start_date = datetime.datetime(1950, 1, 1, 0)
+        self.dataset_start_date = datetime.datetime(1950, 1, 1, 1)
         self.missing_value = -9999
         self.time_resolution = "hourly"
 
@@ -686,7 +685,7 @@ class ERA5LandDewpointTemperatureValues(ERA5LandValues):  # pragma: nocover
         self.requested_zarr_chunks={"time": 1000, "latitude": 15, "longitude": 40}
         self.requested_dask_chunks={"time": 1000, "latitude": 15, "longitude": -1}
         self.requested_ipfs_chunker = "size-57600"
-        self.dataset_start_date = datetime.datetime(1950, 1, 1, 0)
+        self.dataset_start_date = datetime.datetime(1950, 1, 1, 1)
         self.missing_value = -9999
         self.time_resolution = "hourly"
 
@@ -733,7 +732,7 @@ class ERA5LandSnowfallValues(ERA5LandValues):  # pragma: nocover
         self.requested_zarr_chunks={"time": 1000, "latitude": 15, "longitude": 40}
         self.requested_dask_chunks={"time": 1000, "latitude": 15, "longitude": -1}
         self.requested_ipfs_chunker = "size-57600"
-        self.dataset_start_date = datetime.datetime(1950, 1, 1, 0)
+        self.dataset_start_date = datetime.datetime(1950, 1, 1, 1)
         self.missing_value = -9999
         self.time_resolution = "hourly"
 
@@ -805,7 +804,7 @@ class ERA5LandSurfaceSolarRadiationDownwardsValues(ERA5LandValues):  # pragma: n
         self.requested_zarr_chunks={"time": 1000, "latitude": 15, "longitude": 40}
         self.requested_dask_chunks={"time": 1000, "latitude": 15, "longitude": -1}
         self.requested_ipfs_chunker = "size-57600"
-        self.dataset_start_date = datetime.datetime(1950, 1, 1, 0)
+        self.dataset_start_date = datetime.datetime(1950, 1, 1, 1)
         self.missing_value = -9999
         self.time_resolution = "hourly"
 
