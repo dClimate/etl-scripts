@@ -44,7 +44,7 @@ def build_pipeline(dataset_type):
             compress([dataset_values.data_var]),
         ),
         loader=stac_loader(
-            time_dim="time", publisher=component.ipld_publisher("local_file", combined_cache_path / "zarr_head.cid")
+            time_dim="time", publisher=component.ipld_publisher("local_file", combined_cache_path / "zarr_head.cid"), cache_location=dataset_cache_path
         ),
     )
 

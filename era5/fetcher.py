@@ -244,11 +244,12 @@ class ERA5Family(Fetcher, Logging):
         job_args, paths = [], []
         client = cdsapi.Client(verify=True, key=self.cdsapi_key)
         self.info(f"CDS API Client key is {client.key}")
+        found_any_files = False
         while current_date <= end:  # will get files for all months if rebuild requested
-            self.create_request(client, current_date, end, paths, job_args, enable_caching)
+            if self.create_request(client, current_date, end, paths, job_args, enable_caching):
+                found_any_files = True
             current_date += dateutil.relativedelta.relativedelta(months=1)
         # request all files asynchronously using separate processes
-        found_any_files = False
         with ThreadPool(processes=max(6, multiprocessing.cpu_count() - 1)) as pool:
             for result in pool.starmap(self.request_file, job_args):
                 if not result[0]:
@@ -271,7 +272,7 @@ class ERA5Family(Fetcher, Logging):
         paths: list,
         job_args: dict,
         enable_caching: bool = False,
-    ):
+    ) -> bool:
         """
         Create a request object formatted to the specifications of the Copernicus API (JSON format)
          based on input date ranges.
@@ -279,6 +280,12 @@ class ERA5Family(Fetcher, Logging):
         """
         file_name = f"{self.dataset_name}_{current_date.strftime('%Y%m')}.grib"
         path = self.local_input_path() / file_name
+
+        # Check if the file already exists
+        if os.path.exists(path):
+            self.info(f"File {file_name} already exists. Skipping request creation.")
+            return True# Skip further request creation and return
+            
         if current_date.month == end.month and current_date.year == end.year:
             start_date = end.replace(day=1).date()
             end_date = end.date()
@@ -288,12 +295,11 @@ class ERA5Family(Fetcher, Logging):
             start_date = current_date.replace(day=1).date()
             end_date = start_date.replace(day=last_day_of_month)
             day_range = f"{start_date}/{end_date}"
-        print(day_range)
         request = {"date": day_range, "time": self.get_list_of_times(), "format": "grib"}
 
         self.info(f"queuing request to ERA5 Copernicus for {current_date}, days {day_range}")
-        paths.append(path)
         job_args.append((client, request, path, enable_caching))
+        return False
 
     def request_file(
         self, client: cdsapi.Client, request: dict, output_path: str, enable_caching=False

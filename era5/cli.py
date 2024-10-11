@@ -130,7 +130,6 @@ def main(pipeline: Pipeline):
             while load_begin < remote_span.end:
                 load_end = _add_delta(load_begin, timedelta - ONE_DAY)
                 load_span = Timespan(load_begin, min(load_end, remote_span.end))
-                print(load_span, remote_span.end)
                 load_span = adjust_span_to_end_hour_23(load_span)
                 run_pipeline(pipeline, load_span, pipeline.loader.append, args, manual_override=True)
                 
