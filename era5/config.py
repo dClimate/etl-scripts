@@ -1,5 +1,5 @@
 
-from .transformer import ERA5FamilyDatasetTransformer, ERA5VolumetricSoilWaterTransformer, ERA5SeaDatasetTransformer
+from .transformer import ERA5FamilyDatasetTransformer, ERA5VolumetricSoilWaterTransformer
 from .ipld_stac_loader import (
     ERA5PrecipStacLoader,
     ERA5SurfaceSolarRadiationDownwardsStacLoader,
@@ -17,6 +17,7 @@ from .ipld_stac_loader import (
     ERA5SeaSurfaceTemperatureDailyStacLoader,
     ERA5SeaLevelPressureStacLoader,
     ERA5LandPrecipStacLoader,
+    ERA5Land2mTempStacLoader,
     ERA5LandDewpointTemperatureStacLoader,
     ERA5LandSnowfallStacLoader,
     ERA5LandSurfaceSolarRadiationDownwardsStacLoader,
@@ -103,7 +104,7 @@ DATASET_CONFIG = {
         "dataset_values_class": ERA52mTempValues,
         "assessor_class": ERA52mTempValuesAssessor,
         "fetcher_class": ERA52mTemp,
-        "stac_loader_class": ERA5PrecipStacLoader,
+        "stac_loader_class": ERA52mTempStacLoader,
         "metadata_transformer_class": ERA52mTempValuesMetadataTransformer,
         "transformer_class": ERA5FamilyDatasetTransformer,
     },
@@ -193,7 +194,7 @@ DATASET_CONFIG = {
         "fetcher_class": ERA5SeaSurfaceTemperatureDaily,
         "stac_loader_class": ERA5SeaSurfaceTemperatureDailyStacLoader,
         "metadata_transformer_class": ERA5SeaSurfaceTemperatureDailyValuesMetadataTransformer,
-        "transformer_class": ERA5SeaDatasetTransformer,
+        "transformer_class": ERA5FamilyDatasetTransformer,
     },
     "sea-level-pressure": {
         "dataset_values_class": ERA5SeaLevelPressureValues,
@@ -201,7 +202,7 @@ DATASET_CONFIG = {
         "fetcher_class": ERA5SeaLevelPressure,
         "stac_loader_class": ERA5SeaLevelPressureStacLoader,
         "metadata_transformer_class": ERA5SeaLevelPressureValuesMetadataTransformer,
-        "transformer_class": ERA5SeaDatasetTransformer,
+        "transformer_class": ERA5FamilyDatasetTransformer,
     },
     "land-precip": {
         "dataset_values_class": ERA5LandPrecipValues,
@@ -231,7 +232,7 @@ DATASET_CONFIG = {
         "dataset_values_class": ERA5Land2mTempValues,
         "assessor_class": ERA5Land2mTempValuesAssessor,
         "fetcher_class": ERA5Land2mTemp,
-        "stac_loader_class": ERA52mTempStacLoader,
+        "stac_loader_class": ERA5Land2mTempStacLoader,
         "metadata_transformer_class": ERA5Land2mTempValuesMetadataTransformer,
         "transformer_class": ERA5FamilyDatasetTransformer,
     },

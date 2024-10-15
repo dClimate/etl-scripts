@@ -50,32 +50,33 @@ class ERA5FamilyDatasetTransformer(ERA5Family):
         # Otherwise it will just return the dataset
         dataset = dataset.rename_vars(
             {[key for key in dataset.data_vars][0]: data_var}
-        )  # GRIB CDO process seems to remove the variable name
+        )  # GRIB CDO process seems to remove the variable name. This will restore it. If it's not needed, nothing will happen
         return cls.standardize_longitudes(dataset)
 
     def dataset_transformer(self, dataset: xarray.Dataset, metadata_info: dict) -> tuple[xarray.Dataset, dict]:
         return self.postprocess_zarr(dataset=dataset, data_var=self.data_var), metadata_info
 
-class ERA5SeaDatasetTransformer(ERA5FamilyDatasetTransformer):
+# Found it could be merged to the parent class
+# class ERA5SeaDatasetTransformer(ERA5FamilyDatasetTransformer):
 
-    def __init__(self, data_var):
-        self.data_var = data_var  # Set data_var for this instance
+#     def __init__(self, data_var):
+#         self.data_var = data_var  # Set data_var for this instance
 
-    @classmethod
-    def postprocess_zarr(self, dataset: xarray.Dataset, data_var: str) -> xarray.Dataset:
-        """
-        Sea layers must be further postprocessed to fit with the Arbol's Zarr file standard.
-        Sea layers come packaged with ['number','surface','step'] coordinates which will break parses,
-        despite providing no relevant information when exporting a single layer.
-        """
-        dataset = super().postprocess_zarr(dataset=dataset, data_var=data_var)
-        dataset = dataset.rename_vars(
-            {[key for key in dataset.data_vars][0]: data_var}
-        )  # GRIB CDO process seems to remove the variable name
-        return dataset
+#     @classmethod
+#     def postprocess_zarr(self, dataset: xarray.Dataset, data_var: str) -> xarray.Dataset:
+#         """
+#         Sea layers must be further postprocessed to fit with the Arbol's Zarr file standard.
+#         Sea layers come packaged with ['number','surface','step'] coordinates which will break parses,
+#         despite providing no relevant information when exporting a single layer.
+#         """
+#         dataset = super().postprocess_zarr(dataset=dataset, data_var=data_var)
+#         dataset = dataset.rename_vars(
+#             {[key for key in dataset.data_vars][0]: data_var}
+#         )  # GRIB CDO process seems to remove the variable name
+#         return dataset
     
-    def dataset_transformer(self, dataset: xarray.Dataset, metadata_info: dict) -> tuple[xarray.Dataset, dict]:
-        return self.postprocess_zarr(dataset=dataset, data_var=self.data_var), metadata_info
+#     def dataset_transformer(self, dataset: xarray.Dataset, metadata_info: dict) -> tuple[xarray.Dataset, dict]:
+#         return self.postprocess_zarr(dataset=dataset, data_var=self.data_var), metadata_info
 
 
 class ERA5VolumetricSoilWaterTransformer(ERA5FamilyDatasetTransformer):
