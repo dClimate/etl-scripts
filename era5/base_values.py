@@ -867,7 +867,7 @@ class ERA5LandWindUValues(ERA5LandWindValues):  # pragma: nocover
         self.requested_zarr_chunks={"time": 1000, "latitude": 15, "longitude": 40}
         self.requested_dask_chunks={"time": 1000, "latitude": 15, "longitude": -1}
         self.requested_ipfs_chunker = "size-57600"
-        self.dataset_start_date = datetime.datetime(1950, 1, 1, 0)
+        self.dataset_start_date = datetime.datetime(1950, 1, 1, 1)
         self.missing_value = -9999
         self.time_resolution = "hourly"
         self.final_lag_in_days = 90
@@ -895,7 +895,7 @@ class ERA5LandWindVValues(ERA5LandWindValues):  # pragma: nocover
         self.requested_zarr_chunks={"time": 1000, "latitude": 15, "longitude": 40}
         self.requested_dask_chunks={"time": 1000, "latitude": 15, "longitude": -1}
         self.requested_ipfs_chunker = "size-57600"
-        self.dataset_start_date = datetime.datetime(1950, 1, 1, 0)
+        self.dataset_start_date = datetime.datetime(1950, 1, 1, 1)
         self.missing_value = -9999
         self.time_resolution = "hourly"
         self.final_lag_in_days = 90
