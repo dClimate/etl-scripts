@@ -261,7 +261,6 @@ class ERA5Family(Fetcher, Logging):
             pool.join()
         if not found_any_files:
             raise ValueError("No finalization files successfully retrieved from the API, " "please try again later.")
-
         return True
 
     def create_request(
@@ -278,12 +277,14 @@ class ERA5Family(Fetcher, Logging):
          based on input date ranges.
         Append this request object and a corresponding file pathinto the job args submitted to starmap. in `extract`.
         """
-        file_name = f"{self.dataset_name}_{current_date.strftime('%Y%m')}.grib"
+        file_name = f"{self.dataset_name}_{current_date.strftime('%Y%m')}_downloading.grib"
+        finished_file_name = f"{self.dataset_name}_{current_date.strftime('%Y%m')}.grib"
         path = self.local_input_path() / file_name
+        finished_path = self.local_input_path() / finished_file_name
 
         # Check if the file already exists
-        if os.path.exists(path):
-            self.info(f"File {file_name} already exists. Skipping request creation.")
+        if os.path.exists(finished_path):
+            self.info(f"File {finished_path} already exists. Skipping request creation.")
             return True# Skip further request creation and return
             
         if current_date.month == end.month and current_date.year == end.year:
@@ -355,7 +356,17 @@ class ERA5Family(Fetcher, Logging):
 
         # If the function hasn't returned false or exited already, the file must have been retrieved
         self.info(f"File {output_path} retrieved")
-        return True, output_path
+        final_output_path = output_path.with_name(output_path.name.replace('_downloading', ''))
+        
+        if final_output_path != output_path:
+            try:
+                os.rename(str(output_path), str(final_output_path))
+                self.info(f"Renamed file from {output_path} to {final_output_path}")
+            except OSError as e:
+                self.warn(f"Error renaming file {output_path}: {type(e).__name__} - {e}")
+                return False, output_path      
+
+        return True, final_output_path
 
     def get_list_of_times(self, time_range=range(0, 24)) -> str:
         return [f"{time_index:02}:00" for time_index in time_range]
