@@ -34,7 +34,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         config["publisher"] = config["publisher"].as_component("ipld_publisher")
         return cls(**config)
 
-    def __init__(self, time_dim: str, publisher: IPLDPublisher):
+    def __init__(self, time_dim: str, publisher: IPLDPublisher, cache_location: str = None):
         super().__init__(host="http://127.0.0.1:5001")
         Logging.__init__(self, dataset_name="vhi")
         self.time_dim = time_dim
@@ -55,12 +55,27 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         self.host = "http://127.0.0.1:5001" 
         self.requested_ipfs_chunker = "size-113000"
         self.metadata = metadata
+        self.cache_location=cache_location
         self.requested_dask_chunks = {"time": 200, "latitude": 226, "longitude": -1}  # 1.8 GB
 
     def static_metadata(self):
         return self.metadata
 
-    def prepare_publish_stac_metadata(self, cid, dataset: xarray.Dataset):
+    def cleanup_files(self):
+        # Check if the path exists and is a directory
+        if self.cache_location.exists() and self.cache_location.fs.isdir(self.cache_location.path):
+            # List all files in the directory
+            file_list = self.cache_location.fs.ls(self.cache_location.path, detail=False)
+            for file_path in file_list:
+                # Check if the item is a file (not a directory)
+                if self.cache_location.fs.isfile(file_path):
+                    self.cache_location.fs.rm(file_path)
+        else:
+            print(f"{self.cache_location.path} does not exist or is not a directory.")
+
+
+
+    def prepare_publish_stac_metadata(self, cid, dataset: xarray.Dataset, rebuild=False):
         """Prepare the STAC metadata for the dataset."""
         self.set_custom_latest_hash(str(cid))
         self.create_root_stac_catalog()
@@ -70,7 +85,6 @@ class IPLDStacLoader(Loader, Metadata, Logging):
 
     def initial(self, dataset: xarray.Dataset, span: Timespan | None = None):
         """Start writing a new dataset."""
-        print(span)
         mapper = self._mapper()
         dataset = dataset.sel(**{self.time_dim: slice(*span)})
         # Convert numpy.datetime64 to string YYYYMMDDHH format
@@ -78,26 +92,16 @@ class IPLDStacLoader(Loader, Metadata, Logging):
             np.datetime_as_string(span.start, unit='h').replace('-', '').replace(':', '').replace('T', ''),
             np.datetime_as_string(span.end, unit='h').replace('-', '').replace(':', '').replace('T', '')
         ]
-        # print(dataset)
-        # data_point = dataset.sel(
-        #     time="2024-01-01", 
-        #     latitude=44.982, 
-        #     longitude=44.982, 
-        #     # method="nearest"
-        # )
-
-        # # Access the VHI variable at the selected point
-        # vhi_value = data_point['VHI'].values
-        # print(vhi_value)
         dataset = self.set_zarr_metadata(dataset)
         # Chunk the dataset to the requested dask chunks
         dataset = dataset.chunk(self.requested_dask_chunks)
         dataset.to_zarr(store=mapper, consolidated=True)
         cid = mapper.freeze()
         self.info("Preparing Stac Metadata")
-        self.prepare_publish_stac_metadata(cid, dataset)
+        self.prepare_publish_stac_metadata(cid, dataset, rebuild=True)
         self.publisher.publish(cid)
         self.info(f"Published {cid}")
+        self.cleanup_files()
 
     def append(self, dataset: xarray.Dataset, span: Timespan | None = None):
         """Append data to an existing dataset."""
@@ -120,6 +124,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         self.create_stac_item(dataset=dataset)
         self.publisher.publish(cid)
         self.info(f"Published {cid}")
+        self.cleanup_files()
 
     def replace(self, replace_dataset: xarray.Dataset, span: Timespan | None = None):
         """Replace a contiguous span of data in an existing dataset."""
@@ -139,6 +144,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         cid = mapper.freeze()
         self.publisher.publish(cid)
         self.info(f"Published {cid}")
+        self.cleanup_files()
 
     def dataset(self) -> xarray.Dataset:
         """Convenience method to get the currently published dataset."""
@@ -155,3 +161,16 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         # It seems like an oversight in xarray that this is the best way to do this.
         nearest = dataset.sel(**{self.time_dim: timestamp, "method": "nearest"})[self.time_dim]
         return list(dataset[self.time_dim].values).index(nearest)
+
+
+# print(dataset)
+# data_point = dataset.sel(
+#     time="2024-01-01", 
+#     latitude=44.982, 
+#     longitude=44.982, 
+#     # method="nearest"
+# )
+
+# # Access the VHI variable at the selected point
+# vhi_value = data_point['VHI'].values
+# print(vhi_value)

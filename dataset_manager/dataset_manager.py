@@ -356,7 +356,7 @@ class DatasetManager(Logging, Publish, ABC, IPFS):
         return publish_dataset
 
     @abstractmethod
-    def prepare_input_files(self, keep_originals: bool = True):
+    def prepare_input_files(self):
         """
         Convert each of the input files (and associated metadata files) to a collection of daily netCDF4 classic files
         suitable for reading by Kerchunk and intake into Xarray. This allows us to stack data into modern, performant
@@ -364,9 +364,6 @@ class DatasetManager(Logging, Publish, ABC, IPFS):
 
         Parameters
         ----------
-
-        keep_originals : bool, optional
-            An optional flag to preserve the original files for debugging purposes. Defaults to True.
         """
 
     def populate_metadata(self):  # pragma NO COVER

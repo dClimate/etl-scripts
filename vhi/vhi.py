@@ -9,17 +9,18 @@ import pathlib
 
 from dc_etl import filespec
 from .cli import main
+from .pipeline import Pipeline
 # import fetch from same directory
 from .fetcher import VHI
-from dc_etl.pipeline import Pipeline
-from dc_etl import component
+from .publisher import LocalFileIPLDPublisher
 from .metadata import MetadataTransformer
 from .transformer import DatasetTransformer
-
+from .compressor import compress
+from .composite import Composite
 from .ipld_stac_loader import IPLDStacLoader
 from .extractor import VHINetCDFExtractor
 from .combiner import VHICombiner
-
+from .assessor import VHIAssessor
 
 HERE = filespec.file(pathlib.Path(__file__).parent, auto_mkdir=True)
 CACHE = HERE / "datasets"
@@ -29,19 +30,18 @@ def mainPipeline():
     """Run the example.
     Other than how they're configured, the two examples aren't particularly different, so we use the same command
     line interface code for both."""
-
     pipeline = Pipeline(
+        assessor=VHIAssessor(dataset_name="vhi", time_resolution="weekly"),
         fetcher=VHI(skip_pre_parse_nan_check=True, cache=CACHE),
         extractor=VHINetCDFExtractor(),
         combiner=VHICombiner(),
-        transformer=component.transformer(
-            "composite",
-            DatasetTransformer(),
-            MetadataTransformer("VHI", "vhi"),
-            component.transformer("compress", ["VHI"]),
+        transformer=Composite(
+            DatasetTransformer().dataset_transformer,
+            MetadataTransformer("VHI", "vhi").metadata_transformer,
+            compress(["VHI"]),
         ),
         loader=IPLDStacLoader(
-            time_dim="time", publisher=component.ipld_publisher("local_file", CACHE / "vhi" / "combined" / "zarr_head.cid")
+            time_dim="time", publisher=LocalFileIPLDPublisher("local_file", CACHE / "vhi" / "combined" / "zarr_head.cid"), cache_location=CACHE / "vhi"
         ),
     )
 

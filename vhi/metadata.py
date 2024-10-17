@@ -1,9 +1,15 @@
-from dc_etl.transform import Transformer
 import xarray
 import datetime
 
-def MetadataTransformer(variable: str, dataset_name: str) -> Transformer:
-    def set_dataset_metadata(dataset: xarray.Dataset) -> xarray.Dataset:
+class MetadataTransformer():
+
+    # Init with variable and dataset_name
+
+    def __init__(self, variable: str, dataset_name: str):
+        self.variable = variable
+        self.dataset_name = dataset_name
+
+    def set_dataset_metadata(self, dataset: xarray.Dataset) -> xarray.Dataset:
         # Newer satellites have different attributes we must accommodate to prevent update ETL failure
         try:
             dataset.attrs["preferred_citation"] = dataset.attrs["CITATION_TO_DOCUMENTS"]
@@ -75,8 +81,8 @@ def MetadataTransformer(variable: str, dataset_name: str) -> Transformer:
 
         all_keys = (
             list(dataset.attrs.keys())
-            + list(dataset[variable].attrs.keys())
-            + list(dataset[variable].encoding.keys())
+            + list(dataset[self.variable].attrs.keys())
+            + list(dataset[self.variable].encoding.keys())
         )
 
         for key in all_keys:
@@ -84,13 +90,14 @@ def MetadataTransformer(variable: str, dataset_name: str) -> Transformer:
                 dataset.attrs.pop(key, None)
                 dataset["latitude"].attrs.pop(key, None)
                 dataset["longitude"].attrs.pop(key, None)
-                dataset[variable].attrs.pop(key, None)
-                dataset[variable].encoding.pop(key, None)
+                dataset[self.variable].attrs.pop(key, None)
+                dataset[self.variable].encoding.pop(key, None)
 
         dataset.attrs.update(static_metadata)
         return dataset
 
-    return set_dataset_metadata
+    def metadata_transformer(self, dataset: xarray.Dataset, pipeline_info: dict) -> tuple[xarray.Dataset, dict]:
+        return self.set_dataset_metadata(dataset=dataset), pipeline_info
 
 
 static_metadata = {

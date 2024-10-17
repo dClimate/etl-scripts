@@ -18,7 +18,6 @@ class NCtoNetCDF4Converter(Logging):
         input_files: list[pathlib.Path],
         command_text: list[str],
         replacement_suffix: str,
-        keep_originals: bool = False,
         invert_file_order: bool = False,
         
     ):
@@ -36,8 +35,6 @@ class NCtoNetCDF4Converter(Logging):
             A list of strings to reconstruct into a shell command
         replacement_suffix : str
             The desired extension of the file(s) created by the shell routine. Replaces the old extension.
-        keep_originals : bool, optional
-            An optional flag to preserve the original files for debugging purposes. Defaults to False.
         """
         # set up and run conversion subprocess on command line
         commands = []
@@ -63,19 +60,11 @@ class NCtoNetCDF4Converter(Logging):
             commands_slice = [Popen(cmd) for cmd in commands[index : index + 100]]
             for command in commands_slice:
                 command.wait()
-                # if not keep_originals:
-                #     if not invert_file_order:
-                #         os.remove(command.args[-2])
-                #     else:
-                #         os.remove(command.args[-1])
 
         self.info(f"{(len(input_files))} conversions finished, cleaning up original files")
-        # Get rid of original files that were converted
-        # if keep_originals:
-        #     self.archive_original_files(input_files)
         self.info("Cleanup finished")
 
-    def convert_to_lowest_common_time_denom(self, raw_files: list, keep_originals: bool = False):
+    def convert_to_lowest_common_time_denom(self, raw_files: list):
         """
         Decompose a set of raw files aggregated by week, month, year, or other irregular time denominator
         into a set of smaller files, one per the lowest common time denominator -- hour, day, etc.
@@ -88,9 +77,6 @@ class NCtoNetCDF4Converter(Logging):
             A list of file path strings referencing the original files prior to processing
         originals_dir : pathlib.Path
             A path to a directory to hold the original files
-        keep_originals : bool, optional
-            An optional flag to preserve the original files for debugging purposes. Defaults to False.
-
         Raises
         ------
         ValueError
@@ -103,10 +89,9 @@ class NCtoNetCDF4Converter(Logging):
             input_files=raw_files,
             command_text=command_text,
             replacement_suffix=".nc4",
-            keep_originals=keep_originals,
         )
 
-    def ncs_to_nc4s(self, raw_files, keep_originals: bool = False):
+    def ncs_to_nc4s(self, raw_files):
         """
         Find all NetCDF files in the input folder and batch convert them
         in parallel to NetCDF4-Classic files that play nicely with Kerchunk
@@ -116,9 +101,6 @@ class NCtoNetCDF4Converter(Logging):
 
         Parameters
         ----------
-        keep_originals : bool
-            An optional flag to preserve the original files for debugging purposes. Defaults to False.
-
         Raises
         ------
         ValueError
@@ -131,7 +113,7 @@ class NCtoNetCDF4Converter(Logging):
         self.info(f"Converting {(len(raw_files))} NetCDFs to NetCDF4 Classic files")
         command_text = ["nccopy", "-k", "netCDF-4 classic model"]
         self.parallel_subprocess_files(
-            input_files=raw_files, command_text=command_text, replacement_suffix=".nc4", keep_originals=keep_originals
+            input_files=raw_files, command_text=command_text, replacement_suffix=".nc4"
         )
 
     def archive_original_files(self, files: list):

@@ -8,7 +8,7 @@ from dc_etl.ipld.loader import IPLDPublisher
 class LocalFileIPLDPublisher(IPLDPublisher):
     """Publishes CID of dataset to a local file."""
 
-    def __init__(self, path: FileSpec):
+    def __init__(self, type: str, path: FileSpec):
         self.path = path
 
     def publish(self, cid: CID):

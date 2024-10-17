@@ -139,7 +139,7 @@ class ERA5Family(Fetcher, Logging):
         current_datetime = pd.to_datetime(span.start).to_pydatetime()
         limit_datetime = pd.to_datetime(span.end).to_pydatetime()
         self.extract(date_range=[current_datetime, limit_datetime], enable_caching=True)
-        self.prepare_input_files(keep_originals=False)
+        self.prepare_input_files()
         cumulative_hour = 0
         previous_month = None  # Initialize to track the month change
         while current_datetime <= limit_datetime:
@@ -175,20 +175,18 @@ class ERA5Family(Fetcher, Logging):
         # If the file isn't found in the cache, handle the case (e.g., raise an exception or log)
         raise FileNotFoundError(f"File {file_name} not found in cache")
 
-    def prepare_input_files(self, keep_originals: bool = False):
+    def prepare_input_files(self):
         """
         Command line tools converting from GRIB1 to NetCDF4 classic whilst splitting by hour.
 
         Parameters
         ----------
-        keep_originals : bool
-            A flag to preserve the original files for debugging purposes. Defaults to False.
         """
         input_dir = pathlib.Path(self.local_input_path())
         monthlies = [pathlib.Path(file) for file in glob.glob(str(input_dir / "*.grib"))]
         # Convert input files to hourly NetCDFs
         self.info(f"Converting {(len(list(monthlies)))} monthly ERA5 GRIB files to hourly NetCDFs")
-        self.converter.convert_to_lowest_common_time_denom(raw_files=monthlies, keep_originals=keep_originals)
+        self.converter.convert_to_lowest_common_time_denom(raw_files=monthlies)
 
     def _cache_path(self, path):
         """Compute a file's path in the cache."""

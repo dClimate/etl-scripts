@@ -702,7 +702,7 @@ class CopernicusOcean(Fetcher):
 
     # TRANSFORMATION
 
-    def prepare_input_files(self, keep_originals: bool = False):
+    def prepare_input_files(self):
         """
         Convert all NetCDFs to NetCDF 4 Classics compatible with Kerchunk
         """
@@ -710,7 +710,7 @@ class CopernicusOcean(Fetcher):
         yearlies = [pathlib.Path(file) for file in glob.glob(str(input_dir / "*.nc"))]
         # Convert input files to hourly NetCDFs
         self.info(f"Converting {(len(list(yearlies)))} yearly NetCDF files to daily NetCDFs")
-        self.convert_to_lowest_common_time_denom(yearlies, keep_originals)
+        self.convert_to_lowest_common_time_denom(yearlies)
 
     def set_zarr_metadata(self, dataset: xr.Dataset):
         """

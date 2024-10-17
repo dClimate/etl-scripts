@@ -14,9 +14,6 @@ from dc_etl.fetch import Fetcher, Timespan
 from typing import Generator
 from dc_etl.filespec import FileSpec
 from dataset_manager.utils.extractor import HTTPExtractor
-import os
-import tarfile
-import shutil
 from dataset_manager.utils.logging import Logging
 from dataset_manager.utils.converter import NCtoNetCDF4Converter
 
@@ -63,20 +60,28 @@ class VHI(Fetcher, Logging):
     # Implementation of the method
         return "prefetch data"
 
-    def fetch(self, span: Timespan) -> Generator[FileSpec, None, None]:
+    def fetch(self, span: Timespan, pipeline_info: dict) -> Generator[FileSpec, None, None]:
         """Implementation of :meth:`Fetcher.fetch`"""
         current_datetime = pd.to_datetime(span.start).to_pydatetime()
         limit_datetime = pd.to_datetime(span.end).to_pydatetime()
         self.info(f"Fetching data for the timespan from {span.start} to {span.end}")
         self.extract((current_datetime, limit_datetime))
-        self.prepare_input_files(keep_originals=False)
+        self.convert_downloaded_files()
         # Extracting the start and end years from the timespan
         start_year = current_datetime.year
         end_year = limit_datetime.year
         for year in range(start_year, end_year + 1):
             vhi_weeks = self.vhi_weeks_per_year((current_datetime, limit_datetime))
-            for idx in range(len(vhi_weeks[0])):
-                yield self._get_file_by_year_week(year, idx + 1)
+            for week_date_str in vhi_weeks[0]:
+                # Convert the week date string to a datetime object
+                week_date = pd.to_datetime(week_date_str).to_pydatetime()
+                # Check if the year of the date matches the current year
+                if week_date.year != year:
+                    continue
+                # Get the ISO week number for the date
+                week_number = week_date.isocalendar()[1]  # ISO week number
+                # Yield the file for the corresponding year and week number
+                yield self._get_file_by_year_week(year, week_number)
 
     
     def _get_file_by_year_week(self, year, week):
@@ -137,6 +142,16 @@ class VHI(Fetcher, Logging):
         # Download files
         found_any_files = HTTPExtractor(self).pool(requests)
         # return a list of new files downloaded. If none this equates to False and terminates the ETL
+        # Remove "_downloading" from all successfully downloaded files
+        # for request in requests:
+        #     downloading_file_path = request["local_file_path"]
+        #     final_file_path = downloading_file_path.with_name(downloading_file_path.stem.replace("_downloading", "") + downloading_file_path.suffix)
+            
+        #     # Check if the "_downloading" file exists and rename it
+        #     if downloading_file_path.exists():
+        #         os.rename(downloading_file_path, final_file_path)
+        #         print(f"Renamed {downloading_file_path} to {final_file_path}")
+
         return found_any_files
 
     def define_request_dates(self, date_range: list = None) -> tuple[datetime.datetime, datetime.datetime]:
@@ -250,10 +265,16 @@ class VHI(Fetcher, Logging):
                 (file_year > start_date.year or (file_year == start_date.year and file_week >= start_week))
                 and (file_year < end_date.year or (file_year == end_date.year and file_week <= end_date.isocalendar()[1]))
             ):
+                local_file_path = self.local_input_path() / file_url
+                if local_file_path.exists():
+                    print(f"File {local_file_path} already exists, skipping download.")
+                    continue
+                # downloading_file_path = local_file_path.with_name(local_file_path.stem + "_downloading" + local_file_path.suffix)
+
                 requests.append(
                     {
                         "remote_file_path": self.data_download_url + "/" + file_url,
-                        "local_file_path": self.local_input_path() / file_url,
+                        "local_file_path": local_file_path,
                     }
                 )
         return requests
@@ -280,46 +301,17 @@ class VHI(Fetcher, Logging):
         return year, week
 
     # TRANSFORM STEPS
-    def prepare_input_files(self, keep_originals: bool = False):
+    def convert_downloaded_files(self):
         """
         Command line tools converting raw downloaded data to daily / hourly data
         Note that `nccopy` will fail when reading incompletely downloaded files
 
         Parameters
         ----------
-        keep_originals : bool, optional
-            An optional flag to preserve the original files for debugging purposes. Defaults to False.
         """
-        input_dir = pathlib.Path(self.local_input_path())
-        originals_dir = input_dir.parent / (input_dir.stem + "_originals")
-        for fil in input_dir.glob("*.tar"):
-            if tarfile.is_tarfile(fil):
-                out_file = input_dir / fil.stem
-                with tarfile.TarFile(fil) as item:
-                    item.extractall(out_file)
-                if keep_originals:
-                    os.makedirs(originals_dir, 0o755, True)
-                    shutil.move(fil, (originals_dir / (fil.stem + fil.suffix)))
-                else:
-                    os.unlink(fil)
-            else:
-                raise TypeError(
-                    f"Fil {fil} has a tar extension but is not a valid tar\
-                        and hence cannot be safely unpacked. Please investigate."
-                )
-        for fil in input_dir.glob("*.nc"):
-            if ".nc1." in fil.suffix:
-                fil.replace(fil.with_suffix(".nc"))
-        # move untarred files up one level out of enclosing folders, then delete those folders
-        for fil in input_dir.rglob("*.*"):
-            fil.rename(input_dir / fil.name)
-        for unzipped_dir in list(input_dir.glob("**"))[
-            1:
-        ]:  # the 1st entry is the current directory, don't want to delete that!
-            shutil.rmtree(unzipped_dir)
         # Convert all NCs to NC4s
         raw_files = sorted([pathlib.Path(file) for file in glob.glob(str(self.local_input_path() / "*.nc"))])
-        self.converter.ncs_to_nc4s(raw_files, keep_originals)
+        self.converter.ncs_to_nc4s(raw_files)
 
 
     def vhi_weeks_per_year(self, date_range: tuple[datetime.datetime, datetime.datetime]) -> list[datetime.datetime]:
