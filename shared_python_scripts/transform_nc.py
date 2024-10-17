@@ -9,16 +9,6 @@ import xarray as xr
 import numcodecs
 
 
-def normalize_longitudes(ds: xr.Dataset) -> xr.Dataset:
-    ds = ds.assign_coords(longitude=(((ds.longitude + 180) % 360) - 180))
-
-    # After converting, the longitudes may still start at zero. This reorders the longitude coordinates from -180
-    # to 180 if necessary.
-    ds.sortby(["latitude", "longitude"])
-
-    return ds
-
-
 def fix_fill_missing_value(ds: xr.Dataset) -> tuple[xr.Dataset, dict]:
     for var in ds.data_vars:
         fill_value = ds[var].encoding.get("_FillValue")
@@ -58,22 +48,15 @@ def fix_fill_missing_value(ds: xr.Dataset) -> tuple[xr.Dataset, dict]:
 
 
 def perform_transformations(ds: xr.Dataset) -> tuple[xr.Dataset, dict]:
-    # Rename dimensions if needed
-    if "lat" in ds.dims:
-        ds = ds.rename({"lat": "latitude"})
-    if "lon" in ds.dims:
-        ds = ds.rename({"lon": "longitude"})
-
-    ds = normalize_longitudes(ds)
-
     # Apply compression to all data variables
     data_vars = list(ds.data_vars.keys())
     for var in data_vars:
         ds[var].encoding["compressor"] = numcodecs.Blosc()
 
-    # Rechunk
-    chunk_sizes = {"time": "auto", "latitude": "auto", "longitude": "auto"}
-    ds = ds.chunk(chunk_sizes)
+    # Rechunk various dimensions
+    for dim_name in ["time", "lat", "latitude", "lon", "longitude"]:
+        if dim_name in ds.dims:
+            ds = ds.chunk({dim_name: "auto"})
 
     ds, encoding = fix_fill_missing_value(ds)
 
