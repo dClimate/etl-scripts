@@ -4,9 +4,14 @@
 </a>
 </p>
 
-This repository contains scripts that process ETLs of gridded datasets[^1] to an ipfs cluster.
+This repository contains ETLs of gridded datasets to the dClimate IPFS cluster.
 
-[^1] A gridded dataset organizes data into cells on a grid. Each cell represents a specific area on the Earth's surface and contains values like temperature, precipitation, etc.
+This repository houses ETL (Extract, Transform, Load) scripts for gridded datasets. These scripts load into the dClimate IPFS cluster.
 
-Read `README-dev.md` for how to setup your development environment.
-Check out `repo-map.md` for information about what each directory holds.
+Gridded datasets are powerful tools in environmental and climate science. They organize data into a matrix of cells, each representing a specific geographical area on the Earth's surface. These cells contain various climate-related measurements such as temperature, precipitation, wind speed, and other meteorological or environmental variables.
+
+An [IPFS Cluster](https://ipfscluster.io/) orchestrates pinsets among many ipfs daemons.
+
+See `development.md` for how to setup the development and operation environment.
+
+For a more technical overview of all parts of the repository, see `repo-map.md`.

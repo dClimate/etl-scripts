@@ -4,12 +4,16 @@ set -e
 script_dir=$(dirname "$0")
 cd "$script_dir"
 
-source shared_functions.sh
+source shared-functions.sh
 
 check_there_is_one_argument $#
 
 dataset=$1
-check_argument_is_valid $dataset
+check_valid_dataset $dataset
+
+create_cpc_log $dataset
+
+cpc_log "Starting Prefetch"
 
 base_url=""
 start_year=""
@@ -33,12 +37,12 @@ case $dataset in
         ;;
 esac
 
-cd $dataset
 year=$start_year
-> ./download-links.txt # Clear the file first
+> $dataset/download-links.txt # Clear the file first
 while (( year <= end_year )); do
     url="${base_url}${year}.nc"
-    echo $url >> ./download-links.txt
+    echo "$url" >> $dataset/download-links.txt
     year=$((year + 1))
 done
-echo Finished writing download URLs for $dataset
+
+cpc_log "Finished Prefetch"
