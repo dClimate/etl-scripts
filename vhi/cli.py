@@ -24,6 +24,8 @@ import pandas as pd
 
 import docopt
 import numpy
+import time   # noqa: F401
+from datetime import timedelta
 
 from dateutil.relativedelta import relativedelta
 
@@ -31,6 +33,12 @@ from dc_etl.fetch import Timespan
 from dc_etl.pipeline import Pipeline
 
 ONE_WEEK = relativedelta(weeks=1)
+
+def _align_to_week(date):
+    """Align the given date to the nearest valid week (1st, 8th, 15th, etc.)."""
+    day_of_month = date.day
+    aligned_day = ((day_of_month - 1) // 7) * 7 + 1  # Nearest start of the week (1st, 8th, 15th, etc.)
+    return date.replace(day=aligned_day)
 
 def main(pipeline: Pipeline):
     args = _parse_args()
@@ -89,14 +97,14 @@ def main(pipeline: Pipeline):
             if not cid:
                 # If the dataset does not exist, initialize the first timespan
                 print("Dataset not found. Initializing dataset...")
-                load_end = _add_delta(remote_span.start, timedelta - ONE_WEEK)
+                load_end = increment_weeks(remote_span.start, "4W")
                 load_span = Timespan(remote_span.start, min(load_end, remote_span.end))
                 run_pipeline(pipeline, load_span, pipeline.loader.initial, args, manual_override=True)
                 
                 # Update the CID to mark the dataset as initialized
                 cid = pipeline.loader.dataset()
 
-                load_begin = _add_delta(load_span.end, ONE_WEEK)
+                load_begin = increment_weeks(load_end, "1W")
                 
             else:
                 # If the dataset exists, pick up from where it left off
@@ -110,24 +118,17 @@ def main(pipeline: Pipeline):
                     return
                 
                 # Calculate where to start appending from
-                load_begin = _add_delta(existing_end, ONE_WEEK)
- 
-                existing_end_datetime = pd.to_datetime(existing_end)
-                year = existing_end_datetime.year
-                # Calculate remaining days until the end of the year
-                remaining_days = (numpy.datetime64(f'{year}-12-31') - existing_end.astype('datetime64[D]')).astype(int)
-                # If remaining days are more than 7 but less than 14, jump to the first day of the next year
-                if 7 <= remaining_days < 14:
-                    load_begin = numpy.datetime64(f'{year + 1}-01-01')
+                load_begin = increment_weeks(existing_end, "1W")
 
             # Continue appending in steps until the remote dataset end is reached
             while load_begin < remote_span.end:
-                load_end = _add_delta(load_begin, timedelta)
+                load_end = increment_weeks(load_begin, "4W")
                 load_span = Timespan(load_begin, min(load_end, remote_span.end))
                 run_pipeline(pipeline, load_span, pipeline.loader.append, args, manual_override=True)
-                
+        
                 # Update load_begin for the next step (next month)
-                load_begin = load_end
+                load_begin = increment_weeks(load_end, "1W")
+               
             
             return
 
@@ -226,3 +227,33 @@ def _add_delta(timestamp, delta):
 
     # We only need to the day precision for these examples
     return numpy.datetime64(f"{timestamp.year}-{timestamp.month:02d}-{timestamp.day:02d}")
+
+# Main function to increment by a specific timedelta
+def increment_weeks(start_date_str, delta_str):
+    # Convert the input start date to numpy.datetime64
+    load_begin = numpy.datetime64(pd.to_datetime(start_date_str))
+
+    # Get the number from the delta string which is like 21D or 4W
+    iterations = int(delta_str[:-1])
+    # Parse the delta, for example, 4W would be 4 weeks
+    delta = _parse_timedelta(delta_str)
+    if delta is None:
+        raise ValueError(f"Invalid timedelta string: {delta_str}")
+
+    # Initialize the current date
+    current_date = load_begin
+    
+    for _ in range(iterations):
+        existing_end_datetime = pd.to_datetime(current_date)
+        year = existing_end_datetime.year
+        
+        # Calculate remaining days until the end of the year
+        remaining_days = (numpy.datetime64(f'{year}-12-31') - current_date.astype('datetime64[D]')).astype(int)
+        
+        # If the remaining days in the year are less than a week, skip to the next year
+        if remaining_days < 7:
+            current_date = numpy.datetime64(f'{year + 1}-01-01')
+        else:
+            # Add the delta (e.g., 1 week) to the current date
+            current_date = _add_delta(current_date, timedelta(weeks=1))
+    return current_date

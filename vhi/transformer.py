@@ -80,24 +80,18 @@ class DatasetTransformer():
         date_range : tuple[datetime.datetime, datetime.datetime]
             A range of dates formatted to match VHI's update schedule
         """
-        start = pd.to_datetime(start)
-        end = pd.to_datetime(end)
+        start, end = pd.to_datetime(start), pd.to_datetime(end)
         date_range = pd.DatetimeIndex([])
+
         for year in range(start.year, end.year + 1):
-            year_end = datetime.datetime(year, 12, 29)
-            if year_end > end:
-                year_end = end
-            year_start = datetime.datetime(year, 1, 1)
-            if year_start < start:
-                # we want the first valid day after the start
-                # this returns the first valid day in the range, or None
-                year_start = next(
-                    (day for day in pd.date_range(datetime.datetime(year, 1, 1), year_end, freq="7D") if day >= start),
-                    None,
-                )
-            # There's never a file for the last day (or two days in a leap year)
-            # don't make a entry for it
-            date_range = date_range.union(pd.date_range(year_start, year_end, freq="7D"))
+            # Define year start and end, adjusting for the provided start and end
+            year_start = max(start, pd.Timestamp(f"{year}-01-01"))
+            year_end = min(end, pd.Timestamp(f"{year}-12-29"))
+            
+            # Create the weekly frequency range
+            weekly_dates = pd.date_range(year_start, year_end, freq="7D")
+            date_range = date_range.union(weekly_dates)
+
         return date_range
 
     def vhi_weeks_per_year(self, date_range: tuple[datetime.datetime, datetime.datetime]) -> list[datetime.datetime]:
@@ -114,33 +108,15 @@ class DatasetTransformer():
         vhi_weeks : list[datetime.datetime]
             A list of weeks to request expressed as datetimes
         """
+        start_date, end_date = date_range
         vhi_weeks = []
-        for year in range(date_range[0].year, date_range[1].year + 1):
-            if datetime.datetime(year, 1, 1) > date_range[0]:
-                if datetime.datetime(year, 12, 31) > date_range[1]:
-                    vhi_weeks.append(
-                        self.vhi_daterange(
-                            datetime.datetime(year, 1, 1).isoformat(),
-                            date_range[1].isoformat(),
-                        )
-                    )
-                else:
-                    vhi_weeks.append(
-                        self.vhi_daterange(
-                            datetime.datetime(year, 1, 1).isoformat(),
-                            datetime.datetime(year, 12, 31).isoformat(),
-                        )
-                    )
-            else:
-                if datetime.datetime(year, 12, 31) > date_range[1]:
-                    vhi_weeks.append(self.vhi_daterange(date_range[0].isoformat(), date_range[1].isoformat()))
-                else:
-                    vhi_weeks.append(
-                        self.vhi_daterange(
-                            date_range[0].isoformat(),
-                            datetime.datetime(year, 12, 31).isoformat(),
-                        )
-                    )
+
+        for year in range(start_date.year, end_date.year + 1):
+            year_start = max(datetime.datetime(year, 1, 1), start_date)
+            year_end = min(datetime.datetime(year, 12, 31), end_date)
+
+            vhi_weeks.append(self.vhi_daterange(year_start.isoformat(), year_end.isoformat()))
+
         return vhi_weeks
 
     def data_mean_per_time_period(self, dataset: xarray.DataArray) -> da.Array:

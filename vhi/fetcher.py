@@ -6,6 +6,7 @@ import datetime
 import pandas as pd
 import numpy as np
 import glob
+from typing import List
 
 import requests
 from requests.adapters import HTTPAdapter, Retry
@@ -71,16 +72,16 @@ class VHI(Fetcher, Logging):
         start_year = current_datetime.year
         end_year = limit_datetime.year
         for year in range(start_year, end_year + 1):
-            vhi_weeks = self.vhi_weeks_per_year((current_datetime, limit_datetime))
-            for week_date_str in vhi_weeks[0]:
-                # Convert the week date string to a datetime object
-                week_date = pd.to_datetime(week_date_str).to_pydatetime()
-                # Check if the year of the date matches the current year
+            vhi_weeks = self.get_vhi_weeks((current_datetime, limit_datetime))
+            for week_date in vhi_weeks[0]:
+                week_date = pd.to_datetime(week_date).to_pydatetime()
+                # Only process dates in the current year
                 if week_date.year != year:
                     continue
-                # Get the ISO week number for the date
-                week_number = week_date.isocalendar()[1]  # ISO week number
-                # Yield the file for the corresponding year and week number
+                # Calculate simple week number (1-based)
+                day_of_year = week_date.timetuple().tm_yday
+                week_number = ((day_of_year - 1) // 7) + 1
+                week_number = min(week_number, 52)  # Cap at 52 weeks
                 yield self._get_file_by_year_week(year, week_number)
 
     
@@ -188,6 +189,12 @@ class VHI(Fetcher, Logging):
 
         return start_date, start_week, end_date
 
+    def get_week_number(self, input_date):
+        """Get week number (1-52) from a date."""
+        year_start = datetime.datetime(input_date.year, 1, 1)
+        week = (input_date - year_start).days // 7 + 1
+        return min(week, 52)  # Cap at 52 weeks
+
     def get_start_date_and_week(self, new_start_date: datetime.datetime) -> tuple[datetime.datetime, int]:
         """
         Derive a start year and week in line with VHI's update schedule from a specified start date
@@ -202,20 +209,13 @@ class VHI(Fetcher, Logging):
         tuple[datetime.datetime, int]
             A tuple containing datetime and integer representations of the start date and week, respectively
         """
-        year_end = datetime.datetime(new_start_date.year, 12, 30)
-        if new_start_date >= year_end:
+        if new_start_date >= datetime.datetime(new_start_date.year, 12, 30):
             return datetime.datetime(new_start_date.year + 1, 1, 1), 1
 
-        day_iterator = datetime.datetime(new_start_date.year, 1, 1)
-        week = 1
+        week = self.get_week_number(new_start_date)
 
-        while day_iterator < new_start_date:
-            day_iterator += datetime.timedelta(days=7)
-            week += 1
-
-        if day_iterator != new_start_date:
+        if (new_start_date - datetime.datetime(new_start_date.year, 1, 1)).days % 7 != 0:
             raise Exception("invalid first day")
-
         return new_start_date, week
 
     def get_session(self):
@@ -261,15 +261,16 @@ class VHI(Fetcher, Logging):
         requests = []
         for file_url in valid_year_urls:
             file_year, file_week = self.return_year_week_from_path(file_url)
+            # Calculate end week number  
+            end_week = self.get_week_number(end_date)
             if (
                 (file_year > start_date.year or (file_year == start_date.year and file_week >= start_week))
-                and (file_year < end_date.year or (file_year == end_date.year and file_week <= end_date.isocalendar()[1]))
+                and (file_year < end_date.year or (file_year == end_date.year and file_week <= end_week))
             ):
                 local_file_path = self.local_input_path() / file_url
                 if local_file_path.exists():
                     print(f"File {local_file_path} already exists, skipping download.")
                     continue
-                # downloading_file_path = local_file_path.with_name(local_file_path.stem + "_downloading" + local_file_path.suffix)
 
                 requests.append(
                     {
@@ -314,82 +315,37 @@ class VHI(Fetcher, Logging):
         self.converter.ncs_to_nc4s(raw_files)
 
 
-    def vhi_weeks_per_year(self, date_range: tuple[datetime.datetime, datetime.datetime]) -> list[datetime.datetime]:
+    def get_vhi_weeks(self, date_range: tuple[datetime, datetime]) -> List[pd.DatetimeIndex]:
         """
-        Calculate the weeks covered by VHI in a given time range, according to the logic of its update schedule
+        Calculate the weeks covered by VHI in a given time range, accounting for VHI's update schedule.
+        VHI updates every 7 days, but skips the last 1-2 days of each year.
 
         Parameters
         ----------
-        date_range : tuple[datetime.datetime, datetime.datetime]
-            A range of dates formatted to match VHI's update schedule
+        date_range : tuple[datetime, datetime]
+            Start and end dates for the period of interest
 
         Returns
         -------
-        vhi_weeks : list[datetime.datetime]
-            A list of weeks to request expressed as datetimes
+        List[pd.DatetimeIndex]
+            List of DatetimeIndex objects containing valid VHI dates for each year
         """
-        vhi_weeks = []
-        for year in range(date_range[0].year, date_range[1].year + 1):
-            if datetime.datetime(year, 1, 1) > date_range[0]:
-                if datetime.datetime(year, 12, 31) > date_range[1]:
-                    vhi_weeks.append(
-                        self.vhi_daterange(
-                            datetime.datetime(year, 1, 1).isoformat(),
-                            date_range[1].isoformat(),
-                        )
-                    )
-                else:
-                    vhi_weeks.append(
-                        self.vhi_daterange(
-                            datetime.datetime(year, 1, 1).isoformat(),
-                            datetime.datetime(year, 12, 31).isoformat(),
-                        )
-                    )
-            else:
-                if datetime.datetime(year, 12, 31) > date_range[1]:
-                    vhi_weeks.append(self.vhi_daterange(date_range[0].isoformat(), date_range[1].isoformat()))
-                else:
-                    vhi_weeks.append(
-                        self.vhi_daterange(
-                            date_range[0].isoformat(),
-                            datetime.datetime(year, 12, 31).isoformat(),
-                        )
-                    )
-        return vhi_weeks
-
-    def vhi_daterange(self, start: str, end: str) -> tuple[datetime.datetime, datetime.datetime]:
-        """
-        VHI updates on a slightly odd schedule that shifts around every year.
-        To ensure we request the precise days we want, we have to do some gymnastics.
-
-        Parameters
-        ----------
-        start : str (isoformatted)
-            First date to include
-        end : str (isformatted)
-            Last date to include
-
-        Returns
-        -------
-        date_range : tuple[datetime.datetime, datetime.datetime]
-            A range of dates formatted to match VHI's update schedule
-        """
-        start = pd.to_datetime(start)
-        end = pd.to_datetime(end)
-        date_range = pd.DatetimeIndex([])
-        for year in range(start.year, end.year + 1):
-            year_end = datetime.datetime(year, 12, 29)
-            if year_end > end:
-                year_end = end
-            year_start = datetime.datetime(year, 1, 1)
-            if year_start < start:
-                # we want the first valid day after the start
-                # this returns the first valid day in the range, or None
-                year_start = next(
-                    (day for day in pd.date_range(datetime.datetime(year, 1, 1), year_end, freq="7D") if day >= start),
-                    None,
-                )
-            # There's never a file for the last day (or two days in a leap year)
-            # don't make a entry for it
-            date_range = date_range.union(pd.date_range(year_start, year_end, freq="7D"))
-        return date_range
+        start_date, end_date = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
+        result = []
+        
+        for year in range(start_date.year, end_date.year + 1):
+            # Define year boundaries
+            year_start = max(start_date, pd.Timestamp(f"{year}-01-01"))
+            year_end = min(end_date, pd.Timestamp(f"{year}-12-29"))
+            
+            # Find first valid week start after year_start
+            valid_weeks = pd.date_range(
+                pd.Timestamp(f"{year}-01-01"),
+                year_end,
+                freq="7D"
+            )
+            year_start = valid_weeks[valid_weeks >= year_start][0] if len(valid_weeks[valid_weeks >= year_start]) > 0 else None
+            
+            if year_start is not None and year_start <= year_end:
+                result.append(pd.date_range(year_start, year_end, freq="7D"))
+        return result

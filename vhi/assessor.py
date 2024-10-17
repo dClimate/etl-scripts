@@ -85,7 +85,7 @@ class VHIAssessor(Assessor, Logging, IPFS):
                 self.info(f"Existing data ends at {existing_end_date}")
 
                 # Start date is the next day after the existing end date
-                start_date = existing_end_date + datetime.timedelta(days=1)
+                start_date = existing_end_date + datetime.timedelta(days=7)
 
                 # End date is the latest possible date, minus 7 days to ensure full week increments
                 end_date = self.vhi_latest_possible_date.replace(hour=0, minute=0, second=0, microsecond=0)
