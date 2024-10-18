@@ -1,5 +1,4 @@
 import datetime
-import os
 import xarray as xr
 
 import pathlib
@@ -38,19 +37,10 @@ class VHIAssessor(Assessor, Logging, IPFS):
         dataset_name: str = None,
         time_resolution: str = None,
         dataset_start_date: datetime.datetime = None,
-        skip_finalization: bool = False,
-        cdsapi_key: str = None,
         **kwargs,
     ):
         """
-        Initialize a new ERA5 object with appropriate chunking parameters.
-
-        Parameters
-        ----------
-        skip_finalization : bool
-            A trigger to ignore the finalization check and proceed directly with the start/end dates
-        cdsapi_key : str
-            A custom API key string for ECMWF's CDS API. If unfilled the orchestration system will use a default key.
+        Initialize a new VHI assessor.
         """
         IPFS.__init__(self, host="http://127.0.0.1:5001")
         super().__init__(
@@ -60,22 +50,25 @@ class VHIAssessor(Assessor, Logging, IPFS):
         )
         self.dataset_name = dataset_name
         self.time_resolution = time_resolution
+        self.latest_possible_date = None
         self.dataset_start_date = datetime.datetime(2019, 1, 1, 0)
-        self.skip_finalization = skip_finalization
-        self.vhi_latest_possible_date = datetime.datetime.utcnow() - datetime.timedelta(days=7)
-        self.cdsapi_key = cdsapi_key if cdsapi_key else os.environ.get("CDSAPI_KEY")
 
-
-    def start(self, args={}) -> tuple[tuple[datetime.datetime, datetime.datetime], dict]:
+    def start(self, latest_possible_date, args={}) -> tuple[tuple[datetime.datetime, datetime.datetime], dict]:
+        latest_possible_date_dt = latest_possible_date.astype('M8[ms]').astype(datetime.datetime)
+        # Reset the time components
+        end = latest_possible_date_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        self.latest_possible_date = end
         self.allow_overwrite = args["--overwrite"]
         self.rebuild_requested = args["init"] 
         # Load the previous dataset and extract date range
         self.existing_dataset = self.get_existing_stac_metadata()
-
         # Initialize pipeline metadata
         pipeline_metadata = {
             "existing_dataset": self.existing_dataset,
         }
+        # Skip everything since latest_possible_date is None
+        if self.latest_possible_date is None:
+            return None, pipeline_metadata
         # Check if new data should be fetched
         if self.check_if_new_data():
             existing_date_range = self.existing_dataset["properties"]["date_range"]
@@ -83,16 +76,11 @@ class VHIAssessor(Assessor, Logging, IPFS):
                 # Calculate the start date as the day after the existing end date
                 existing_end_date = datetime.datetime.strptime(existing_date_range[1], "%Y%m%d%H")
                 self.info(f"Existing data ends at {existing_end_date}")
-
                 # Start date is the next day after the existing end date
                 start_date = existing_end_date + datetime.timedelta(days=7)
-
-                # End date is the latest possible date, minus 7 days to ensure full week increments
-                end_date = self.vhi_latest_possible_date.replace(hour=0, minute=0, second=0, microsecond=0)
-                
                 # Return the calculated start and end dates
-                self.info(f"New data will be fetched from {start_date} to {end_date}")
-                defined_dates = (start_date, end_date)
+                self.info(f"New data will be fetched from {start_date} to {self.latest_possible_date}")
+                defined_dates = (start_date, self.latest_possible_date)
                 return defined_dates, pipeline_metadata
         self.info("No new data detected, skipping fetch")
         return None, pipeline_metadata
@@ -156,71 +144,5 @@ class VHIAssessor(Assessor, Logging, IPFS):
         if existing_date_range is not None:
             existing_end_date = datetime.datetime.strptime(existing_date_range[1], "%Y%m%d%H")
             self.info(f"Existing data ends at {existing_end_date}")
-            end = self.vhi_latest_possible_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            return end > existing_end_date
+            return self.latest_possible_date > existing_end_date
         return False
-
-    
-    def define_dates(self, date_range: list = None) -> tuple[datetime.datetime, datetime.datetime]:
-        """
-        Define start and end dates to be used when requesting files
-
-        Parameters
-        ----------
-        date_range : list, optional
-            A list of start and end datetimes for retrieval. Defaults to None.
-
-        Returns
-        -------
-        tuple[datetime.datetime, datetime.datetime]
-            A tuple of start and end datetimes for retrival
-        """
-        if date_range:
-            self.info("Calculating new start and end dates based on the provided date range.")
-            start_date, start_week = self.get_start_date_and_week(date_range[0])
-            end_date = date_range[1]
-        else:
-            try:
-                current_datetime = self.get_metadata_date_range()["end"] + datetime.timedelta(days=7)
-                self.info("Calculating new start date based on end date in metadata")
-            except (KeyError, ValueError):
-                self.info(
-                    f"No existing metadata or file found; "
-                    "starting download from Arbol's specified start date of "
-                    f"{self.dataset_start_date.date().isoformat()}"
-                )
-                current_datetime = self.dataset_start_date
-            start_date, start_week = self.get_start_date_and_week(current_datetime)
-            end_date = datetime.datetime.now()
-
-        return start_date, start_week, end_date
-
-    def get_start_date_and_week(self, new_start_date: datetime.datetime) -> tuple[datetime.datetime, int]:
-        """
-        Derive a start year and week in line with VHI's update schedule from a specified start date
-
-        Parameters
-        ----------
-        new_start_date : datetime.datetime
-            The newly calculated start date for a given year
-
-        Returns
-        -------
-        tuple[datetime.datetime, int]
-            A tuple containing datetime and integer representations of the start date and week, respectively
-        """
-        year_end = datetime.datetime(new_start_date.year, 12, 30)
-        if new_start_date >= year_end:
-            return datetime.datetime(new_start_date.year + 1, 1, 1), 1
-
-        day_iterator = datetime.datetime(new_start_date.year, 1, 1)
-        week = 1
-
-        while day_iterator < new_start_date:
-            day_iterator += datetime.timedelta(days=7)
-            week += 1
-
-        if day_iterator != new_start_date:
-            raise Exception("invalid first day")
-
-        return new_start_date, week

@@ -52,9 +52,19 @@ class VHI(Fetcher, Logging):
 
 
     def get_remote_timespan(self) -> Timespan:
+        all_urls = HTTPExtractor(self).get_hrefs(self.data_download_url)
+        valid_year_urls = [link for link in all_urls if re.match(r"VHP\.G04\.C07\..*\.P[0-9]{7}\.VH\.nc", link)]
+        # Filter out for the current year and get the latest week
+        valid_year_urls = sorted(valid_year_urls, reverse=True)
+        latest_available_file = valid_year_urls[0]
+        # Get the year and week from the latest file
+        year, week = self.return_year_week_from_path(latest_available_file)
+        # Using the year and week, calculate the latest date
+        first_day_of_year = datetime.date(year, 1, 1)
+        week_date = first_day_of_year + datetime.timedelta(weeks=week-1)
+        # Convert to np.datetime64 format
+        latest_time = np.datetime64(week_date)
         earliest_time = np.datetime64(self.dataset_start_date)
-        # Get current time in np.datetime64 format
-        latest_time = np.datetime64(datetime.datetime.now())
         return Timespan(start=earliest_time, end=latest_time)
 
     def prefetch(self):

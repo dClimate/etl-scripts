@@ -34,14 +34,11 @@ from dc_etl.pipeline import Pipeline
 
 ONE_WEEK = relativedelta(weeks=1)
 
-def _align_to_week(date):
-    """Align the given date to the nearest valid week (1st, 8th, 15th, etc.)."""
-    day_of_month = date.day
-    aligned_day = ((day_of_month - 1) // 7) * 7 + 1  # Nearest start of the week (1st, 8th, 15th, etc.)
-    return date.replace(day=aligned_day)
+class EmptyClass:
+    pass
 
 def main(pipeline: Pipeline):
-    args = _parse_args()
+    args = _parse_args()    
     try:
         cid = pipeline.loader.publisher.retrieve()
         if args["init"]:
@@ -49,18 +46,18 @@ def main(pipeline: Pipeline):
                 raise docopt.DocoptExit(
                     "Init would overwrite existing data. Use '--overwrite' flag if you really want to do this."
                 )
-            timedelta = _parse_timedelta(args["--timespan"])
+            # timedelta = _parse_timedelta(args["--timespan"])
             remote_span = pipeline.fetcher.get_remote_timespan()
-            load_end = _add_delta(remote_span.start, timedelta - ONE_WEEK)
+            load_end = increment_weeks(remote_span.start, "4W")
             load_span = Timespan(remote_span.start, min(load_end, remote_span.end))
-            run_pipeline(pipeline, load_span, pipeline.loader.initial, args, manual_override=True)
+            run_pipeline(pipeline, load_span, pipeline.loader.initial, args, latest_possible_date=None, manual_override=True)
             return
 
         elif args["append"]:
             if not cid:
                 raise docopt.DocoptExit("Dataset has not been initialized.")
             # Get the timedelta which is like 4Y or 7Y
-            timedelta = _parse_timedelta(args["--timespan"])
+            # timedelta = _parse_timedelta(args["--timespan"])
             # Get the remote timespan of the dataset
             remote_span = pipeline.fetcher.get_remote_timespan()
             # Get the existing dataset
@@ -73,33 +70,28 @@ def main(pipeline: Pipeline):
                 print("No more data to load.")
                 return
             # Get the last time value of the existing dataset and add one day to it to get the start of the next load
-            load_begin = _add_delta(existing_end, ONE_WEEK)
+            load_begin = increment_weeks(load_end, "1W")
             # Get the end of the next load
-            load_end = _add_delta(load_begin, timedelta - ONE_WEEK)
+            load_end = increment_weeks(load_end, "4W")
             # Get the timespan to load
             load_span = Timespan(load_begin, min(load_end, remote_span.end))
-            run_pipeline(pipeline, load_span, pipeline.loader.append, args, manual_override=True)
+            run_pipeline(pipeline, load_span, pipeline.loader.append, args, latest_possible_date=None, manual_override=True)
             return
 
         elif args["replace"]:
             load_span = _parse_timestamp(args["--daterange"])
-            run_pipeline(pipeline, load_span, pipeline.loader.replace, args, manual_override=True)
+            run_pipeline(pipeline, load_span, pipeline.loader.replace, args, latest_possible_date=None, manual_override=True)
             return
 
-        elif args["init-stepped"]:
-            # Get the timescale to use (like 1 month, or any timedelta)
-            timedelta = _parse_timedelta(args["--timespan"])
-            
+        elif args["init-stepped"]:            
             # Get the remote timespan of the dataset (the full available time range)
             remote_span = pipeline.fetcher.get_remote_timespan()
-            
-
             if not cid:
                 # If the dataset does not exist, initialize the first timespan
                 print("Dataset not found. Initializing dataset...")
                 load_end = increment_weeks(remote_span.start, "4W")
                 load_span = Timespan(remote_span.start, min(load_end, remote_span.end))
-                run_pipeline(pipeline, load_span, pipeline.loader.initial, args, manual_override=True)
+                run_pipeline(pipeline, load_span, pipeline.loader.initial, args, latest_possible_date=None, manual_override=True)
                 
                 # Update the CID to mark the dataset as initialized
                 cid = pipeline.loader.dataset()
@@ -124,7 +116,7 @@ def main(pipeline: Pipeline):
             while load_begin < remote_span.end:
                 load_end = increment_weeks(load_begin, "4W")
                 load_span = Timespan(load_begin, min(load_end, remote_span.end))
-                run_pipeline(pipeline, load_span, pipeline.loader.append, args, manual_override=True)
+                run_pipeline(pipeline, load_span, pipeline.loader.append, args, latest_possible_date=None, manual_override=True)
         
                 # Update load_begin for the next step (next month)
                 load_begin = increment_weeks(load_end, "1W")
@@ -132,8 +124,9 @@ def main(pipeline: Pipeline):
             
             return
 
+        remote_span = pipeline.fetcher.get_remote_timespan()
         # If nothing is specified, run the pipeline for the entire date range
-        run_pipeline(pipeline, None, pipeline.loader.replace, args, manual_override=False)
+        run_pipeline(pipeline, None, pipeline.loader.replace, args, latest_possible_date=remote_span.end, manual_override=False)
 
     except:
         if args["--pdb"]:
@@ -141,10 +134,9 @@ def main(pipeline: Pipeline):
         raise
 
 
-def run_pipeline(pipeline, span, load, args, manual_override=False):
+def run_pipeline(pipeline, span, load, args, latest_possible_date=None, manual_override=False):
     # If nothing exists, run the start for the entire date range
-    new_span, pipeline_info = pipeline.assessor.start(args=args)
-
+    new_span, pipeline_info = pipeline.assessor.start(args=args, latest_possible_date=latest_possible_date)
     # If there is a manual override, fetch, extract, transform, and load the data based on manual ovveride
     if manual_override:
         print(
@@ -157,6 +149,8 @@ def run_pipeline(pipeline, span, load, args, manual_override=False):
         load(combined, span)
         return
     
+    if new_span is None:
+        return
     existing_dataset = pipeline_info.get("existing_dataset", None)
     start, end = new_span
 
