@@ -203,12 +203,10 @@ class GlobalPhysicsDatasetTransformer(DatasetTransformer):
         """
         # Necessary pre-processing steps specific to Global Physics datasets
         if "depth" in dataset.coords:
-            print("DROPPING DEPTH")
             dataset = dataset.drop_vars("depth")
         dataset = dataset.squeeze()
         if "time" not in dataset.dims:
             dataset = dataset.expand_dims("time")
-        print(dataset.attrs)
         return dataset
 
     def dataset_transformer(self, dataset: xarray.Dataset, metadata_info: dict) -> xarray.Dataset:
@@ -217,7 +215,6 @@ class GlobalPhysicsDatasetTransformer(DatasetTransformer):
         self.reanalysis_start_date = metadata_info["reanalysis_start_date"]
         self.interim_reanalysis_end_date = metadata_info["interim_reanalysis_end_date"]
         self.interim_reanalysis_start_date = metadata_info["interim_reanalysis_start_date"]
-        # print(str(metadata_info["reanalysis_end_date"]))
         return self.set_dataset_metadata(dataset=dataset), metadata_info
 
 

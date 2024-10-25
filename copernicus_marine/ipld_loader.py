@@ -99,7 +99,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         self.prepare_publish_stac_metadata(cid, dataset, rebuild=True)
         self.publisher.publish(cid)
         self.info(f"Published {cid}")
-        # self.cleanup_files()
+        self.cleanup_files()
 
     def append(self, dataset: xarray.Dataset, span: Timespan | None = None):
         """Append data to an existing dataset."""
@@ -122,7 +122,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         self.create_stac_item(dataset=dataset)
         self.publisher.publish(cid)
         self.info(f"Published {cid}")
-        # self.cleanup_files()
+        self.cleanup_files()
 
     def replace(self, replace_dataset: xarray.Dataset, span: Timespan | None = None):
         # Print
@@ -143,7 +143,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         cid = mapper.freeze()
         self.publisher.publish(cid)
         self.info(f"Published {cid}")
-        # self.cleanup_files()
+        self.cleanup_files()
 
     def dataset(self) -> xarray.Dataset:
         """Convenience method to get the currently published dataset."""

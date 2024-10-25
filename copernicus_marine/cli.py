@@ -53,7 +53,7 @@ def split_into_three_requests(pipeline, span, cid, args):
         first_run = False
         start_date = existing_end.astype('M8[D]').astype(datetime) + ONE_DAY
         start_date = numpy.datetime64(start_date)
-
+    
     # Process the reanalysis data
     while start_date <= reanalysis_time_span.end:
         # Set the end date as the end of the year for the current start date
@@ -147,89 +147,6 @@ def main(pipeline: Pipeline):
         # Get the remote timespan of the dataset
         remote_span = pipeline.assessor.get_remote_timespan()
         split_into_three_requests(pipeline, remote_span, cid, args)
-        # if args["init"]:
-        #     if cid and not args["--overwrite"]:
-        #         raise docopt.DocoptExit(
-        #             "Init would overwrite existing data. Use '--overwrite' flag if you really want to do this."
-        #         )
-        #     timedelta = _parse_timedelta(args["--timespan"])
-        #     load_end = _add_delta(remote_span.start, timedelta - ONE_DAY)
-        #     load_span = Timespan(remote_span.start, min(load_end, remote_span.end))
-        #     run_pipeline(pipeline, load_span, pipeline.loader.initial, args, manual_override=True)
-        #     return
-
-        # elif args["append"]:
-        #     if not cid:
-        #         raise docopt.DocoptExit("Dataset has not been initialized.")
-        #     # Get the timedelta which is like 4Y or 7Y
-        #     timedelta = _parse_timedelta(args["--timespan"])
-        #     # Get the existing dataset
-        #     existing = pipeline.loader.dataset()
-        #     # Get the last time value of the existing dataset
-        #     existing_end = existing.time[-1].values
-        #     # If the last time value of the existing dataset is greater than or equal to the last time value of the remote dataset
-        #     # then there is no more data to load
-        #     if existing_end >= remote_span.end:
-        #         print("No more data to load.")
-        #         return
-        #     # Get the last time value of the existing dataset and add one day to it to get the start of the next load
-        #     load_begin = _add_delta(existing_end, ONE_DAY)
-        #     # Get the end of the next load
-        #     load_end = _add_delta(load_begin, timedelta - ONE_DAY)
-        #     # Get the timespan to load
-        #     load_span = Timespan(load_begin, min(load_end, remote_span.end))
-        #     run_pipeline(pipeline, load_span, pipeline.loader.append, args, manual_override=True)
-        #     return
-
-        # elif args["replace"]:
-        #     load_span = _parse_timestamp(args["--daterange"])
-        #     run_pipeline(pipeline, load_span, pipeline.loader.replace, args, manual_override=True)
-        #     return
-
-        # elif args["init-stepped"]:
-        #     # Get the timescale to use (like 1 month, or any timedelta)
-        #     timedelta = _parse_timedelta(args["--timespan"])          
-
-        #     if not cid:
-        #         # If the dataset does not exist, initialize the first timespan
-        #         print("Dataset not found. Initializing dataset...")
-        #         load_end = _add_delta(remote_span.start, timedelta - ONE_DAY)
-        #         load_span = Timespan(remote_span.start, min(load_end, remote_span.end))
-        #         run_pipeline(pipeline, load_span, pipeline.loader.initial, args, manual_override=True)
-                
-        #         # Update the CID to mark the dataset as initialized
-        #         cid = pipeline.loader.dataset()
-
-        #         load_begin = _add_delta(load_span.end, ONE_DAY)
-                
-        #     else:
-        #         # If the dataset exists, pick up from where it left off
-        #         print("Dataset exists. Resuming append process...")
-        #         existing = pipeline.loader.dataset()
-        #         existing_end = existing.time[-1].values
-                
-        #         # Check if there's more data to load
-        #         if existing_end >= remote_span.end:
-        #             print("No more data to load.")
-        #             return
-                
-        #         # Calculate where to start appending from
-        #         load_begin = _add_delta(existing_end, ONE_DAY)
-
-        #     # Continue appending in steps until the remote dataset end is reached
-        #     while load_begin < remote_span.end:
-        #         load_end = _add_delta(load_begin, timedelta - ONE_DAY)
-        #         load_span = Timespan(load_begin, min(load_end, remote_span.end))
-        #         run_pipeline(pipeline, load_span, pipeline.loader.append, args, manual_override=True)
-                
-        #         # Update load_begin for the next step (next month)
-        #         load_begin = _add_delta(load_end, ONE_DAY)
-            
-        #     return
-
-        # # If nothing is specified, run the pipeline for the entire date range
-        # run_pipeline(pipeline, None, pipeline.loader.replace, args, manual_override=False)
-
     except:
         if args["--pdb"]:
             pdb.post_mortem()
@@ -237,69 +154,23 @@ def main(pipeline: Pipeline):
 
 
 
-# def run_pipeline(pipeline, span, load, args):
-#     print(
-#         f"Loading {span.start.astype('<M8[s]').astype(object):%Y-%m-%d} "
-#         f"to {span.end.astype('<M8[s]').astype(object):%Y-%m-%d}"
-#     )
-#     # If nothing exists, run the start for the entire date range
-#     new_span, pipeline_info = pipeline.assessor.start(args=args)
-
-#     sources = pipeline.fetcher.fetch(span)
-#     extracted = list(itertools.chain(*[pipeline.extractor(source) for source in sources]))
-#     combined = pipeline.transformer(pipeline.combiner(extracted))
-#     load(combined, span)
-
-
-
 
 def run_pipeline(pipeline, span, load, args, manual_override=False, dataset_type=None):
-    # split_into_three_requests(pipeline, span, load, args)
     # If nothing exists, run the start for the entire date range
     pipeline_info = pipeline.assessor.start(args=args)
-    print(pipeline_info)
-
     # If there is a manual override, fetch, extract, transform, and load the data based on manual oveveride
     print(
         f"Loading {span.start.astype('<M8[s]').astype(object):%Y-%m-%d} "
         f"to {span.end.astype('<M8[s]').astype(object):%Y-%m-%d}", dataset_type, load
     )
-
-
     pipeline_info["dataset_to_download"] = dataset_type
 
     sources = pipeline.fetcher.fetch(span, pipeline_info)
     extracted = list(itertools.chain(*[pipeline.extractor(source) for source in sources]))
-    print(extracted)
     combined, pipeline_info = pipeline.transformer(pipeline.combiner(extracted), pipeline_info)
     load(combined, span)
     return
     
-    # if new_span is None:
-    #     return
-    # existing_dataset = pipeline_info.get("existing_dataset", None)
-    # start, end = new_span
-
-    # # If there is a start and end date and there is no existing data, fetch, extract, transform, and load the data
-    # # Any finalization data will be passed via the pipeline info
-    # if (start and end and not existing_dataset):
-    #     new_span = Timespan(start=start, end=end)
-    #     loader = pipeline.loader.initial
-    #     sources = pipeline.fetcher.fetch(new_span, pipeline_info)
-    #     extracted = list(itertools.chain(*[pipeline.extractor(source) for source in sources]))
-    #     combined, pipeline_info = pipeline.transformer(pipeline.combiner(extracted), pipeline_info)
-    #     loader(combined, new_span)
-    #     return
-        
-    # # If something exists already append it first
-    # if existing_dataset:
-    #     append_span = Timespan(start=start, end=end)
-    #     loader = pipeline.loader.append
-    #     sources = pipeline.fetcher.fetch(append_span, pipeline_info)
-    #     extracted = list(itertools.chain(*[pipeline.extractor(source) for source in sources]))
-    #     combined, pipeline_info = pipeline.transformer(pipeline.combiner(extracted), pipeline_info)
-    #     loader(combined, append_span)
-
 
 def _parse_args():
     script = sys.argv[0]

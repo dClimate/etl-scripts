@@ -159,9 +159,9 @@ class CopernicusOcean(Fetcher, Logging):
         self.interim_reanalysis_end_date = pipeline_info["interim_reanalysis_end_date"]
 
         # Download the files
-        # self.extract(date_range=(current_datetime, limit_datetime))
-        # self.prepare_input_files()
-        # self.postprocess_extract()  # Do post processing of the downloaded files
+        self.extract(date_range=(current_datetime, limit_datetime))
+        self.prepare_input_files()
+        self.postprocess_extract()  # Do post processing of the downloaded files
         print("FINISHED EXTRACTING")
         # Extracting the start and end years from the timespan
         start_year = current_datetime.year

@@ -276,8 +276,8 @@ class CopernicusOceanSalinityValues(CopernicusOceanGlobalPhysicsValues):  # prag
         """
         super().__init__()
         # Salinity dataset sizes are time: ~10,000+, latitude: 2041, longitude: 4320
-        self.requested_dask_chunks={"time": 200, "latitude": 157, "longitude": -1} # 2 GB
-        self.requested_zarr_chunks={"time": 200, "latitude": 157, "longitude": 30} # 14 MB
+        self.requested_dask_chunks={"time": 400, "latitude": 157, "longitude": -1} # 2 GB
+        self.requested_zarr_chunks={"time": 400, "latitude": 157, "longitude": 30} # 14 MB
         self.requested_ipfs_chunker="size-18840"
         self.dataset_name = f"{CopernicusOceanGlobalPhysicsValues.dataset_name}_salinity"
         self.data_var = "so"

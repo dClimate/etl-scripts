@@ -134,7 +134,6 @@ class CopernicusAssessor(Assessor, Logging, IPFS):
         self.rebuild_requested = args["init"] 
         # Load the previous dataset and extract date range
         self.existing_dataset = self.get_existing_stac_metadata()
-
         # Initialize pipeline metadata
         pipeline_metadata = {
             "existing_dataset": self.existing_dataset,
@@ -144,30 +143,6 @@ class CopernicusAssessor(Assessor, Logging, IPFS):
             "interim_reanalysis_end_date": self.interim_reanalysis_end_date.replace(tzinfo=datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         }
         return pipeline_metadata
-        # Skip everything since latest_possible_date is None
-        # if self.latest_possible_date is None:
-        #     return pipeline_metadata
-        # # Check if new data should be fetched
-        # if self.check_if_new_data():
-        #     existing_date_range = self.existing_dataset["properties"]["date_range"]
-        #     if existing_date_range is not None:
-        #         # Calculate the start date as the day after the existing end date
-        #         existing_end_date = datetime.datetime.strptime(existing_date_range[1], "%Y%m%d")
-        #         self.info(f"Existing data ends at {existing_end_date}")
-        #         # Start date is the next day after the existing end date
-        #         start_date = existing_end_date + datetime.timedelta(days=1)
-        #         # Return the calculated start and end dates
-        #         self.info(f"New data will be fetched from {start_date} to {self.latest_possible_date}")
-
-        #         # If new reanalysis data is found, adjust the start date to the first day of new reanalysis data
-        #         # new_start_date = self.get_new_reanalysis_dates(self.dataset_start_date)
-        #         # If the new start date is earlier than the current start date, update the start date
-        #         # if new_start_date < start_date:
-        #         #     start_date = new_start_date
-        #         defined_dates = (start_date, self.latest_possible_date)
-        #         return defined_dates, pipeline_metadata
-        # self.info("No new data detected, skipping fetch")
-        # return pipeline_metadata
 
     def key(self) -> str:
         """
@@ -210,30 +185,6 @@ class CopernicusAssessor(Assessor, Logging, IPFS):
         except Exception as e:
             print(e)
             return None
-
-    # def check_if_new_data(self) -> bool:
-    #     """
-    #     Check if there is new data available in downloaded data
-    #      by comparing its end date to the end date of existing data.
-    #     If there is no existing data, or rebuild was requested, consider downloaded data to be new and return True.
-
-    #     If there is no downloaded data, issue a warning and return False.
-
-    #     @return   True if there is new data in downloaded data, False otherwise
-    #     """
-    #     if self.rebuild_requested or not bool(self.existing_dataset):
-    #         self.info("All local data will be used because the incoming dataset is starting from scratch")
-    #         return True
-    #     if self.allow_overwrite:
-    #         self.info("All local data will be used because the allow overwrite flag triggered")
-    #         return True
-    #     existing_date_range = self.existing_dataset["properties"]["date_range"]
-    #     if existing_date_range is not None:
-    #         existing_end_date = datetime.datetime.strptime(existing_date_range[1], "%Y%m%d")
-    #         # Check
-    #         self.info(f"Existing data ends at {existing_end_date}")
-    #         return self.latest_possible_date > existing_end_date
-    #     return False
 
     def find_reanalysis_end_dates(self):
         """
@@ -289,64 +240,6 @@ class CopernicusAssessor(Assessor, Logging, IPFS):
             latest_measurement = noon - datetime.timedelta(days=2)
         self.analysis_end_date = numpydate_to_py(latest_measurement)
         self.info(f"determined analysis data to be final through {self.analysis_end_date}")
-
-
-    # def get_new_reanalysis_dates(self, current_datetime: datetime.datetime) -> datetime.datetime:
-    #     """
-    #     Check if the reanalysis finalization date has changed. If it has, set the first day to download
-    #       from the first day of new reanalysis data and enable data overwrites
-
-    #     Parameters
-    #     ----------
-    #     current_datetime
-    #         The start date for downloads
-
-    #     Returns
-    #     -------
-    #     current_datetime
-    #         The start date for downloads, adjusted to the first day of new reanalysis data
-    #         if newly finalized or interim reanalysis data is found.
-    #     """
-    #     # If new finalized data is found, allow overwriting of data to insert new data
-    #     # To insert new finalized data, `overwrite` must be set to allowed.
-    #     current_dataset = self.existing_dataset
-    #     if not current_dataset:
-    #         return current_datetime
-
-    #     previous_reanalysis_finalization_date = (
-    #         numpydate_to_py(
-    #             datetime.datetime.strptime(current_dataset["properties"]["reanalysis_end_date"], "%Y%m%d")
-    #         )
-    #         if "reanalysis_end_date" in current_dataset["properties"]
-    #         else self.reanalysis_start_date
-    #     )
-    #     previous_interim_end_date = (
-    #         numpydate_to_py(
-    #             datetime.datetime.strptime(current_dataset["properties"]["interim_reanalysis_end_date"], "%Y%m%d")
-    #         )
-    #         if "interim_reanalysis_end_date" in current_dataset["properties"]
-    #         else self.interim_reanalysis_start_date
-    #     )
-    #     # Rewind to start downloading newest reanalysis data,
-    #     # finalized preferentially, interim if only it is available new
-    #     if previous_reanalysis_finalization_date < self.reanalysis_end_date:
-    #         current_datetime = self.reanalysis_start_date
-    #         self.info(
-    #             f"Reanalysis end date changed from {previous_reanalysis_finalization_date.date().isoformat()} "
-    #             f"to {self.reanalysis_end_date.date().isoformat()}, setting downloads "
-    #             f"to start from {current_datetime.date().isoformat()}"
-    #         )
-    #         self.allow_overwrite = True
-    #     elif self.reanalysis_end_date <= previous_interim_end_date < self.interim_reanalysis_end_date:
-    #         current_datetime = self.interim_reanalysis_start_date
-    #         self.info(
-    #             f"Reanalysis end date changed from {previous_interim_end_date.date().isoformat()} "
-    #             f"to {self.interim_reanalysis_end_date.date().isoformat()}, setting downloads "
-    #             f"to start from {current_datetime.date().isoformat()}"
-    #         )
-    #         self.allow_overwrite = True
-
-    #     return current_datetime
 
 
 class CopernicusOceanSeaSurfaceHeightAssessor(CopernicusAssessor, CopernicusOceanSeaSurfaceHeightValues):
