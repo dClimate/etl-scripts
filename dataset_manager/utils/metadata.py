@@ -404,6 +404,10 @@ class Metadata(Convenience, IPFS):
             "finalization_date",
             "analysis_data_download_url",
             "reanalysis_data_download_url",
+            "reanalysis_end_date",
+            "interim_reanalysis_end_date",
+            "reanalysis_start_date",
+            "interim_reanalysis_start_date",
             "input_history_cid",
             "input_history_JSON_documentation",
         }

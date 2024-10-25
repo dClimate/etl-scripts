@@ -4,6 +4,7 @@
 *.zarr
 *.cid
 download-links.txt
+test.py
 
 pyrightconfig.json
 requirements.txt

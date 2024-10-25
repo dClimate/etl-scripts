@@ -54,10 +54,11 @@ class VHIAssessor(Assessor, Logging, IPFS):
         self.dataset_start_date = datetime.datetime(2019, 1, 1, 0)
 
     def start(self, latest_possible_date, args={}) -> tuple[tuple[datetime.datetime, datetime.datetime], dict]:
-        latest_possible_date_dt = latest_possible_date.astype('M8[ms]').astype(datetime.datetime)
-        # Reset the time components
-        end = latest_possible_date_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        self.latest_possible_date = end
+        if latest_possible_date is not None:
+            latest_possible_date_dt = latest_possible_date.astype('M8[ms]').astype(datetime.datetime)
+            # Reset the time components
+            end = latest_possible_date_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            self.latest_possible_date = end
         self.allow_overwrite = args["--overwrite"]
         self.rebuild_requested = args["init"] 
         # Load the previous dataset and extract date range
@@ -74,7 +75,7 @@ class VHIAssessor(Assessor, Logging, IPFS):
             existing_date_range = self.existing_dataset["properties"]["date_range"]
             if existing_date_range is not None:
                 # Calculate the start date as the day after the existing end date
-                existing_end_date = datetime.datetime.strptime(existing_date_range[1], "%Y%m%d%H")
+                existing_end_date = datetime.datetime.strptime(existing_date_range[1], "%Y%m%d")
                 self.info(f"Existing data ends at {existing_end_date}")
                 # Start date is the next day after the existing end date
                 start_date = existing_end_date + datetime.timedelta(days=7)
@@ -142,7 +143,7 @@ class VHIAssessor(Assessor, Logging, IPFS):
             return True
         existing_date_range = self.existing_dataset["properties"]["date_range"]
         if existing_date_range is not None:
-            existing_end_date = datetime.datetime.strptime(existing_date_range[1], "%Y%m%d%H")
+            existing_end_date = datetime.datetime.strptime(existing_date_range[1], "%Y%m%d")
             self.info(f"Existing data ends at {existing_end_date}")
             return self.latest_possible_date > existing_end_date
         return False
