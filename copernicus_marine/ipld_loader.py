@@ -151,7 +151,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         return xarray.open_zarr(store=mapper, consolidated=True)
 
     def _mapper(self, root=None):
-        mapper = ipldstore.get_ipfs_mapper(host=self.host, chunker=self.requested_ipfs_chunker)
+        mapper = ipldstore.get_ipfs_mapper(host=self.host, chunker=self.requested_ipfs_chunker, should_async_get=False)
         if root is not None:
             mapper.set_root(root)
         return mapper

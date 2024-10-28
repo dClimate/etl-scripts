@@ -121,6 +121,14 @@ class CopernicusOcean(Fetcher, Logging):
         # Implementation of the method
         return "prefetch data"
 
+    def cleanup_files(self):
+        # Check if the path exists and is a directory
+        file_list = self._cache.fs.ls(self.local_input_path(), detail=False)
+        for file_path in file_list:
+            # Check if the item is a file (not a directory)
+            if self._cache.fs.isfile(file_path):
+                self._cache.fs.rm(file_path)
+
     # EXTRACTION
 
     def extract(self, date_range: tuple[datetime.datetime, datetime.datetime] = None, *args, **kwargs):
@@ -159,10 +167,12 @@ class CopernicusOcean(Fetcher, Logging):
         self.interim_reanalysis_end_date = pipeline_info["interim_reanalysis_end_date"]
 
         # Download the files
+        # Cleanup everything in case of prior issue
+        self.cleanup_files()
         self.extract(date_range=(current_datetime, limit_datetime))
         self.prepare_input_files()
         self.postprocess_extract()  # Do post processing of the downloaded files
-        print("FINISHED EXTRACTING")
+
         # Extracting the start and end years from the timespan
         start_year = current_datetime.year
         end_year = limit_datetime.year
@@ -421,7 +431,6 @@ class CopernicusOcean(Fetcher, Logging):
             new_ds = self.set_zarr_metadata(new_ds)
             new_ds.to_netcdf(local_file_path, format="NETCDF4", unlimited_dims=unlimited_dims)
             local_file_path.with_suffix("").unlink()
-            print(f"Finished postprocessing {local_file_path}")
 
 
     # TRANSFORMATION
