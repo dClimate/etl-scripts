@@ -118,8 +118,8 @@ class CopernicusOceanSeaSurfaceHeightValues(CopernicusOceanValues):
     # Sea Surface Height dataset size is time: 10585, latitude: 668, longitude: 1440
     def __init__(self):
         self.dataset_name = f"{CopernicusOceanValues.dataset_name}_sea_level"
-        self.requested_dask_chunks={"time": 200, "latitude": 167, "longitude": -1}  # 192.3 MB
-        self.requested_zarr_chunks={"time": 200, "latitude": 167, "longitude": 16} # 2.14 MB
+        self.requested_dask_chunks={"time": 200, "latitude": 144, "longitude": -1}  # 192.3 MB
+        self.requested_zarr_chunks={"time": 200, "latitude": 144, "longitude": 16} # 2.14 MB
         self.requested_ipfs_chunker="size-10688"
         self.tags = ["Sea level anomaly, Sea surface height"]
         self.data_var = "sla"
