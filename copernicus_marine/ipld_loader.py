@@ -57,6 +57,59 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         self.host = "http://127.0.0.1:5001" 
         self.metadata = metadata
 
+    def check_dataset_alignment(self, dataset: xarray.Dataset):
+        """Check if the dataset aligns with the current dataset.
+        We check the following:
+        - The dataset has the same dimensions as the current dataset
+        - The dataset has the same coordinates as the current dataset
+        - The dataset has the same variables as the current dataset
+        - The dataset has the same attributes as the current dataset
+
+        This method should raise an exception if the dataset does not align.
+        This prevents the user from accidentally appending or replacing data that does not align with the existing dataset.
+        
+        """
+        # Get original dataset
+        original_dataset = self.dataset()
+        if original_dataset is None:
+            return
+        # Check if the dataset has the same dimensions as the current dataset except for the time dimension
+        for dim in dataset.dims:
+            if dim != self.time_dim:
+                if dim not in original_dataset.dims:
+                    raise ValueError(f"Dimension {dim} not found in the original dataset.")
+        # Check if the dataset has the same coordinates as the current dataset
+        for coord in dataset.coords:
+            if coord not in original_dataset.coords:
+                raise ValueError(f"Coordinate {coord} not found in the original dataset.")
+        # Check if the dataset has the same variables as the current dataset
+        for var in dataset.data_vars:
+            if var not in original_dataset.data_vars:
+                raise ValueError(f"Variable {var} not found in the original dataset.")
+        # Check if the dataset has the same attributes as the current dataset
+        for attr in dataset.attrs:
+            if attr not in original_dataset.attrs:
+                raise ValueError(f"Attribute {attr} not found in the original dataset.")
+        # Check the dimensions sizes for the latitude and longitude align
+        if dataset.latitude.size != original_dataset.latitude.size:
+            raise ValueError("Latitude dimensions do not match.")
+        if dataset.longitude.size != original_dataset.longitude.size:
+            raise ValueError("Longitude dimensions do not match.")
+        # Check the bounds for the latitude and longitude dimensions
+        if dataset.latitude.values[0] != original_dataset.latitude.values[0]:
+            raise ValueError("Latitude bounds do not match.")
+        if dataset.longitude.values[0] != original_dataset.longitude.values[0]:
+            raise ValueError("Longitude bounds do not match.")
+        # Check the resolution for the latitude and longitude dimensions
+        if dataset.latitude.values[1] - dataset.latitude.values[0] != original_dataset.latitude.values[1] - original_dataset.latitude.values[0]:
+            raise ValueError("Latitude resolution does not match.")
+        if dataset.longitude.values[1] - dataset.longitude.values[0] != original_dataset.longitude.values[1] - original_dataset.longitude.values[0]:
+            raise ValueError("Longitude resolution does not match.")
+        # Check the time resolution
+        if dataset.time.values[1] - dataset.time.values[0] != original_dataset.time.values[1] - original_dataset.time.values[0]:
+            raise ValueError("Time resolution does not match.")
+        self.info("Dataset alignment check passed.")
+        
     def static_metadata(self):
         return self.metadata
 
@@ -85,6 +138,8 @@ class IPLDStacLoader(Loader, Metadata, Logging):
 
         mapper = self._mapper()
         dataset = dataset.sel(**{self.time_dim: slice(*span)})
+
+        self.check_dataset_alignment(dataset)
         # Convert numpy.datetime64 to string YYYYMMDDHH format
         dataset.attrs["date_range"] = [
             np.datetime_as_string(span.start, unit='h').replace('-', '').replace(':', '').replace('T', ''),
@@ -104,6 +159,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
     def append(self, dataset: xarray.Dataset, span: Timespan | None = None):
         """Append data to an existing dataset."""
         mapper = self._mapper(self.publisher.retrieve())
+        self.check_dataset_alignment(dataset)
         original_dataset = self.dataset()
         dataset = dataset.sel(**{self.time_dim: slice(*span)})
         # Extract the start and end times from the old and new datasets
@@ -128,6 +184,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         # Print
         """Replace a contiguous span of data in an existing dataset."""
         mapper = self._mapper(self.publisher.retrieve())
+        self.check_dataset_alignment(replace_dataset)
         original_dataset = self.dataset()
         region = (
             self._time_to_integer(original_dataset, span.start),
