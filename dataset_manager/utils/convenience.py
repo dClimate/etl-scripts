@@ -605,16 +605,3 @@ class Convenience(Attributes):
             coords_dict.update({dim: random.choice(dataset[dim].values)})
         return coords_dict
 
-    @property
-    @deprecation.deprecated("Use the constant DatasetManager.EXTREME_VALUES_BY_UNIT")
-    def extreme_values_by_unit(self):
-        """
-        Define minimum and maximum permissible values for common units
-
-        Returns
-        -------
-        dict
-            A dict of {str : (float, float)} representing the unit name
-            and corresponding lower/upper value limits
-        """
-        return self.EXTREME_VALUES_BY_UNIT

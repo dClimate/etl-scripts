@@ -6,7 +6,7 @@ version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
     "xarray[io,parallel]",
-    "ipldstore @ git+https://github.com/dClimate/ipldstore@v2.1.3",
+    "ipldstore @ git+https://github.com/dClimate/ipldstore.git",
     "dc-etl @ git+https://github.com/dClimate/etl-tooling.git",
     "docopt",
     "copernicusmarine",
