@@ -9,16 +9,6 @@ import xarray as xr
 import numcodecs
 
 
-def normalize_longitudes(ds: xr.Dataset) -> xr.Dataset:
-    ds = ds.assign_coords(longitude=(((ds.longitude + 180) % 360) - 180))
-
-    # After converting, the longitudes may still start at zero. This reorders the longitude coordinates from -180
-    # to 180 if necessary.
-    ds.sortby(["latitude", "longitude"])
-
-    return ds
-
-
 def fix_fill_missing_value(ds: xr.Dataset) -> tuple[xr.Dataset, dict]:
     for var in ds.data_vars:
         fill_value = ds[var].encoding.get("_FillValue")
@@ -59,21 +49,19 @@ def fix_fill_missing_value(ds: xr.Dataset) -> tuple[xr.Dataset, dict]:
 
 def perform_transformations(ds: xr.Dataset) -> tuple[xr.Dataset, dict]:
     # Rename dimensions if needed
-    if "lat" in ds.dims:
-        ds = ds.rename({"lat": "latitude"})
-    if "lon" in ds.dims:
-        ds = ds.rename({"lon": "longitude"})
+    # if "lat" in ds.dims:
+    #     ds = ds.rename({"lat": "latitude"})
+    # if "lon" in ds.dims:
+    #     ds = ds.rename({"lon": "longitude"})
 
-    ds = normalize_longitudes(ds)
+    # ds = normalize_longitudes(ds)
 
     # Apply compression to all data variables
-    data_vars = list(ds.data_vars.keys())
-    for var in data_vars:
-        ds[var].encoding["compressor"] = numcodecs.Blosc()
-
-    # Rechunk
-    chunk_sizes = {"time": "auto", "latitude": "auto", "longitude": "auto"}
-    ds = ds.chunk(chunk_sizes)
+    # data_vars = list(ds.data_vars.keys())
+    # for var in data_vars:
+    #     ds[var].encoding["compressor"] = numcodecs.Blosc()
+    # # Rechunk
+    # ds.chunk({"time": "auto", "latitude": "auto", "longitude": "auto"}, chunks="10MB")
 
     ds, encoding = fix_fill_missing_value(ds)
 
@@ -125,7 +113,8 @@ def main():
         return
 
     # Set up a dask cluster with memory limits before computing
-    cluster = LocalCluster(n_workers=1, threads_per_worker=1, memory_limit="16GB")
+    # TODO redo the cluster's workers and threads limits
+    cluster = LocalCluster(n_workers=1, threads_per_worker=1, memory_limit="100GB")
     dask_client = Client(cluster)
 
     try:
@@ -133,7 +122,9 @@ def main():
             nc_files,
             combine="by_coords",
             parallel=True,
+            chunks=None
         )
+        print(ds)
 
         ds, encoding = perform_transformations(ds)
         print(f"Writing zarr to {zarr_path}")
