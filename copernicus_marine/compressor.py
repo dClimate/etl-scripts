@@ -17,10 +17,8 @@ def compress(variables: list[str]) -> Transformer:
         The transformer.
     """
 
-    def compress(dataset: xarray.Dataset, metadata_info: dict) -> tuple[xarray.Dataset, dict]:
+    def compress(dataset: xarray.Dataset, **kwargs) -> xarray.Dataset:
         for var in variables:
             dataset[var].encoding["compressor"] = numcodecs.Blosc()
-
-        return dataset, metadata_info
-
+        return dataset
     return compress

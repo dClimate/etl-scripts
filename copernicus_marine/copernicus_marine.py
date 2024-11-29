@@ -10,9 +10,8 @@ import pathlib
 from dc_etl import filespec
 from .cli import main
 # import fetch from same directory
-from .pipeline import Pipeline
+from dc_etl.pipeline import Pipeline
 from dc_etl import component
-from .composite import Composite
 from .config import DATASET_CONFIG
 from docopt import docopt 
 import sys
@@ -55,7 +54,8 @@ def build_pipeline(dataset_type):
             concat_dims=["time"],
             identical_dims=["longitude", "latitude"],
         ),
-        transformer=Composite(
+        transformer=component.transformer(
+            "composite",
             transformer.dataset_transformer,
             compress([dataset_values.data_var]),
         ),

@@ -20,6 +20,7 @@ from utils.helper_functions import numpydate_to_py
 import copernicusmarine as cm_client
 import os
 from dc_etl.fetch import Timespan
+from dc_etl.assessor import Assessor
 import numpy as np
 
 
@@ -28,19 +29,7 @@ from dataset_manager.utils.ipfs import IPFS
 
 from dataset_manager.utils.logging import Logging
 
-
 from dc_etl import filespec
-import abc
-
-
-class Assessor(abc.ABC):
-    """A component responsible for fetching data from a data source and providing it to an Extractor."""
-
-    @abc.abstractmethod
-    def start(self):
-        """Start the analysis
-
-        """
 
 
 HERE = filespec.file(pathlib.Path(__file__).parent, auto_mkdir=True)

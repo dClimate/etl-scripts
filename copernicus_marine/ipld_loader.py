@@ -42,7 +42,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         self.time_dim = time_dim
         self.publisher = publisher
         metadata = {
-            "title": "Copernicus Marine Sea Level",
+            "title": "Copernicus Marine Ocean",
             "license": "CC-BY-4.0",
             "provider_description": "Copernicus Marine",
             "provider_url": "https://marine.copernicus.eu/",
@@ -81,7 +81,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         else:
             print(f"{self.cache_location.path} does not exist or is not a directory.")
 
-    def initial(self, dataset: xarray.Dataset, span: Timespan | None = None):
+    def initial(self, dataset: xarray.Dataset, span: Timespan | None = None, **kwargs):
         """Start writing a new dataset."""
 
         mapper = self._mapper()
@@ -106,7 +106,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         check_written_value(data_var=self.data_var, orig_ds=dataset, prod_ds=new_dataset)
         self.cleanup_files()
 
-    def append(self, dataset: xarray.Dataset, span: Timespan | None = None):
+    def append(self, dataset: xarray.Dataset, span: Timespan | None = None, **kwargs):
         """Append data to an existing dataset."""
         mapper = self._mapper(self.publisher.retrieve())
         original_dataset = self.dataset()
@@ -134,7 +134,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         check_written_value(data_var=self.data_var, orig_ds=dataset, prod_ds=new_dataset)
         self.cleanup_files()
 
-    def replace(self, replace_dataset: xarray.Dataset, span: Timespan | None = None):
+    def replace(self, replace_dataset: xarray.Dataset, span: Timespan | None = None, **kwargs):
         # Print
         """Replace a contiguous span of data in an existing dataset."""
         mapper = self._mapper(self.publisher.retrieve())

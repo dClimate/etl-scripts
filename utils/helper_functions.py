@@ -59,7 +59,7 @@ def check_written_value(
     orig_ds: xr.Dataset,
     prod_ds: xr.Dataset,
     threshold: float = 10e-5,
-    n_checks: int = 20,
+    n_checks: int = 100,
 ):
     """
     Check random values in the original files against the written values
@@ -76,7 +76,7 @@ def check_written_value(
     threshold : float, optional
         The tolerance for differences between original and parsed values.
     n_checks : int, optional
-        The number of random values to check, default is 20.
+        The number of random values to check per day. Default is 100.
 
     Returns
     -------
@@ -89,13 +89,27 @@ def check_written_value(
         Indicates a mismatch between source data values and values written to production.
     """
 
+    # Number of checks will depend on the day difference of the dataset. For every day, check 100 random points.
+
+    # Get day of the first and last time step
+    first_date = numpydate_to_py(orig_ds.time.values[0])
+    last_date = numpydate_to_py(orig_ds.time.values[-1])
+
+    # Get the number of days between the first and last day
+    # Calculate the absolute day difference
+    day_difference = abs((last_date - first_date).days)
+    # Get the number of checks
+    n_checks = day_difference * n_checks
+
+    print(f"Checking {n_checks} random values for {data_var} in the dataset.", day_difference)
+
+
     for _ in range(n_checks):
         selection_coords = get_random_coords(orig_ds)
         
         orig_val = orig_ds[data_var].sel(**selection_coords).values
         prod_val = prod_ds[data_var].sel(**selection_coords, method="nearest", tolerance=0.0001).values
 
-        print(f"{orig_val}, {prod_val}")
         if _is_infish(orig_val) and _is_infish(prod_val):
             continue  # Both are infinity, skip to the next check
         elif np.isnan(orig_val) and np.isnan(prod_val):

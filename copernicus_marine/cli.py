@@ -167,7 +167,7 @@ def run_pipeline(pipeline, span, load, args, manual_override=False, dataset_type
 
     sources = pipeline.fetcher.fetch(span, pipeline_info)
     extracted = list(itertools.chain(*[pipeline.extractor(source) for source in sources]))
-    combined, pipeline_info = pipeline.transformer(pipeline.combiner(extracted), pipeline_info)
+    combined = pipeline.transformer(pipeline.combiner(extracted), pipeline_info=pipeline_info)
     load(combined, span)
     return
     

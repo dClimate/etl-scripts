@@ -181,12 +181,13 @@ class DatasetTransformer():
         dataset.attrs.update(self.static_metadata())
         return dataset
 
-    def dataset_transformer(self, dataset: xarray.Dataset, metadata_info: dict) -> xarray.Dataset:
+    def dataset_transformer(self, dataset: xarray.Dataset, **kwargs) -> xarray.Dataset:
+        metadata_info = kwargs.get("pipeline_info", {})
         self.reanalysis_end_date = metadata_info["reanalysis_end_date"]
         self.reanalysis_start_date = metadata_info["reanalysis_start_date"]
         self.interim_reanalysis_end_date = metadata_info["interim_reanalysis_end_date"]
         self.interim_reanalysis_start_date = metadata_info["interim_reanalysis_start_date"]
-        return self.set_dataset_metadata(dataset=dataset), metadata_info
+        return self.set_dataset_metadata(dataset=dataset)
 
 
 class GlobalPhysicsDatasetTransformer(DatasetTransformer):
@@ -209,13 +210,14 @@ class GlobalPhysicsDatasetTransformer(DatasetTransformer):
             dataset = dataset.expand_dims("time")
         return dataset
 
-    def dataset_transformer(self, dataset: xarray.Dataset, metadata_info: dict) -> xarray.Dataset:
+    def dataset_transformer(self, dataset: xarray.Dataset, **kwargs) -> xarray.Dataset:
+        metadata_info = kwargs.get("pipeline_info", {})
         dataset = self.postprocess_zarr(dataset)
         self.reanalysis_end_date = metadata_info["reanalysis_end_date"]
         self.reanalysis_start_date = metadata_info["reanalysis_start_date"]
         self.interim_reanalysis_end_date = metadata_info["interim_reanalysis_end_date"]
         self.interim_reanalysis_start_date = metadata_info["interim_reanalysis_start_date"]
-        return self.set_dataset_metadata(dataset=dataset), metadata_info
+        return self.set_dataset_metadata(dataset=dataset)
 
 
 class CopernicusOceanSeaSurfaceHeightTransformer(DatasetTransformer, CopernicusOceanSeaSurfaceHeightValues):
