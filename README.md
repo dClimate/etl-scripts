@@ -88,7 +88,7 @@ Ensure the following are installed in the local environment.
 + `git`
 + `wget`
 + `uv` [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv) for python packages and virtual environment creation.
-+ `python` >= 3.10.14
++ `python` >= 3.12
 
 # Setup python virtual environment
 1. Use `uv` to instantiate the virtual environment and install packages

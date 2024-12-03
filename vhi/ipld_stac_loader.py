@@ -1,7 +1,7 @@
 from dc_etl.load import Loader
 from dc_etl.ipld.loader import IPLDPublisher
 
-import ipldstore
+from py_hamt import HAMT, IPFSStore
 import xarray
 from dc_etl.fetch import Timespan
 from dataset_manager.utils.metadata import Metadata
@@ -90,7 +90,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         """Start writing a new dataset."""
         mapper = self._mapper()
         dataset = dataset.sel(**{self.time_dim: slice(*span)})
-        check_dataset_alignment(self, new_ds=dataset, prod_ds=self.dataset())
+
         # Convert numpy.datetime64 to string YYYYMMDDHH format
         dataset.attrs["date_range"] = [
             np.datetime_as_string(span.start, unit='h').replace('-', '').replace(':', '').replace('T', ''),
@@ -100,7 +100,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         # Chunk the dataset to the requested dask chunks
         dataset = dataset.chunk(self.requested_dask_chunks)
         dataset.to_zarr(store=mapper, consolidated=True)
-        cid = mapper.freeze()
+        cid = mapper.root_node_id
         self.info("Preparing Stac Metadata")
         self.prepare_publish_stac_metadata(cid, dataset, rebuild=True)
         self.publisher.publish(cid)
@@ -126,7 +126,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         # Chunk the dataset to the requested dask chunks
         dataset = dataset.chunk(self.requested_dask_chunks)
         dataset.to_zarr(store=mapper, consolidated=True, append_dim=self.time_dim)
-        cid = mapper.freeze()
+        cid = mapper.root_node_id
         self.info("Preparing Stac Metadata")
         self.create_stac_item(dataset=dataset)
         self.publisher.publish(cid)
@@ -151,7 +151,7 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         original_dataset.attrs["date_range"] = original_dataset.attrs["date_range"]
         replace_dataset.to_zarr(store=mapper, consolidated=True, region={self.time_dim: slice(*region)})
 
-        cid = mapper.freeze()
+        cid = mapper.root_node_id
         self.publisher.publish(cid)
         self.info(f"Published {cid}")
         new_dataset = self.dataset()
@@ -164,9 +164,10 @@ class IPLDStacLoader(Loader, Metadata, Logging):
         return xarray.open_zarr(store=mapper, consolidated=True)
 
     def _mapper(self, root=None):
-        mapper = ipldstore.get_ipfs_mapper(host=self.host, chunker=self.requested_ipfs_chunker)
-        if root is not None:
-            mapper.set_root(root)
+        if root is None:
+            mapper = HAMT(store=IPFSStore())
+        else:
+            mapper = HAMT(store=IPFSStore(), root_node_id=root)
         return mapper
 
     def _time_to_integer(self, dataset, timestamp):

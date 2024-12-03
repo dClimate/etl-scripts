@@ -125,7 +125,7 @@ class CopernicusOceanSeaSurfaceHeightValues(CopernicusOceanValues):
         self.data_var = "sla"
         self.time_resolution = "daily"
         self.update_cadence = "irregular (approximately 5 months)"
-        self.spatial_resolution = 0.25
+        self.spatial_resolution = 0.125
         self.spatial_precision = 0.0001
         self.bbox =[-179.875, -89.875, 179.875, 89.875]
         self.missing_value = -2147483647
@@ -140,6 +140,7 @@ class CopernicusOceanSeaSurfaceHeightValues(CopernicusOceanValues):
         return super().relative_path() / "sea_level"
 
 
+
     def _dataset_parameters(self, analysis_type: str) -> tuple[str, str, str]:
         """
         Convenience method to return the correct dataset_id, title, and URL for querying the CDS API
@@ -150,19 +151,19 @@ class CopernicusOceanSeaSurfaceHeightValues(CopernicusOceanValues):
             A string of 'analysis' or 'reanalysis'
         """
         if analysis_type == "reanalysis":
-            dataset_id = "cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.25deg_P1D"
+            dataset_id = "cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D"
             title = "GLOBAL OCEAN GRIDDED L4 SEA SURFACE HEIGHTS AND DERIVED VARIABLES REPROCESSED (1993-ONGOING)"
             info_url = (
                 "https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_MY_008_047/description"  # noqa: E501
             )
         elif analysis_type == "interim-reanalysis":
-            dataset_id = "cmems_obs-sl_glo_phy-ssh_myint_allsat-l4-duacs-0.25deg_P1D"
+            dataset_id = "cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D"
             title = "GLOBAL OCEAN GRIDDED L4 SEA SURFACE HEIGHTS AND DERIVED VARIABLES REPROCESSED (1993-ONGOING)"
             info_url = (
                 "https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_MY_008_047/description"  # noqa: E501
             )
         elif analysis_type == "analysis":
-            dataset_id = "cmems_obs-sl_glo_phy-ssh_nrt_allsat-l4-duacs-0.25deg_P1D"
+            dataset_id = "cmems_obs-sl_glo_phy-ssh_nrt_allsat-l4-duacs-0.125deg_P1D"
             title = "GLOBAL OCEAN GRIDDED L4 SEA SURFACE HEIGHTS AND DERIVED VARIABLES NRT"
             info_url = (
                 "https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_NRT_008_046/description"  # noqa: E501

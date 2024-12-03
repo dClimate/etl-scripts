@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import xarray as xr
-import ipldstore
+from py_hamt import HAMT, IPFSStore
 import collections
 
 from abc import abstractmethod, ABC
@@ -189,7 +189,7 @@ class IPLDStore(StoreInterface):
     used to write new data to IPFS and generate a new recursive hash.
     """
 
-    def mapper(self, set_root: bool = True, refresh: bool = False) -> ipldstore.IPLDStore:
+    def mapper(self, set_root: bool = True, refresh: bool = False) -> HAMT:
         """
         Get an IPLD mapper by delegating to `ipldstore.get_ipfs_mapper`, passing along an IPFS chunker value if the
         associated dataset's `requested_ipfs_chunker` property has been set.
@@ -212,13 +212,10 @@ class IPLDStore(StoreInterface):
             An IPLD `MutableMapping`, usable, for example, to open a Zarr with `xr.open_zarr`
         """
         if refresh or not hasattr(self, "_mapper"):
-            if self.requested_ipfs_chunker:
-                self._mapper = ipldstore.get_ipfs_mapper(host=self._host, chunker=self.requested_ipfs_chunker)
-            else:
-                self._mapper = ipldstore.get_ipfs_mapper(host=self._host)
-            self.info(f"IPFS chunker is {self._mapper._store._chunker}")
             if set_root and self.latest_hash():
-                self._mapper.set_root(self.latest_hash())
+                self._mapper = HAMT(store=IPFSStore(), root_node_id=self.latest_hash())
+            else:
+                self._mapper = HAMT(store=IPFSStore())
         return self._mapper
 
     def __str__(self) -> str:

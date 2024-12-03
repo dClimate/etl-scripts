@@ -3,11 +3,11 @@
 name = "etl-scripts"
 # Semantic Versioning https://semver.org/
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "xarray[io,parallel]",
-    "ipldstore @ git+https://github.com/dClimate/ipldstore.git",
-    "dc-etl @ git+https://github.com/dClimate/etl-tooling.git",
+    "dc-etl @ git+https://github.com/dClimate/etl-tooling.git@remove-ipldstore",
+    "py-hamt @ git+https://github.com/dClimate/py-hamt.git@version2",
     "docopt",
     "copernicusmarine",
     "python-dotenv",
@@ -33,7 +33,7 @@ dependencies = [
     "xarray[complete]>=2023.9.0",
     "zarr>=2.16.1",
     "cfgrib",
-    "dag-cbor==0.2.2",
+    "dag-cbor==0.3.3",
     "dask[array,diagnostics,distributed]",
     "lxml",
     "ipdb",

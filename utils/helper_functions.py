@@ -109,7 +109,7 @@ def check_written_value(
         
         orig_val = orig_ds[data_var].sel(**selection_coords).values
         prod_val = prod_ds[data_var].sel(**selection_coords, method="nearest", tolerance=0.0001).values
-
+        print(orig_val, prod_val)
         if _is_infish(orig_val) and _is_infish(prod_val):
             continue  # Both are infinity, skip to the next check
         elif np.isnan(orig_val) and np.isnan(prod_val):
