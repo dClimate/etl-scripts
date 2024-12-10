@@ -112,7 +112,7 @@ fetch() {
 transform() {
     current_step="Transform: create Zarr from .nc files"
     cpc_log $current_step
-    python ../shared_python_scripts/transform_nc.py "$PWD/$dataset/"
+    python ./transform.py "$PWD/$dataset/"
 }
 
 load_to_ipfs() {

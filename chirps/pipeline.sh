@@ -17,8 +17,7 @@ error_usage_exit() {
 
 chirps_log() {
     message="$*"
-    # echo_and_webhook "[CHIRPS $dataset]" $message
-    er "[CHIRPS $dataset]" $message
+    echo_and_webhook "[CHIRPS $dataset]" $message
 }
 
 notify_of_error() {
@@ -56,6 +55,7 @@ case $step in
 esac
 
 # Note that all etl steps just access the $dataset variable without it needing to be passed in
+
 current_step="Pipeline not started yet"
 
 prefetch() {
@@ -134,7 +134,7 @@ send_to_cluster() {
     # For some reason, ipfs-cluster-ctl pin adds encounter unknown errors with larger datasets, but kubo handles it fine
     # Then doing the ipfs-cluster-ctl pin add allows us to associate it with a name and keep better track
     time ssh $cluster "/srv/ipfs/bin/ipfs pin add $cid"
-    ssh $cluster "/srv/ipfs/bin/ipfs-cluster-ctl pin add --name $dataset.zarr --wait $cid"
+    # ssh $cluster "/srv/ipfs/bin/ipfs-cluster-ctl pin add --name $dataset.zarr --wait $cid"
 }
 
 update_ipns() {

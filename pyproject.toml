@@ -10,11 +10,11 @@ dependencies = [
     "xarray[io,parallel]",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project.optional-dependencies]
-dev = [
-    "ruff",
-    "pre-commit"
-]
 cyclops = [
     "boto3"
 ]
@@ -22,3 +22,7 @@ cyclops = [
 [tool.uv.sources]
 py-hamt = { git = "https://github.com/dClimate/py-hamt", rev = "c51b729ef9df64cacc15113ee42a05b1ed970230" }
 
+[dependency-groups]
+dev = [
+    "ruff>=0.8.0",
+]
