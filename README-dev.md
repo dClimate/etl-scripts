@@ -1,7 +1,7 @@
 # How to setup your development environment
 ## Install system environment packages
 Ensure the following are installed in the local environment, manually or through your package manager.
-+ `bash` version 4 or greater, for use of new builtins in like mapfile. Checking your bash version is important for macOS systems which are stuck on bash 3.
++ `bash` version 5, for use of new builtins in like mapfile. Checking your bash version is important for macOS systems which are stuck on bash 3.
 + `git` Both for downloading this repository's code and for downloading the `ipldstore` python dependency.
 + `uv` https://github.com/astral-sh/uv
   + For installing python packages and creating a python virtual environment
@@ -12,7 +12,9 @@ Ensure the following are installed in the local environment, manually or through
 + `wget` For downloading dataset files for CPC, CHIRPS, PRISM
 + `curl` For querying html pages for CHIRPS, PRISM
 + `unzip` Unzips .nc.zip files downloaded for PRISM
-+ Standard POSIX tools like bash, grep, sed, awk
++ GNU coreutils
+  + For developers on mac, there are some differences between the BSD versions used by macOS and the GNU ones on linux servers
+  + Mac users, make sure `date` is aliased to `gdate` if you install GNU coreutils
 
 ## Create python virtual environment
 Now, create your python environment.
