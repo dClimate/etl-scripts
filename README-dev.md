@@ -20,9 +20,7 @@ Ensure the following are installed in the local environment, manually or through
 Now, create your python environment.
 1. Use `uv` to instantiate the virtual environment and install packages
 ```sh
-$ uv venv
-$ uv pip compile --all-extras pyproject.toml -o requirements.txt
-$ uv pip sync requirements.txt
+$ uv sync
 ```
 2. To activate the virtual environment:
 ```sh
