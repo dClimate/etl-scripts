@@ -157,7 +157,6 @@ def run_pipeline(pipeline, span, load, args, manual_override=False):
     new_span, pipeline_info = pipeline.assessor.start(args=args)
     existing_dataset = pipeline_info.get("existing_dataset", None)
 
-    start, end, new_finalization_date_start, new_finalization_date_end = new_span
 
     # If there is a manual override, fetch, extract, transform, and load the data based on manual ovveride
     if manual_override:
@@ -166,6 +165,11 @@ def run_pipeline(pipeline, span, load, args, manual_override=False):
         combined, pipeline_info = pipeline.transformer(pipeline.combiner(extracted), pipeline_info)
         load(combined, span)
         return
+
+    if new_span is None:
+        return
+
+    start, end, new_finalization_date_start, new_finalization_date_end = new_span
     
     # If there is a start and end date and there is no existing data, fetch, extract, transform, and load the data
     # Any finalization data will be passed via the pipeline info

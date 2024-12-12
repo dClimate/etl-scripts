@@ -95,7 +95,7 @@ class CopernicusOceanGlobalPhysicsValues():
         elif analysis_type == "analysis":
             dataset_id = f"cmems_mod_glo_phy-{self.data_var}_anfc_0.083deg_P1D-m"
             title = "Global Ocean Physics Analysis and Forecast"
-            info_url = "https://resources.marine.copernicus.eu/product-detail/GLOBAL_ANALYSIS_FORECAST_PHY_001_024/INFORMATION"  # noqa: E501
+            info_url = "https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024/description"  # noqa: E501
         return dataset_id, title, info_url
 
     def _info_url(self, analysis_type: str) -> str:
@@ -110,7 +110,7 @@ class CopernicusOceanGlobalPhysicsValues():
         if analysis_type == "reanalysis":
             return "https://resources.marine.copernicus.eu/product-detail/GLOBAL_MULTIYEAR_PHY_001_030/INFORMATION"
         elif analysis_type == "analysis":
-            return "https://resources.marine.copernicus.eu/product-detail/GLOBAL_ANALYSIS_FORECAST_PHY_001_024/INFORMATION"  # noqa: E501
+            return "https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024/description"  # noqa: E501
     
 class CopernicusOceanSeaSurfaceHeightValues(CopernicusOceanValues):
     """Child class for Sea Surface Height datasets"""
