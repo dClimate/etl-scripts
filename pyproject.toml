@@ -20,7 +20,7 @@ cyclops = [
 ]
 
 [tool.uv.sources]
-py-hamt = { git = "https://github.com/dClimate/py-hamt", rev = "c51b729ef9df64cacc15113ee42a05b1ed970230" }
+py-hamt = { git = "https://github.com/dClimate/py-hamt", rev = "v2.0.3" }
 
 [dependency-groups]
 dev = [
