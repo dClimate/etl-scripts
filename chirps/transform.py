@@ -1,7 +1,7 @@
 import multiprocessing
 import sys
 
-from dask.distributed import Client, LocalCluster
+from dask.distributed import LocalCluster
 import xarray as xr
 from etl_scripts.transform import (
     check_only_one_argument,
