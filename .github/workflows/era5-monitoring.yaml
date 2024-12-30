@@ -35,7 +35,5 @@ jobs:
       - name: Install all dependencies
         run: ./uv sync
 
-      - name: test print
-        run: |
-          echo $BASH_VERSION
-          echo im running at this time $EPOCHSECONDS
+      - name: Run ERA5 Monitoring script
+        run: ./uv run era5/monitoring.py
