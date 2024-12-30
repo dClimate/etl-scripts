@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: era5
+    env:
+      ERA5_TOTAL_PRECIPITATION_CID: ${{vars.ERA5_TOTAL_PRECIPITATION_CID}}
 
     steps:
       - uses: actions/checkout@v4
