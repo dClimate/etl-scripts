@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 
 # numcodecs, dask, pandas, numpy, and multiformats are imports in various files, but not in pyproject.toml dependencies, since they are required by xarray, so we just use the existing compatible versions that are installed when xarray is installed
 dependencies = [
+    "gcsfs>=2024.12.0",
     "py-hamt",
     "xarray[io,parallel]",
 ]
