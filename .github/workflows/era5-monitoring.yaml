@@ -22,7 +22,7 @@ jobs:
       - name: Install IPFS
         uses: ibnesayeed/setup-ipfs@c779340c110024feeb46579fef211c89332caf85
         with:
-          ipfs_version: "0.32.1"
+          ipfs_version: "0.29.0"
           run_daemon: true
 
       - name: Swarm connect to our IPFS Servers
