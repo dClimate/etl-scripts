@@ -25,6 +25,12 @@ jobs:
           ipfs_version: "0.32.1"
           run_daemon: true
 
+      - name: Swarm connect to our IPFS Servers
+        run: |
+          ipfs swarm peering add "/ip4/15.235.14.184/udp/4001/quic-v1/p2p/12D3KooWHdZM98wcuyGorE184exFrPEJWv2btXWWSHLQaqwZXuPe"
+          ipfs swarm peering add "/ip4/15.235.86.198/udp/4001/quic-v1/p2p/12D3KooWGX5HDDjbdiJL2QYf2f7Kjp1Bj6QAXR5vFvLQniTKwoBR"
+          ipfs swarm peering add "/ip4/148.113.168.50/udp/4001/quic-v1/p2p/12D3KooWCHHPjFyKK1GFyeNPkHoY85AoYVGCFDNaCtPBwJkD9Mu2"
+
       # At this point, the current working directory will be /home/runner/work/etl-scripts/etl-scripts
       # The -A curl option specifies a user agent, github requires this for a download
       - name: Download uv, version locked
