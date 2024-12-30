@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 
 # numcodecs, dask, pandas, numpy, and multiformats are imports in various files, but not in pyproject.toml dependencies, since they are required by xarray, so we just use the existing compatible versions that are installed when xarray is installed
 dependencies = [
+    # Needed for xarray to access google cloud storage service
     "gcsfs>=2024.12.0",
     "py-hamt",
     "xarray[io,parallel]",
@@ -16,14 +17,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.optional-dependencies]
-cyclops = [
-    "boto3"
-]
+cyclops = ["boto3"]
 
 [tool.uv.sources]
 py-hamt = { git = "https://github.com/dClimate/py-hamt", rev = "v2.0.3" }
 
 [dependency-groups]
-dev = [
-    "ruff>=0.8.0",
-]
+dev = ["ruff>=0.8.0"]
