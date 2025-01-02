@@ -7,16 +7,20 @@ on:
 
 permissions:
   contents: read
-  
 
 jobs:
   check_available:
     runs-on: ubuntu-latest
- 
+
     strategy:
       matrix:
         cid:
-          ["${{vars.CPC_PRECIP_CONUS_CID}}", "${{vars.CPC_PRECIP_GLOBAL_CID}}", "${{vars.CPC_TMAX_CID}}", "${{vars.CPC_TMIN_CID}}"]
+          [
+            "${{vars.CPC_PRECIP_CONUS_CID}}",
+            "${{vars.CPC_PRECIP_GLOBAL_CID}}",
+            "${{vars.CPC_TMAX_CID}}",
+            "${{vars.CPC_TMIN_CID}}",
+          ]
 
     env:
       FLUORINE_MULTIADDRESS: ${{vars.FLUORINE_MULTIADDRESS}}
@@ -25,9 +29,7 @@ jobs:
       CPC_CID: ${{matrix.cid}}
 
     steps:
-    
       - uses: actions/checkout@v4
-
 
       - name: Print Matrix Values
         run: |
@@ -54,5 +56,7 @@ jobs:
       - name: Install all dependencies
         run: uv sync
 
-      - name: Run CPC monitoring script
-        run: uv run test_get_ds.py "$CPC_CID"
+      - name: Print Dataset metadata and plot random timepoint
+        run: uv run cpc/availability-check.py "$CPC_CID"
+
+      - name: Make plot available as artifact
