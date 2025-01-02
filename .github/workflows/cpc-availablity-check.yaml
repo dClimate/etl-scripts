@@ -55,6 +55,9 @@ jobs:
       - name: Run CPC monitoring script
         run: uv run cpc/availability-check.py "$CPC_CID"
         
+      - name: debugging, see what's there
+        run: ls -lap cpc/*
+        
       - uses: actions/upload-artifact@v4
         with:
           name: Random Timepoint Plot
