@@ -34,4 +34,4 @@ else:
     ds_slice = ds.sortby(['latitude', 'longitude'])
 for var in ds.data_vars:
     ds_slice[var].plot()  # type: ignore
-    plt.savefig(f"{var}-plot.png", dpi=300, bbox_inches="tight")
+    plt.savefig(f"/tmp/{var}-plot.png", dpi=300, bbox_inches="tight")
