@@ -58,10 +58,10 @@ jobs:
       - name: debugging, see what's there
         run: ls -lap cpc/*
         
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Random Timepoint Plot
-          path: cpc/*.py
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 3
+      # - uses: actions/upload-artifact@v4
+      #   with:
+      #     name: Random Timepoint Plot
+      #     path: cpc/*.py
+      #     if-no-files-found: error
+      #     compression-level: 0
+      #     retention-days: 3
