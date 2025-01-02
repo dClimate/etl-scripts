@@ -21,10 +21,10 @@ random_time = np.random.choice(ds.time)
 ds_slice = ds.sel(time=random_time)
 # This is done so that matplotlib has ascending coordinates to graph with
 ds_slice = ds_slice.assign_coords({
-    'longitude': (((ds.longitude + 180) % 360) - 180),
-    'latitude': ((ds.latitude + 90) % 180) - 90
+    'lat': (((ds.lat + 180) % 360) - 180),
+    'lon': ((ds.lon + 90) % 180) - 90
 })
-ds_slice = ds.sortby(['latitude', 'longitude'])
+ds_slice = ds.sortby(['lat', 'lon'])
 for var in ds.data_vars:
     ds_slice[var].plot()  # type: ignore
     plt.savefig(f"{var}-plot.png", dpi=300, bbox_inches="tight")
