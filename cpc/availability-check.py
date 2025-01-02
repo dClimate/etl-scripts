@@ -21,4 +21,4 @@ random_time = np.random.choice(ds.time)
 ds_slice = ds.sel(time=random_time)
 for var in ds.data_vars:
     ds_slice[var].plot()  # type: ignore
-    plt.savefig("plot.png", dpi=300, bbox_inches="tight")
+    plt.savefig(f"{var}-plot.png", dpi=300, bbox_inches="tight")
