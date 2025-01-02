@@ -58,12 +58,12 @@ jobs:
       - name: debugging, see what's there
         run: |
           ls -lap cpc/*
-          ls -lap tmp/*.png
+          ls -lap /tmp/*.png
         
       - uses: actions/upload-artifact@v4
         with:
           name: Random Timepoint Plot
-          path: tmp/*-plot.png
+          path: /tmp/*-plot.png
           if-no-files-found: error
           compression-level: 0
           retention-days: 3
