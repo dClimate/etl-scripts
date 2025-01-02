@@ -7,11 +7,12 @@ on:
 
 permissions:
   contents: read
+  
 
 jobs:
   check_available:
     runs-on: ubuntu-latest
-
+ 
     strategy:
       matrix:
         cid:
@@ -51,7 +52,5 @@ jobs:
       - name: Install all dependencies
         run: uv sync
 
-      - name: Print Dataset metadata and plot random timepoint
+      - name: Run CPC monitoring script
         run: uv run cpc/availability-check.py "$CPC_CID"
-
-      - name: Make plot available as artifact
