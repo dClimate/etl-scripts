@@ -30,7 +30,14 @@ jobs:
       CPC_CID: ${{matrix.cid}}
 
     steps:
+    
       - uses: actions/checkout@v4
+
+
+      - name: Print Matrix Values
+        run: |
+          echo "Matrix Context:"
+          echo '${{ toJSON(matrix) }}'
 
       - name: Install IPFS
         uses: ibnesayeed/setup-ipfs@c779340c110024feeb46579fef211c89332caf85
