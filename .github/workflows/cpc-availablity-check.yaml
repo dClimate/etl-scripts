@@ -47,7 +47,7 @@ jobs:
       - name: Install all dependencies
         run: uv sync
 
-      - name: Load into Dataset and make plot random timepoint
+      - name: Load xarray Dataset and plot random timepoint
         run: uv run cpc/availability-check.py "$CPC_CID"
         
       - uses: actions/upload-artifact@v4
