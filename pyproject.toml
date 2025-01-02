@@ -9,7 +9,7 @@ dependencies = [
     # Needed for xarray to access google cloud storage service
     "gcsfs>=2024.12.0",
     "py-hamt",
-    "xarray[io,parallel]",
+    "xarray[io,parallel,viz]",
 ]
 
 [build-system]

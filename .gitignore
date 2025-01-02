@@ -11,3 +11,5 @@ pyrightconfig.json
 requirements.txt
 
 etl-scripts-cyclops
+
+*.png
