@@ -8,13 +8,14 @@ on:
 permissions:
   contents: read
   
-environment:
-  name: monitoring
 
 jobs:
   check_available:
     runs-on: ubuntu-latest
     
+    environment:
+      name: monitoring
+      
     strategy:
       matrix:
         cid:
