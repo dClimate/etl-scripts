@@ -56,12 +56,14 @@ jobs:
         run: uv run cpc/availability-check.py "$CPC_CID"
         
       - name: debugging, see what's there
-        run: ls -lap cpc/*
+        run: |
+          ls -lap cpc/*
+          ls -lap tmp/*.png
         
-      # - uses: actions/upload-artifact@v4
-      #   with:
-      #     name: Random Timepoint Plot
-      #     path: cpc/*.py
-      #     if-no-files-found: error
-      #     compression-level: 0
-      #     retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Random Timepoint Plot
+          path: tmp/*-plot.png
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
