@@ -27,11 +27,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Print Matrix Values
-        run: |
-          echo "Matrix Context:"
-          echo '${{ toJSON(matrix) }}'
-
       - name: Install IPFS
         uses: ibnesayeed/setup-ipfs@c779340c110024feeb46579fef211c89332caf85
         with:
@@ -52,18 +47,13 @@ jobs:
       - name: Install all dependencies
         run: uv sync
 
-      - name: Run CPC monitoring script
+      - name: Load into Dataset and make plot random timepoint
         run: uv run cpc/availability-check.py "$CPC_CID"
-        
-      - name: debugging, see what's there
-        run: |
-          ls -lap cpc/*
-          ls -lap /tmp/*.png
         
       - uses: actions/upload-artifact@v4
         with:
-          name: Random Timepoint Plot
-          path: /tmp/*-plot.png
+          name: Plot ${{matrix.cid}}
+          path: /tmp/plot.png
           if-no-files-found: error
           compression-level: 0
           retention-days: 3
