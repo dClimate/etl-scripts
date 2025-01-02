@@ -12,10 +12,7 @@ permissions:
 jobs:
   check_available:
     runs-on: ubuntu-latest
-    
-    environment:
-      name: monitoring
-      
+ 
     strategy:
       matrix:
         cid:
