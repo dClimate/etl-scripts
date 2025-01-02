@@ -54,3 +54,9 @@ jobs:
 
       - name: Run CPC monitoring script
         run: uv run cpc/availability-check.py "$CPC_CID"
+        
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Random Timepoint Plot
+          path: cpc/*.png
+          if-no-files-found: error
