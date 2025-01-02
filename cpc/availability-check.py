@@ -20,7 +20,7 @@ print(ds)
 random_time = np.random.choice(ds.time)
 ds_slice = ds.sel(time=random_time)
 # This is done so that matplotlib has ascending coordinates to graph with
-if lat in ds.coords:
+if "lat" in ds.coords:
     ds_slice = ds_slice.assign_coords({
         'lat': (((ds.lat + 180) % 360) - 180),
         'lon': ((ds.lon + 90) % 180) - 90
