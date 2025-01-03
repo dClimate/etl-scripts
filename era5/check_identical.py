@@ -39,4 +39,6 @@ random_time_indices = np.random.choice(len(da), size=n_samples, replace=False)
 
 google_subset = google_da.isel(time=random_time_indices)
 da_subset = da.isel(time=random_time_indices)
+print("Checking this subset of ipfs data")
+print(da_subset)
 xr.testing.assert_identical(google_subset, da_subset)
