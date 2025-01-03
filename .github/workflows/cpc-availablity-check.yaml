@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  
 
 jobs:
   check_available:
@@ -43,15 +42,15 @@ jobs:
 
       - name: Load xarray Datasets and plot random timepoint for each
         run: |
-          uv run cpc/availability-check.py ${{vars.CPC_PRECIP_CONUS_CID}}
+          uv run availability-check.py ${{vars.CPC_PRECIP_CONUS_CID}}
           mv /tmp/plot.png /tmp/precip-conus-plot.png
-          uv run cpc/availability-check.py ${{vars.CPC_PRECIP_GLOBAL_CID}}
+          uv run availability-check.py ${{vars.CPC_PRECIP_GLOBAL_CID}}
           mv /tmp/plot.png /tmp/precip-global-plot.png
-          uv run cpc/availability-check.py ${{vars.CPC_TMAX_CID}}
+          uv run availability-check.py ${{vars.CPC_TMAX_CID}}
           mv /tmp/plot.png /tmp/tmax-plot.png
-          uv run cpc/availability-check.py ${{vars.CPC_TMIN_CID}}
+          uv run availability-check.py ${{vars.CPC_TMIN_CID}}
           mv /tmp/plot.png /tmp/tmin-plot.png
-        
+
       - uses: actions/upload-artifact@v4
         with:
           name: Plots
