@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  check_available:
+  load_and_plot:
     runs-on: ubuntu-latest
 
     env:

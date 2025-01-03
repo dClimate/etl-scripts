@@ -7,10 +7,9 @@ on:
 
 permissions:
   contents: read
-  
 
 jobs:
-  check_available:
+  load_and_plot:
     runs-on: ubuntu-latest
 
     env:
@@ -49,7 +48,7 @@ jobs:
           mv /tmp/plot.png /tmp/final-p25-plot.png
           uv run availability-check.py ${{vars.CHIRPS_PRELIM_P05_CID}}
           mv /tmp/plot.png /tmp/prelim-p05-plot.png
-        
+
       - uses: actions/upload-artifact@v4
         with:
           name: Plots
