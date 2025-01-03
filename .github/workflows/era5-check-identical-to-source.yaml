@@ -42,4 +42,4 @@ jobs:
 
       - name: Check total_precip ETL is identical to Google source
         run: |
-          uv run era5/check_identical.py total_precipitation ${{vars.ERA5_TOTAL_PRECIPITATION_CID}}
+          uv run era5/check_identical.py total_precipitation ${{vars.ERA5_TOTAL_PRECIP_CID}}
