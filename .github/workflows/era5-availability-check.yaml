@@ -1,4 +1,4 @@
-name: cpc-availability-check
+name: era5-availability-check
 
 on:
   workflow_dispatch:
@@ -42,14 +42,8 @@ jobs:
 
       - name: Load xarray Datasets and plot random timepoint for each
         run: |
-          uv run availability-check.py ${{vars.CPC_PRECIP_CONUS_CID}}
-          mv /tmp/plot.png /tmp/precip-conus-plot.png
-          uv run availability-check.py ${{vars.CPC_PRECIP_GLOBAL_CID}}
-          mv /tmp/plot.png /tmp/precip-global-plot.png
-          uv run availability-check.py ${{vars.CPC_TMAX_CID}}
-          mv /tmp/plot.png /tmp/tmax-plot.png
-          uv run availability-check.py ${{vars.CPC_TMIN_CID}}
-          mv /tmp/plot.png /tmp/tmin-plot.png
+          uv run availability-check.py ${{vars.ERA5_TOTAL_PRECIP_CID}}
+          mv /tmp/plot.png /tmp/total-precip-plot.png
 
       - uses: actions/upload-artifact@v4
         with:
