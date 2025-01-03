@@ -1,6 +1,7 @@
 import multiprocessing
 import sys
 
+from dask.distributed import Client, LocalCluster
 import xarray as xr
 from etl_scripts.transform import (
     check_only_one_argument,
@@ -24,12 +25,23 @@ def main():
     zarr_path = nc_dir_path / f"{dataset_name}.zarr"
     exit_if_zarr_uptodate(zarr_path, nc_files)
 
-    ds = xr.open_mfdataset(nc_files, combine="by_coords", parallel=True, chunks=None)
+    cluster = LocalCluster(n_workers=1, threads_per_worker=1, memory_limit="80GB")
+    dask_client: Client = cluster.get_client()
 
-    compress_all_vars(ds)
-    ds, encoding = fix_fill_missing_value(ds)
-    eprint(f"Writing zarr to {zarr_path}")
-    ds.to_zarr(zarr_path, mode="w", consolidated=True, encoding=encoding)
+    try:
+        ds = xr.open_mfdataset(
+            nc_files, combine="by_coords", parallel=True, chunks=None
+        )
+        print(ds)
+
+        compress_all_vars(ds)
+        ds, encoding = fix_fill_missing_value(ds)
+        ds = ds.chunk({"time": 1769, "lat": 24, "lon": 24})
+        eprint(f"Writing zarr to {zarr_path}")
+        ds.to_zarr(zarr_path, mode="w", consolidated=True, encoding=encoding)
+    finally:
+        dask_client.close()
+        cluster.close()
 
 
 if __name__ == "__main__":

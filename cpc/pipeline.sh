@@ -118,7 +118,7 @@ transform() {
 load_to_ipfs() {
     current_step="Load to IPFS: Convert Zarr to HAMT on IPFS"
     cpc_log $current_step
-    time python ../shared_python_scripts/zarr_to_ipfs.py "$PWD/${dataset}/${dataset}.zarr"
+    time python ../etl_scripts/zarr_to_ipfs.py "$PWD/${dataset}/${dataset}.zarr"
 }
 
 send_to_cluster() {
@@ -133,11 +133,7 @@ send_to_cluster() {
         exit 1
     fi
     cid=$(cat $cid_path)
-    # First, pin it directly with ipfs
-    # For some reason, ipfs-cluster-ctl pin adds encounter unknown errors with larger datasets, but kubo handles it fine
-    # Then doing the ipfs-cluster-ctl pin add allows us to associate it with a name and keep better track
     time ssh $cluster "/srv/ipfs/bin/ipfs pin add $cid"
-    ssh $cluster "/srv/ipfs/bin/ipfs-cluster-ctl pin add --name $dataset.zarr --wait $cid"
 }
 
 update_ipns() {
