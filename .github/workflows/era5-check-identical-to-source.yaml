@@ -1,0 +1,45 @@
+name: era5-check-identical-to-source
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  load_and_plot:
+    runs-on: ubuntu-latest
+
+    env:
+      FLUORINE_MULTIADDRESS: ${{vars.FLUORINE_MULTIADDRESS}}
+      THORIUM_MULTIADDRESS: ${{vars.THORIUM_MULTIADDRESS}}
+      CERIUM_MULTIADDRESS: ${{vars.CERIUM_MULTIADDRESS}}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install IPFS
+        uses: ibnesayeed/setup-ipfs@c779340c110024feeb46579fef211c89332caf85
+        with:
+          ipfs_version: ${{vars.IPFS_VERSION}}
+          run_daemon: true
+
+      - name: Swarm peering add to our IPFS Servers
+        run: |
+          ipfs swarm peering add "$FLUORINE_MULTIADDRESS"
+          ipfs swarm peering add "$THORIUM_MULTIADDRESS"
+          ipfs swarm peering add "$CERIUM_MULTIADDRESS"
+
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Install all dependencies
+        run: uv sync
+
+      - name: Check total_precip ETL is identical to Google source
+        run: |
+          uv run era5/check_identical.py total_precipitation ${{vars.ERA5_TOTAL_PRECIPITATION_CID}}
