@@ -47,3 +47,6 @@ jobs:
           uv run era5/check_identical.py 10m_v_component_of_wind ${{vars.ERA5_10M_V_COMPONENT_OF_WIND_CID}}
           uv run era5/check_identical.py 100m_u_component_of_wind ${{vars.ERA5_100M_U_COMPONENT_OF_WIND_CID}}
           uv run era5/check_identical.py 100m_v_component_of_wind ${{vars.ERA5_100M_V_COMPONENT_OF_WIND_CID}}
+          uv run era5/check_identical.py 2m_temperature ${{vars.ERA5_2M_TEMPERATURE_CID}}
+          uv run era5/check_identical.py surface_pressure ${{vars.ERA5_SURFACE_PRESSURE_CID}}
+          
