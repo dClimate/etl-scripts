@@ -43,19 +43,12 @@ jobs:
       - name: Load xarray Datasets and plot random timepoint for each
         run: |
           uv run availability-check.py ${{vars.ERA5_TOTAL_PRECIPITATION_CID}}
-          mv /tmp/plot.png /tmp/total-precipitation-plot.png
           uv run availability-check.py ${{vars.ERA5_10M_U_COMPONENT_OF_WIND_CID}}
-          mv /tmp/plot.png /tmp/10m_u_component_of_wind-plot.png
           uv run availability-check.py ${{vars.ERA5_10M_V_COMPONENT_OF_WIND_CID}}
-          mv /tmp/plot.png /tmp/10m_v_component_of_wind-plot.png
           uv run availability-check.py ${{vars.ERA5_100M_U_COMPONENT_OF_WIND_CID}}
-          mv /tmp/plot.png /tmp/100m_u_component_of_wind-plot.png
           uv run availability-check.py ${{vars.ERA5_100M_V_COMPONENT_OF_WIND_CID}}
-          mv /tmp/plot.png /tmp/100m_v_component_of_wind-plot.png
           uv run availability-check.py ${{vars.ERA5_2M_TEMPERATURE_CID}}
-          mv /tmp/plot.png /tmp/2m-temperature-plot.png
           uv run availability-check.py ${{vars.ERA5_SURFACE_PRESSURE_CID}}
-          mv /tmp/plot.png /tmp/surface-pressure-plot.png
 
       - uses: actions/upload-artifact@v4
         with:
