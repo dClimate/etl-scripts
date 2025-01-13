@@ -4,15 +4,16 @@ from py_hamt import IPFSStore, HAMT
 import multiprocessing
 from pathlib import Path
 
+
 def main():
     ds = xr.open_zarr(
-        'gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3',
-        chunks=None, # type: ignore
-        storage_options=dict(token='anon'),
+        "gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3",
+        chunks=None,  # type: ignore
+        storage_options=dict(token="anon"),
     )
 
     # Only ETL precipitation
-    ds = ds.drop_vars([var for var in ds.data_vars if var != 'total_precipitation'])
+    ds = ds.drop_vars([var for var in ds.data_vars if var != "total_precipitation"])
     ds = ds.drop_vars("level")
     ds["total_precipitation"].encoding["compressor"] = numcodecs.Blosc()
     ds["total_precipitation"].encoding.pop("chunks", None)
@@ -23,9 +24,13 @@ def main():
 
     # Only get a subset of for our ETL, so that we can do it piece by piece
     # ds = ds.sel(time=slice('1940-01-01', '1969-12-31'))
-    time_chunk_size = len(ds.time) // 24 # chosen since len(ds.time) = 1323648 is divisible by 24
-    ds_parts = [ds.isel(time=slice(i, i + time_chunk_size))
-              for i in range(0, len(ds.time), time_chunk_size)]
+    time_chunk_size = (
+        len(ds.time) // 24
+    )  # chosen since len(ds.time) = 1323648 is divisible by 24
+    ds_parts = [
+        ds.isel(time=slice(i, i + time_chunk_size))
+        for i in range(0, len(ds.time), time_chunk_size)
+    ]
 
     ds = ds_parts[0]
 
