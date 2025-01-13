@@ -4,9 +4,19 @@
 </a>
 </p>
 
-This repository contains scripts that process ETLs of gridded datasets[^1] to an ipfs cluster.
+This repository contains scripts that process ETLs of gridded datasets to an ipfs cluster.
 
-[^1] A gridded dataset organizes data into cells on a grid. Each cell represents a specific area on the Earth's surface and contains values like temperature, precipitation, etc.
+A gridded dataset organizes data into cells on a grid. Each cell represents a specific area on the Earth's surface and contains values like temperature, precipitation, etc.
 
-Read `README-dev.md` for how to setup your development environment.
-Check out `repo-map.md` for information about what each directory holds.
+For more information, read:
++ `README-dev.md` for setting up a development environment
++ `repo-map.md` for information about what each directory holds
+
+# Dataset Monitoring Dashboard
+[![cpc-availability-check](https://github.com/dClimate/etl-scripts/actions/workflows/cpc-availablity-check.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/cpc-availablity-check.yaml)
+
+[![chirps-availability-check](https://github.com/dClimate/etl-scripts/actions/workflows/chirps-availability-check.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/chirps-availability-check.yaml)
+
+[![era5-availability-check](https://github.com/dClimate/etl-scripts/actions/workflows/era5-availability-check.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/era5-availability-check.yaml)
+
+[![era5-check-identical-to-source](https://github.com/dClimate/etl-scripts/actions/workflows/era5-check-identical-to-source.yaml/badge.svg?branch=main)](https://github.com/dClimate/etl-scripts/actions/workflows/era5-check-identical-to-source.yaml)
