@@ -1,12 +1,10 @@
 import sys
 
 import xarray as xr
-import numcodecs
 import numpy as np
 
 from py_hamt import HAMT, IPFSStore
 from multiformats import CID
-from xarray.core.utils import V
 
 if len(sys.argv) != 3:
     script_name = sys.argv[0]
@@ -18,7 +16,7 @@ cid = CID.decode(sys.argv[2])
 
 google_ds = xr.open_zarr(
     "gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3",
-    chunks=None, # type: ignore
+    chunks=None,  # type: ignore
     storage_options=dict(token="anon"),
 )
 if variable_to_check not in google_ds:
