@@ -16,9 +16,6 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[project.optional-dependencies]
-cyclops = ["boto3"]
-
 [tool.uv.sources]
 py-hamt = { git = "https://github.com/dClimate/py-hamt", rev = "76deec0aa553a3f7a3bb860910a6cd0686d0bdf1" }
 
