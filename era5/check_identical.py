@@ -19,7 +19,9 @@ google_ds = xr.open_zarr(
     chunks=None,  # type: ignore
     storage_options=dict(token="anon"),
 )
-google_ds = google_ds.sel(time=slice(google_ds.attrs['valid_time_start'], google_ds.attrs['valid_time_stop']))
+google_ds = google_ds.sel(
+    time=slice(google_ds.attrs["valid_time_start"], google_ds.attrs["valid_time_stop"])
+)
 if variable_to_check not in google_ds:
     print(f"Variable {variable_to_check} is not in the Google Dataset")
     sys.exit(1)
