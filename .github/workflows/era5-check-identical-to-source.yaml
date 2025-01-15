@@ -37,12 +37,12 @@ jobs:
 
       - name: Check identical to Google source
         run: |
-          uv run era5/check_identical.py land_sea_mask ${{vars.ERA5_LAND_SEA_MASK_CID}}
-          uv run era5/check_identical.py surface_pressure ${{vars.ERA5_SURFACE_PRESSURE_CID}}
-          uv run era5/check_identical.py surface_solar_radiation_downwards ${{vars.ERA5_SURFACE_SOLAR_RADIATION_DOWNWARDS_CID}}
-          uv run era5/check_identical.py total_precipitation ${{vars.ERA5_TOTAL_PRECIPITATION_CID}}
-          uv run era5/check_identical.py 2m_temperature ${{vars.ERA5_2M_TEMPERATURE_CID}}
-          # uv run era5/check_identical.py 10m_u_component_of_wind ${{vars.ERA5_10M_U_COMPONENT_OF_WIND_CID}}
-          # uv run era5/check_identical.py 10m_v_component_of_wind ${{vars.ERA5_10M_V_COMPONENT_OF_WIND_CID}}
-          # uv run era5/check_identical.py 100m_u_component_of_wind ${{vars.ERA5_100M_U_COMPONENT_OF_WIND_CID}}
-          # uv run era5/check_identical.py 100m_v_component_of_wind ${{vars.ERA5_100M_V_COMPONENT_OF_WIND_CID}}
+          uv run era5/check_identical.py --variable-to-check land_sea_mask --cid ${{vars.ERA5_LAND_SEA_MASK_CID}}
+          uv run era5/check_identical.py --variable-to-check surface_pressure --cid ${{vars.ERA5_SURFACE_PRESSURE_CID}}
+          uv run era5/check_identical.py --variable-to-check surface_solar_radiation_downwards --cid ${{vars.ERA5_SURFACE_SOLAR_RADIATION_DOWNWARDS_CID}}
+          uv run era5/check_identical.py --variable-to-check total_precipitation --cid ${{vars.ERA5_TOTAL_PRECIPITATION_CID}}
+          uv run era5/check_identical.py --variable-to-check 2m_temperature --cid ${{vars.ERA5_2M_TEMPERATURE_CID}}
+          # uv run era5/check_identical.py --variable-to-check 10m_u_component_of_wind --cid ${{vars.ERA5_10M_U_COMPONENT_OF_WIND_CID}}
+          # uv run era5/check_identical.py --variable-to-check 10m_v_component_of_wind --cid ${{vars.ERA5_10M_V_COMPONENT_OF_WIND_CID}}
+          # uv run era5/check_identical.py --variable-to-check 100m_u_component_of_wind --cid ${{vars.ERA5_100M_U_COMPONENT_OF_WIND_CID}}
+          # uv run era5/check_identical.py --variable-to-check 100m_v_component_of_wind --cid ${{vars.ERA5_100M_V_COMPONENT_OF_WIND_CID}}
