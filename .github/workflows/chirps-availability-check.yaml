@@ -42,9 +42,9 @@ jobs:
 
       - name: Load xarray Datasets and plot random timepoint for each
         run: |
-          uv run availability-check.py ${{vars.CHIRPS_FINAL_P05_CID}}
-          uv run availability-check.py ${{vars.CHIRPS_FINAL_P25_CID}}
-          uv run availability-check.py ${{vars.CHIRPS_PRELIM_P05_CID}}
+          uv run check-available.py --cid ${{vars.CHIRPS_FINAL_P05_CID}}
+          uv run check-available.py --cid ${{vars.CHIRPS_FINAL_P25_CID}}
+          uv run check-available.py --cid ${{vars.CHIRPS_PRELIM_P05_CID}}
 
       - uses: actions/upload-artifact@v4
         with:

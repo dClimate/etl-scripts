@@ -1,8 +1,7 @@
 #!/bin/bash
 # This script uses restic to backup ~/.ipfs to an S3 compatible cloud storage service
 
-pgrep ipfs
-if (( $? == 0 )); then
+if pgrep ipfs; then
     echo Error: ipfs daemon looks to be running! >&2
     echo The daemon may be in the process of changing files, restic may backup an invalid state >&2
     echo Exiting now, please shutdown the ipfs daemon before trying to run the backup again >&2
