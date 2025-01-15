@@ -37,15 +37,15 @@ jobs:
 
       - name: Load xarray Datasets and plot random timepoint for each
         run: |
-          uv run availability-check.py ${{vars.ERA5_LAND_SEA_MASK_CID}}
-          uv run availability-check.py ${{vars.ERA5_SURFACE_PRESSURE_CID}}
-          uv run availability-check.py ${{vars.ERA5_SURFACE_SOLAR_RADIATION_DOWNWARDS_CID}}
-          uv run availability-check.py ${{vars.ERA5_TOTAL_PRECIPITATION_CID}}
-          uv run availability-check.py ${{vars.ERA5_2M_TEMPERATURE_CID}}
-          # uv run availability-check.py ${{vars.ERA5_10M_U_COMPONENT_OF_WIND_CID}}
-          # uv run availability-check.py ${{vars.ERA5_10M_V_COMPONENT_OF_WIND_CID}}
-          # uv run availability-check.py ${{vars.ERA5_100M_U_COMPONENT_OF_WIND_CID}}
-          # uv run availability-check.py ${{vars.ERA5_100M_V_COMPONENT_OF_WIND_CID}}
+          uv run check-available.py --cid ${{vars.ERA5_LAND_SEA_MASK_CID}}
+          uv run check-available.py --cid ${{vars.ERA5_SURFACE_PRESSURE_CID}}
+          uv run check-available.py --cid ${{vars.ERA5_SURFACE_SOLAR_RADIATION_DOWNWARDS_CID}}
+          uv run check-available.py --cid ${{vars.ERA5_TOTAL_PRECIPITATION_CID}}
+          uv run check-available.py --cid ${{vars.ERA5_2M_TEMPERATURE_CID}}
+          # uv run check-available.py --cid ${{vars.ERA5_10M_U_COMPONENT_OF_WIND_CID}}
+          # uv run check-available.py --cid ${{vars.ERA5_10M_V_COMPONENT_OF_WIND_CID}}
+          # uv run check-available.py --cid ${{vars.ERA5_100M_U_COMPONENT_OF_WIND_CID}}
+          # uv run check-available.py --cid ${{vars.ERA5_100M_V_COMPONENT_OF_WIND_CID}}
 
       - uses: actions/upload-artifact@v4
         with:
