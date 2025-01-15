@@ -26,7 +26,6 @@ jobs:
           ipfs swarm peering add "${{vars.FLUORINE_MULTIADDRESS}}"
           ipfs swarm peering add "${{vars.THORIUM_MULTIADDRESS}}"
           ipfs swarm peering add "${{vars.CERIUM_MULTIADDRESS}}"
-          ipfs swarm peering add "${{vars.HYDROGEN_MULTIADDRESS}}"
 
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@v5
@@ -42,7 +41,7 @@ jobs:
           uv run era5/check_identical.py surface_pressure ${{vars.ERA5_SURFACE_PRESSURE_CID}}
           uv run era5/check_identical.py surface_solar_radiation_downwards ${{vars.ERA5_SURFACE_SOLAR_RADIATION_DOWNWARDS_CID}}
           uv run era5/check_identical.py total_precipitation ${{vars.ERA5_TOTAL_PRECIPITATION_CID}}
-          # uv run era5/check_identical.py 2m_temperature ${{vars.ERA5_2M_TEMPERATURE_CID}}
+          uv run era5/check_identical.py 2m_temperature ${{vars.ERA5_2M_TEMPERATURE_CID}}
           # uv run era5/check_identical.py 10m_u_component_of_wind ${{vars.ERA5_10M_U_COMPONENT_OF_WIND_CID}}
           # uv run era5/check_identical.py 10m_v_component_of_wind ${{vars.ERA5_10M_V_COMPONENT_OF_WIND_CID}}
           # uv run era5/check_identical.py 100m_u_component_of_wind ${{vars.ERA5_100M_U_COMPONENT_OF_WIND_CID}}
