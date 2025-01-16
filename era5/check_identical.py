@@ -8,10 +8,13 @@ from multiformats import CID
 
 
 @click.command()
-@click.option("--cid")
-@click.option("--variable-to-check")
+@click.argument("variable-to-check")
+@click.argument("cid")
 @click.pass_context
 def check_identical(ctx: Context, variable_to_check: str, cid: str):
+    """
+    Check that a random subset of the Google ERA5 ETLed VARIABLE_TO_CHECK data and the data on IPFS at CID are equivalent.
+    """
     google_ds = xr.open_zarr(
         "gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3",
         chunks=None,  # type: ignore
@@ -46,7 +49,9 @@ def check_identical(ctx: Context, variable_to_check: str, cid: str):
     print(google_subset)
     print("====== IPFS subset ======")
     print(da_subset)
-    if not xr.testing.assert_identical(google_subset, da_subset):
+    try:
+        xr.testing.assert_identical(google_subset, da_subset)
+    except AssertionError:
         ctx.exit(1)
 
 
