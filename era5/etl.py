@@ -54,7 +54,7 @@ if num_ds == 0:
     print(ds)
     ds.to_zarr(store=hamt)
 else:
-    with Path(f"/srv/ipfs/etl-scripts/era5/{data_var}-part{num_ds-1}.cid").open(
+    with Path(f"/srv/ipfs/etl-scripts/era5/{data_var}-part{num_ds - 1}.cid").open(
         "r"
     ) as f:
         original_ds_cid_str = f.read().rstrip()
