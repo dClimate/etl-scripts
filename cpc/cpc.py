@@ -39,6 +39,7 @@ def download_year(dataset: str, year: int) -> Path:
 
     nc_path = scratchspace / f"{dataset}-{year}.nc"
     year_url = f"{base_url}{year}.nc"
+
     curl_result = subprocess.run(
         [
             "curl",
@@ -60,7 +61,7 @@ def download_year(dataset: str, year: int) -> Path:
 @click.pass_context
 def get_available_timespan(ctx, dataset):
     """
-    Gets the earliest and latest timestamps for this dataset and prints to stdout. Output looks like f"{earliest} {latest}"
+    Gets the earliest and latest timestamps for this dataset and prints to stdout. Output looks like "earliest latest".
     """
     start_year: int
     match dataset:
@@ -99,12 +100,29 @@ def get_available_timespan(ctx, dataset):
     print(f"{earliest} {latest}")
 
 
+@click.command()
+@click.argument("dataset", type=datasets_choice)
+@click.argument("timestamp", type=click.DateTime)
+def download(dataset, timestamp: datetime):
+    """Downloads to the scratchspace the netCDF file that contains the data for the timestamp, which should be formatted in ISO8601. This means downloading
+
+    e.g. uv run cpc.py download precip-conus 2014-01-01
+    """
+    year = timestamp.year
+    print(f"Downloading netCDF for year {year}", file=sys.stderr)
+    download_year(dataset, year)
+
+
 @click.group()
 def cli():
+    """
+    Various commands ETLing CPC datasets. All these programs will create a scratch space folder for temporary files, named "scratchspace" located in the same directory the cpc.py file is in.
+    """
     pass
 
 
 cli.add_command(get_available_timespan)
+cli.add_command(download)
 
 if __name__ == "__main__":
     cli()
