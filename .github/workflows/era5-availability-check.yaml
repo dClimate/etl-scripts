@@ -42,10 +42,10 @@ jobs:
           uv run plot-random-timepoint.py ${{vars.ERA5_SURFACE_SOLAR_RADIATION_DOWNWARDS_CID}} /tmp
           uv run plot-random-timepoint.py ${{vars.ERA5_TOTAL_PRECIPITATION_CID}} /tmp
           uv run plot-random-timepoint.py ${{vars.ERA5_2M_TEMPERATURE_CID}} /tmp
-          # uv run plot-random-timepoint.py ${{vars.ERA5_10M_U_COMPONENT_OF_WIND_CID}} /tmp
-          # uv run plot-random-timepoint.py ${{vars.ERA5_10M_V_COMPONENT_OF_WIND_CID}} /tmp
-          # uv run plot-random-timepoint.py ${{vars.ERA5_100M_U_COMPONENT_OF_WIND_CID}} /tmp
-          # uv run plot-random-timepoint.py ${{vars.ERA5_100M_V_COMPONENT_OF_WIND_CID}} /tmp
+          uv run plot-random-timepoint.py ${{vars.ERA5_10M_U_COMPONENT_OF_WIND_CID}} /tmp
+          uv run plot-random-timepoint.py ${{vars.ERA5_10M_V_COMPONENT_OF_WIND_CID}} /tmp
+          uv run plot-random-timepoint.py ${{vars.ERA5_100M_U_COMPONENT_OF_WIND_CID}} /tmp
+          uv run plot-random-timepoint.py ${{vars.ERA5_100M_V_COMPONENT_OF_WIND_CID}} /tmp
 
       - uses: actions/upload-artifact@v4
         with:
