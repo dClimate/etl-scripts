@@ -1,13 +1,12 @@
-import click
-
-from pathlib import Path
 import sys
+from pathlib import Path
 
-import xarray as xr
-import numpy as np
+import click
 import matplotlib.pyplot as plt
-from py_hamt import HAMT, IPFSStore
+import numpy as np
+import xarray as xr
 from multiformats import CID
+from py_hamt import HAMT, IPFSStore
 
 
 @click.command

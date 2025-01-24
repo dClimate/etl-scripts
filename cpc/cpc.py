@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
 import os
-import sys
-from pathlib import Path
 import subprocess
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
 
 import click
 import numpy as np
@@ -11,7 +11,6 @@ from multiformats import CID
 from py_hamt import HAMT, IPFSStore
 
 from etl_scripts.grabbag import eprint
-
 
 scratchspace: Path = (Path(__file__).parent / "scratchspace").absolute()
 os.makedirs(scratchspace, exist_ok=True)
@@ -87,7 +86,7 @@ def get_available_timespan(ctx, dataset):
         case _:
             raise ValueError(f"Invalid dataset {dataset}")
 
-    current_year = datetime.now(timezone.utc).year
+    current_year = datetime.now(UTC).year
     eprint(
         f"Downloading netCDF of current year {current_year} to see latest data coverage"
     )

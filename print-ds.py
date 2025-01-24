@@ -2,8 +2,8 @@ from pathlib import Path
 
 import click
 import xarray as xr
-from py_hamt import HAMT, IPFSStore
 from multiformats import CID
+from py_hamt import HAMT, IPFSStore
 
 
 @click.command()
