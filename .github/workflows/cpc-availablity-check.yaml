@@ -42,10 +42,10 @@ jobs:
 
       - name: Load xarray Datasets and plot random timepoint for each
         run: |
-          uv run check-available.py --cid ${{vars.CPC_PRECIP_CONUS_CID}}
-          uv run check-available.py --cid ${{vars.CPC_PRECIP_GLOBAL_CID}}
-          uv run check-available.py --cid ${{vars.CPC_TMAX_CID}}
-          uv run check-available.py --cid ${{vars.CPC_TMIN_CID}}
+          uv run plot-random-timepoint.py ${{vars.CPC_PRECIP_CONUS_CID}} /tmp
+          uv run plot-random-timepoint.py ${{vars.CPC_PRECIP_GLOBAL_CID}} /tmp
+          uv run plot-random-timepoint.py ${{vars.CPC_TMAX_CID}} /tmp
+          uv run plot-random-timepoint.py ${{vars.CPC_TMIN_CID}} /tmp
 
       - uses: actions/upload-artifact@v4
         with:
