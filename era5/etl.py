@@ -1,10 +1,10 @@
-import xarray as xr
-import numcodecs
-from py_hamt import IPFSStore, HAMT
-from multiformats import CID
+import sys
 from pathlib import Path
 
-import sys
+import numcodecs
+import xarray as xr
+from multiformats import CID
+from py_hamt import HAMT, IPFSStore
 
 if len(sys.argv) != 4:
     script_name = sys.argv[0]

@@ -1,11 +1,10 @@
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
+import numcodecs
 import numpy as np
 import xarray as xr
-import numcodecs
-
 from grabbag import eprint
 
 

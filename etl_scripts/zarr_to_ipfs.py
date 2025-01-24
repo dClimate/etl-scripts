@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from py_hamt import HAMT, IPFSStore
 import xarray as xr
+from py_hamt import HAMT, IPFSStore
 
 
 def load_zarr_to_ipfs(zarr_path: Path):
