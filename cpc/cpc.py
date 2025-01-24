@@ -7,6 +7,10 @@ import subprocess
 import click
 import numpy as np
 import xarray as xr
+from multiformats import CID
+from py_hamt import HAMT, IPFSStore
+
+from etl_scripts.grabbag import eprint
 
 
 scratchspace: Path = (Path(__file__).parent / "scratchspace").absolute()
@@ -15,9 +19,13 @@ os.makedirs(scratchspace, exist_ok=True)
 datasets_choice = click.Choice(["precip-conus", "precip-global", "tmin", "tmax"])
 
 
+def make_nc_path(dataset: str, year: int) -> Path:
+    return scratchspace / f"{dataset}-{year}.nc"
+
+
 def download_year(dataset: str, year: int) -> Path:
     """
-    Downloads the nc file for that year, and returns a path to it.
+    Downloads the nc file for that year, and returns a path to it. Idempotent since it uses curl's timestamping check availability.
 
     Raises ValueError on invalid dataset. Raises Exception if download fails.
     """
@@ -37,7 +45,7 @@ def download_year(dataset: str, year: int) -> Path:
         case _:
             raise ValueError(f"Invalid dataset {dataset}")
 
-    nc_path = scratchspace / f"{dataset}-{year}.nc"
+    nc_path = make_nc_path(dataset, year)
     year_url = f"{base_url}{year}.nc"
 
     curl_result = subprocess.run(
@@ -56,7 +64,14 @@ def download_year(dataset: str, year: int) -> Path:
     return nc_path
 
 
-@click.command()
+def standardize(ds: xr.Dataset) -> xr.Dataset:
+    """Apply our standardizations to a CPC dataset."""
+    ds = ds.rename({"lat": "latitude", "lon": "longitude"})
+
+    return ds
+
+
+@click.command
 @click.argument("dataset", type=datasets_choice)
 @click.pass_context
 def get_available_timespan(ctx, dataset):
@@ -73,14 +88,12 @@ def get_available_timespan(ctx, dataset):
             raise ValueError(f"Invalid dataset {dataset}")
 
     current_year = datetime.now(timezone.utc).year
-    print(
-        f"Downloading netCDF of year {current_year} to see latest data coverage",
-        file=sys.stderr,
+    eprint(
+        f"Downloading netCDF of current year {current_year} to see latest data coverage"
     )
     latest_nc = download_year(dataset, current_year)
-    print(
-        f"Downloading netCDF of start year {start_year} to see earliest data coverage",
-        file=sys.stderr,
+    eprint(
+        f"Downloading netCDF of start year {start_year} to see earliest data coverage"
     )
     earliest_nc = download_year(dataset, start_year)
     ds_latest = xr.open_dataset(latest_nc)
@@ -88,29 +101,113 @@ def get_available_timespan(ctx, dataset):
 
     # Sometimes, right after the start of a new year, you'll get netCDf files just with no data in them
     if len(ds_latest.time) == 0:
-        print(
-            f"Found no data in nc file of year {current_year}, downloading prior year",
-            file=sys.stderr,
+        eprint(
+            f"Found no data in nc file of year {current_year}, downloading prior year"
         )
         latest_nc = download_year(dataset, current_year - 1)
         ds_latest = xr.open_dataset(latest_nc)
 
-    latest: np.datetime64 = ds_latest.time[len(ds_latest.time) - 1].values
-    earliest: np.datetime64 = ds_earliest.time[0].values
+    earliest_dt64: np.datetime64 = ds_earliest.time[0].values
+    latest_dt64: np.datetime64 = ds_latest.time[len(ds_latest.time) - 1].values
+
+    earliest_dt: datetime = datetime.fromisoformat(earliest_dt64.astype(str))
+    latest_dt: datetime = datetime.fromisoformat(latest_dt64.astype(str))
+
+    # only output in YYYY-MM-DD format for ISO8601 to reflect that CPC data only has precision in days
+    earliest = earliest_dt.strftime("%Y-%m-%d")
+    latest = latest_dt.strftime("%Y-%m-%d")
     print(f"{earliest} {latest}")
 
 
-@click.command()
+@click.command
 @click.argument("dataset", type=datasets_choice)
-@click.argument("timestamp", type=click.DateTime)
+@click.argument("timestamp", type=click.DateTime())
 def download(dataset, timestamp: datetime):
     """Downloads to the scratchspace the netCDF file that contains the data for the timestamp, which should be formatted in ISO8601. This means downloading
 
     e.g. uv run cpc.py download precip-conus 2014-01-01
     """
     year = timestamp.year
-    print(f"Downloading netCDF for year {year}", file=sys.stderr)
+    eprint(f"Downloading netCDF for year {year}")
     download_year(dataset, year)
+
+
+@click.command
+@click.argument("dataset", type=datasets_choice)
+@click.argument("cid")
+@click.argument("timestamp", type=click.DateTime())
+@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
+@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option(
+    "--instantiate",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Write this timestamp to a new Zarr entirely instead of appending.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Do a dry run, so load the datasets from disk and IFPS but don't actually append new data to ipfs. If instantiating, just print what we would have instantiated a new Zarr with.",
+)
+def append(
+    dataset,
+    cid: str,
+    timestamp: datetime,
+    gateway_uri_stem: str,
+    rpc_uri_stem: str,
+    instantiate: bool,
+    dry_run: bool,
+):
+    """
+    Append the data at timestamp onto the Dataset that cid points to, print out the CID of the new HAMT root.
+
+    This command requires the kubo daemon to be running.
+    """
+    nc_path = make_nc_path(dataset, timestamp.year)
+    if not nc_path.exists():
+        eprint(
+            f"Did not find a netCDF file for year {timestamp.year} at the path {nc_path}"
+        )
+        sys.exit(1)
+
+    ipfs_store = IPFSStore()
+    if gateway_uri_stem is not None:
+        ipfs_store.gateway_uri_stem = gateway_uri_stem
+    if rpc_uri_stem is not None:
+        ipfs_store.rpc_uri_stem = rpc_uri_stem
+
+    ds = xr.open_dataset(nc_path)
+    ds = standardize(ds)
+    ds = ds.sel(time=timestamp)
+    if instantiate:
+        eprint("====== Writing this dataset to a new Zarr on IPFS ======")
+        eprint(ds)
+        if dry_run:
+            sys.exit(0)
+        hamt = HAMT(store=ipfs_store)
+        ds.to_zarr(store=hamt)
+        eprint("HAMT CID")
+        print(hamt.root_node_id)
+        sys.exit(0)
+
+    eprint("====== Appending this dataset ======")
+    eprint(ds)
+
+    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid), read_only=False)
+    ipfs_ds = xr.open_zarr(store=hamt)
+    eprint("====== Loaded in this Dataset from IPFS ======")
+    eprint(ipfs_ds)
+
+    eprint("====== Appending to IPFS ======")
+    if not dry_run:
+        ds.to_zarr(store=hamt, mode="a", append_dim="time")
+        eprint("New HAMT CID")
+        print(hamt.root_node_id)
+    else:
+        eprint("In dry run mode, otherwise would have printed new CID here")
 
 
 @click.group()
@@ -123,6 +220,7 @@ def cli():
 
 cli.add_command(get_available_timespan)
 cli.add_command(download)
+cli.add_command(append)
 
 if __name__ == "__main__":
     cli()
