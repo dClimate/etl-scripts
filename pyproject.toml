@@ -20,5 +20,11 @@ build-backend = "hatchling.build"
 [tool.uv.sources]
 py-hamt = { git = "https://github.com/dClimate/py-hamt" }
 
+[tool.ruff.lint]
+select = ["I"]
+
+[tool.ruff.format]
+quote-style = "double"
+
 [dependency-groups]
 dev = ["ruff>=0.8.0"]

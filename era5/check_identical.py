@@ -1,10 +1,9 @@
 import click
-from click import Context
-
-import xarray as xr
 import numpy as np
-from py_hamt import HAMT, IPFSStore
+import xarray as xr
+from click import Context
 from multiformats import CID
+from py_hamt import HAMT, IPFSStore
 
 
 @click.command()

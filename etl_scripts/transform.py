@@ -1,10 +1,11 @@
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
+import numcodecs
 import numpy as np
 import xarray as xr
-import numcodecs
+from grabbag import eprint
 
 
 def fix_fill_missing_value(ds: xr.Dataset) -> tuple[xr.Dataset, dict]:
@@ -62,10 +63,6 @@ def exit_if_zarr_uptodate(zarr_path: Path, nc_files: list[Path]):
     if zarr_newer:
         print(f"Skipping generation of Zarr {zarr_path}, it is newer than .nc files")
         sys.exit(0)
-
-
-def eprint(out: str):
-    print(out, file=sys.stderr)
 
 
 def print_usage():

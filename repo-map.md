@@ -4,9 +4,6 @@ Scripts used for collecting metrics on the running cluster, such as time to firs
 # `operations/`
 Utilities for running the cluster.
 
-# `shared_python_scripts/`
-Python scripts that are utilized across multiple ETLs.
-
 # Dataset Directories
 Each of these following directories correspond to an organization that produces multiple datasets.
 ## `cpc/`

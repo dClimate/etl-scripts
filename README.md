@@ -9,7 +9,6 @@ This repository contains scripts that process ETLs of gridded datasets to an ipf
 A gridded dataset organizes data into cells on a grid. Each cell represents a specific area on the Earth's surface and contains values like temperature, precipitation, etc.
 
 For more information, read:
-+ `README-dev.md` for setting up a development environment
 + `repo-map.md` for information about what each directory holds
 
 # Dataset Monitoring Dashboard
