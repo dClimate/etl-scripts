@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import click
+import numcodecs
 import numpy as np
 import xarray as xr
 from multiformats import CID
@@ -66,6 +67,23 @@ def download_year(dataset: str, year: int) -> Path:
 def standardize(ds: xr.Dataset) -> xr.Dataset:
     """Apply our standardizations to a CPC dataset."""
     ds = ds.rename({"lat": "latitude", "lon": "longitude"})
+    # Results in about 1 MB sized chunks
+    # We chunk small in spatial, wide in time
+    ds = ds.chunk({"time": 1769, "latitude": 24, "longitude": 24})
+
+    for var in ds.data_vars:
+        da = ds[var]
+
+        # Apply compression
+        # clevel=9 means highest compression level (0-9 scale), we are optimizing for read speed
+        da.encoding["compressor"] = numcodecs.Blosc(clevel=9)
+
+        # Prefer Fill Value over missing_value
+        da.encoding["_FillValue"] = np.nan
+        if "missing_value" in da.attrs:
+            del da.attrs["missing_value"]
+        if "missing_value" in da.encoding:
+            del da.encoding["missing_value"]
 
     return ds
 
@@ -142,7 +160,7 @@ def download(dataset, timestamp: datetime):
     is_flag=True,
     show_default=True,
     default=False,
-    help="Write this timestamp to a new Zarr entirely instead of appending.",
+    help="Write this timestamp to a new Zarr entirely instead of appending. If set, then the command will ignore the CID.",
 )
 @click.option(
     "--dry-run",
@@ -187,6 +205,9 @@ def append(
         if dry_run:
             sys.exit(0)
         hamt = HAMT(store=ipfs_store)
+        import pdb
+
+        pdb.set_trace()
         ds.to_zarr(store=hamt)
         eprint("HAMT CID")
         print(hamt.root_node_id)
