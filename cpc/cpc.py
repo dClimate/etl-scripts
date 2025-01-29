@@ -71,6 +71,10 @@ def standardize(ds: xr.Dataset) -> xr.Dataset:
     # We chunk small in spatial, wide in time
     ds = ds.chunk({"time": 1769, "latitude": 24, "longitude": 24})
 
+    # Reorder these coordinates to be ascending order only
+    ds = ds.sortby("latitude", ascending=True)
+    ds = ds.sortby("longitude", ascending=True)
+
     for var in ds.data_vars:
         da = ds[var]
 
@@ -140,7 +144,7 @@ def get_available_timespan(ctx, dataset):
 @click.argument("dataset", type=datasets_choice)
 @click.argument("timestamp", type=click.DateTime())
 def download(dataset, timestamp: datetime):
-    """Downloads to the scratchspace the netCDF file that contains the data for the timestamp, which should be formatted in ISO8601. This means downloading
+    """Download to the scratchspace the netCDF file that contains the data for the timestamp, which should be formatted in ISO8601.
 
     e.g. uv run cpc.py download precip-conus 2014-01-01
     """
@@ -155,6 +159,13 @@ def download(dataset, timestamp: datetime):
 @click.argument("timestamp", type=click.DateTime())
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option(
+    "--year",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Append/instantiate with the entire year that this timestamp corresponds to.",
+)
 @click.option(
     "--instantiate",
     is_flag=True,
@@ -176,6 +187,7 @@ def append(
     gateway_uri_stem: str,
     rpc_uri_stem: str,
     instantiate: bool,
+    year: bool,
     dry_run: bool,
 ):
     """
@@ -198,16 +210,20 @@ def append(
 
     ds = xr.open_dataset(nc_path)
     ds = standardize(ds)
-    ds = ds.sel(time=timestamp)
+
+    if year:
+        ds = ds.sel(
+            time=str(timestamp.year)
+        )  # convert to string auto aggregate all timestamps within the year
+    else:
+        ds = ds.sel(time=timestamp)
+
     if instantiate:
         eprint("====== Writing this dataset to a new Zarr on IPFS ======")
         eprint(ds)
         if dry_run:
             sys.exit(0)
         hamt = HAMT(store=ipfs_store)
-        import pdb
-
-        pdb.set_trace()
         ds.to_zarr(store=hamt)
         eprint("HAMT CID")
         print(hamt.root_node_id)
@@ -230,7 +246,7 @@ def append(
         eprint("In dry run mode, otherwise would have printed new CID here")
 
 
-@click.group()
+@click.group
 def cli():
     """
     Various commands ETLing CPC datasets. All these programs will create a scratch space folder for temporary files, named "scratchspace" located in the same directory the cpc.py file is in.
