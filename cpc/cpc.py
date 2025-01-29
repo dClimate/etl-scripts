@@ -20,7 +20,7 @@ datasets_choice = click.Choice(["precip-conus", "precip-global", "tmin", "tmax"]
 
 
 def make_nc_path(dataset: str, year: int) -> Path:
-    return scratchspace / f"{dataset}-{year}.nc"
+    return scratchspace / f"{dataset}_{year}.nc"
 
 
 def download_year(dataset: str, year: int) -> Path:
