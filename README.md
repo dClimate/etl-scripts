@@ -12,6 +12,7 @@ For more information, read:
 + `repo-map.md` for information about what each directory holds
 
 # Dataset Monitoring Dashboard
+## Dataset Availability
 [![cpc-availability-check](https://github.com/dClimate/etl-scripts/actions/workflows/cpc-availablity-check.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/cpc-availablity-check.yaml)
 
 [![chirps-availability-check](https://github.com/dClimate/etl-scripts/actions/workflows/chirps-availability-check.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/chirps-availability-check.yaml)
@@ -19,3 +20,8 @@ For more information, read:
 [![era5-availability-check](https://github.com/dClimate/etl-scripts/actions/workflows/era5-availability-check.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/era5-availability-check.yaml)
 
 [![era5-check-identical-to-source](https://github.com/dClimate/etl-scripts/actions/workflows/era5-check-identical-to-source.yaml/badge.svg?branch=main)](https://github.com/dClimate/etl-scripts/actions/workflows/era5-check-identical-to-source.yaml)
+
+## Datasets are up to date
+[![cpc-check-uptodate](https://github.com/dClimate/etl-scripts/actions/workflows/cpc-check-uptodate.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/cpc-check-uptodate.yaml)
+
+[![chirps-check-uptodate](https://github.com/dClimate/etl-scripts/actions/workflows/chirps-check-uptodate.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/chirps-check-uptodate.yaml)
