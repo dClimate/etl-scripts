@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import click
@@ -5,12 +6,26 @@ import xarray as xr
 from multiformats import CID
 from py_hamt import HAMT, IPFSStore
 
+from etl_scripts.grabbag import eprint
+
 
 @click.command()
 @click.argument("cid")
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
-def ipfs(cid: str, gateway_uri_stem: str, rpc_uri_stem: str):
+@click.option(
+    "--print-latest-timestamps",
+    default=1,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="Print the latest time coordinate values. Prints in order from the latest time coordinate value to the most recent, assuming time coordinate is in ascending order. No guarantee on formatting in ISO8601, it just prints whatever xarray presents as the string value.",
+)
+def ipfs(
+    cid: str,
+    gateway_uri_stem: str | None,
+    rpc_uri_stem: str | None,
+    print_latest_timestamps: int | None,
+):
     """
     Set CID to the root of a HAMT from py-hamt, load the zarr into xarray, and print the Dataset.
     """
@@ -22,7 +37,22 @@ def ipfs(cid: str, gateway_uri_stem: str, rpc_uri_stem: str):
 
     hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid), read_only=True)
     ds = xr.open_zarr(store=hamt)
-    print(ds)
+    if print_latest_timestamps is None:
+        print(ds)
+    else:
+        if "time" not in ds:
+            eprint("Error: Time coordinate does not exist in dataset")
+            eprint(ds)
+            sys.exit(1)
+        l = len(ds.time)
+        if l < print_latest_timestamps:
+            eprint(
+                f"Error: Time coordinate has {l} values in dataset, but {print_latest_timestamps} were requested"
+            )
+            eprint(ds)
+            sys.exit(1)
+        for i in range(0, print_latest_timestamps):
+            print(ds["time"][l - 1 - i].values)
 
 
 @click.command
