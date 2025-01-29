@@ -15,16 +15,16 @@ from etl_scripts.grabbag import eprint
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 @click.option(
     "--print-latest-timestamps",
-    default=1,
+    default=0,
     show_default=True,
-    type=click.IntRange(min=1),
-    help="Print the latest time coordinate values. Prints in order from the latest time coordinate value to the most recent, assuming time coordinate is in ascending order. No guarantee on formatting in ISO8601, it just prints whatever xarray presents as the string value.",
+    type=click.IntRange(min=0),
+    help="Print the latest time coordinate values. If 0 then just print the Dataset. Prints in order from the latest time coordinate value to the most recent, assuming time coordinate is in ascending order. No guarantee on formatting in ISO8601, it just prints whatever xarray presents as the string value.",
 )
 def ipfs(
     cid: str,
     gateway_uri_stem: str | None,
     rpc_uri_stem: str | None,
-    print_latest_timestamps: int | None,
+    print_latest_timestamps: int,
 ):
     """
     Set CID to the root of a HAMT from py-hamt, load the zarr into xarray, and print the Dataset.
@@ -37,7 +37,7 @@ def ipfs(
 
     hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid), read_only=True)
     ds = xr.open_zarr(store=hamt)
-    if print_latest_timestamps is None:
+    if print_latest_timestamps == 0:
         print(ds)
     else:
         if "time" not in ds:
