@@ -160,6 +160,13 @@ def download(dataset, timestamp: datetime):
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 @click.option(
+    "--year",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Append/instantiate with the entire year that this timestamp corresponds to.",
+)
+@click.option(
     "--instantiate",
     is_flag=True,
     show_default=True,
@@ -180,6 +187,7 @@ def append(
     gateway_uri_stem: str,
     rpc_uri_stem: str,
     instantiate: bool,
+    year: bool,
     dry_run: bool,
 ):
     """
@@ -202,7 +210,14 @@ def append(
 
     ds = xr.open_dataset(nc_path)
     ds = standardize(ds)
-    ds = ds.sel(time=timestamp)
+
+    if year:
+        ds = ds.sel(
+            time=str(timestamp.year)
+        )  # convert to string auto aggregate all timestamps within the year
+    else:
+        ds = ds.sel(time=timestamp)
+
     if instantiate:
         eprint("====== Writing this dataset to a new Zarr on IPFS ======")
         eprint(ds)
@@ -231,7 +246,7 @@ def append(
         eprint("In dry run mode, otherwise would have printed new CID here")
 
 
-@click.group()
+@click.group
 def cli():
     """
     Various commands ETLing CPC datasets. All these programs will create a scratch space folder for temporary files, named "scratchspace" located in the same directory the cpc.py file is in.
