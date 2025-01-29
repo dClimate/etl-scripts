@@ -1,0 +1,47 @@
+name: chirps-check-uptodate
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *" # Once a day at midnight
+
+permissions:
+  contents: read
+
+jobs:
+  load_and_plot:
+    runs-on: ubuntu-latest
+
+    env:
+      FLUORINE_MULTIADDRESS: ${{vars.FLUORINE_MULTIADDRESS}}
+      THORIUM_MULTIADDRESS: ${{vars.THORIUM_MULTIADDRESS}}
+      CERIUM_MULTIADDRESS: ${{vars.CERIUM_MULTIADDRESS}}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install IPFS
+        uses: ibnesayeed/setup-ipfs@c779340c110024feeb46579fef211c89332caf85
+        with:
+          ipfs_version: ${{vars.IPFS_VERSION}}
+          run_daemon: true
+
+      - name: Swarm peering add to our IPFS Servers
+        run: |
+          ipfs swarm peering add "$FLUORINE_MULTIADDRESS"
+          ipfs swarm peering add "$THORIUM_MULTIADDRESS"
+          ipfs swarm peering add "$CERIUM_MULTIADDRESS"
+
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Install all dependencies
+        run: uv sync
+
+      - name: Check if each dataset is up to date
+        run: |
+          uv run check-uptodate.py chirps/chirps.py final-p05 ${{vars.CHIRPS_FINAL_P05_CID}}
+          uv run check-uptodate.py chirps/chirps.py final-p25 ${{vars.CHIRPS_FINAL_P25_CID}}
+          uv run check-uptodate.py chirps/chirps.py prelim-p05 ${{vars.CHIRPS_PRELIM_P05_CID}}
