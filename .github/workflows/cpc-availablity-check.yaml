@@ -12,11 +12,6 @@ jobs:
   load_and_plot:
     runs-on: ubuntu-latest
 
-    env:
-      FLUORINE_MULTIADDRESS: ${{vars.FLUORINE_MULTIADDRESS}}
-      THORIUM_MULTIADDRESS: ${{vars.THORIUM_MULTIADDRESS}}
-      CERIUM_MULTIADDRESS: ${{vars.CERIUM_MULTIADDRESS}}
-
     steps:
       - uses: actions/checkout@v4
 
@@ -28,9 +23,9 @@ jobs:
 
       - name: Swarm peering add to our IPFS Servers
         run: |
-          ipfs swarm peering add "$FLUORINE_MULTIADDRESS"
-          ipfs swarm peering add "$THORIUM_MULTIADDRESS"
-          ipfs swarm peering add "$CERIUM_MULTIADDRESS"
+          ipfs swarm peering add "${{vars.FLUORINE_MULTIADDRESS}}"
+          ipfs swarm peering add "${{vars.CERIUM_MULTIADDRESS}}"
+          ipfs swarm peering add "${{vars.BISMUTH_MULTIADDRESS}}"
 
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@v5

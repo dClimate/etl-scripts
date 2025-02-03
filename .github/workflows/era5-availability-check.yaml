@@ -24,8 +24,8 @@ jobs:
       - name: Swarm peering add to our IPFS Servers
         run: |
           ipfs swarm peering add "${{vars.FLUORINE_MULTIADDRESS}}"
-          ipfs swarm peering add "${{vars.THORIUM_MULTIADDRESS}}"
           ipfs swarm peering add "${{vars.CERIUM_MULTIADDRESS}}"
+          ipfs swarm peering add "${{vars.BISMUTH_MULTIADDRESS}}"
 
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@v5
