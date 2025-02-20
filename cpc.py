@@ -13,31 +13,10 @@ from py_hamt import HAMT, IPFSStore
 
 from etl_scripts.grabbag import eprint
 
-scratchspace: Path = (Path(__file__).parent / "scratchspace").absolute()
+scratchspace: Path = (Path(__file__).parent / "scratchspace" / "cpc").absolute()
 os.makedirs(scratchspace, exist_ok=True)
 
-datasets_choice = click.Choice(["final-p05", "final-p25", "prelim-p05"])
-
-
-def make_nc_path(dataset: str, year: int) -> Path:
-    return scratchspace / f"{dataset}_{year}.nc"
-
-
-def make_url(dataset: str, year: int) -> str:
-    base_url = "https://data.chc.ucsb.edu/products/CHIRPS-2.0"
-    url: str
-    # Find these urls by just hitting index.html instead of the .nc file, e.g. https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/netcdf/p05/
-    match dataset:
-        case "final-p05":
-            url = f"{base_url}/global_daily/netcdf/p05/chirps-v2.0.{year}.days_p05.nc"
-        case "final-p25":
-            url = f"{base_url}/global_daily/netcdf/p25/chirps-v2.0.{year}.days_p25.nc"
-        case "prelim-p05":
-            url = f"{base_url}/prelim/global_daily/netcdf/p05/chirps-v2.0.{year}.days_p05.nc"
-        case _:
-            raise ValueError(f"Invalid dataset {dataset}")
-
-    return url
+datasets_choice = click.Choice(["precip-conus", "precip-global", "tmin", "tmax"])
 
 
 def download_year(dataset: str, year: int) -> Path:
@@ -46,70 +25,88 @@ def download_year(dataset: str, year: int) -> Path:
 
     Raises ValueError on invalid dataset. Raises Exception if download fails.
     """
-    url = make_url(dataset, year)
-    nc_path = make_nc_path(dataset, year)
+    match dataset:
+        case "precip-conus":
+            base_url = "https://psl.noaa.gov/thredds/fileServer/Datasets/cpc_us_precip/RT/precip.V1.0."
+        case "precip-global":
+            base_url = "https://psl.noaa.gov/thredds/fileServer/Datasets/cpc_global_precip/precip."
+        case "tmax":
+            base_url = (
+                "https://psl.noaa.gov/thredds/fileServer/Datasets/cpc_global_temp/tmax."
+            )
+        case "tmin":
+            base_url = (
+                "https://psl.noaa.gov/thredds/fileServer/Datasets/cpc_global_temp/tmin."
+            )
+        case _:
+            raise ValueError(f"Invalid dataset {dataset}")
+
+    nc_path = scratchspace / f"{dataset}_{year}.nc"
+    year_url = f"{base_url}{year}.nc"
+
     curl_result = subprocess.run(
         [
             "curl",
             "--silent",
-            "--show-error",  # if we get a 404 then show it
-            "--fail",  # return with status 22 on bad HTTP response code
             "-o",  # Specify output filepath
             nc_path,
             "-z",  # Only download if either the file does not exist or the remote file is newer
             nc_path,
-            url,
-        ],
-        capture_output=True,
-        text=True,
+            year_url,
+        ]
     )
     if curl_result.returncode != 0:
         raise Exception("curl returned nonzero exit code")
     return nc_path
 
 
+def standardize(ds: xr.Dataset) -> xr.Dataset:
+    ds = ds.rename({"lat": "latitude", "lon": "longitude"})
+    ds = ds.sortby("latitude", ascending=True)
+    ds = ds.sortby("longitude", ascending=True)
+    # CPC datasets have longitude from 0 to 360, but dClimate standardizes from -180 to 180
+    ds = ds.assign_coords(longitude=(ds.longitude - 180))
+
+    # Results in about 1 MB sized chunks
+    # We chunk small in spatial, wide in time
+    ds = ds.chunk({"time": 1769, "latitude": 24, "longitude": 24})
+
+    for var in ds.data_vars:
+        da = ds[var]
+
+        # Apply compression
+        # clevel=9 means highest compression level (0-9 scale)
+        da.encoding["compressor"] = numcodecs.Blosc(clevel=9)
+
+        # Prefer Fill Value over missing_value
+        da.encoding["_FillValue"] = np.nan
+        if "missing_value" in da.attrs:
+            del da.attrs["missing_value"]
+        if "missing_value" in da.encoding:
+            del da.encoding["missing_value"]
+
+    return ds
+
+
 @click.command
 @click.argument("dataset", type=datasets_choice)
-@click.argument("timestamp", type=click.DateTime())
-def download(dataset: str, timestamp: datetime):
-    """Download to the scratchspace the netCDF file that contains the data for the timestamp, which should be formatted in ISO8601.
-
-    e.g. uv run cpc.py download final-p25 2014-01-01
-    """
-    year = timestamp.year
-    eprint(f"Downloading netCDF for year {year}")
-    download_year(dataset, year)
-
-
-@click.command
-@click.argument("dataset", type=datasets_choice)
-@click.pass_context
-def get_available_timespan(ctx, dataset):
+def get_available_timespan(dataset):
     """
     Gets the earliest and latest timestamps for this dataset and prints to stdout. Output looks like "earliest latest".
     """
     start_year: int
     match dataset:
-        case "prelim-p05":
-            start_year = 2015
-        case "final-p05" | "final-p25":
-            start_year = 1981
+        case "precip-conus":
+            start_year = 2007
+        case "precip-global" | "tmax" | "tmin":
+            start_year = 1979
         case _:
             raise ValueError(f"Invalid dataset {dataset}")
 
     current_year = datetime.now(UTC).year
-    eprint(f"Checking if netCDF of current year {current_year} exists")
-    current_year_nc_file_check = subprocess.run(
-        ["curl", "--head", make_url(dataset, current_year)],
-        capture_output=True,
-        text=True,
+    eprint(
+        f"Downloading netCDF of current year {current_year} to see latest data coverage"
     )
-    if current_year_nc_file_check.stdout.splitlines()[0] == "HTTP/1.1 404 Not Found":
-        eprint(
-            "Current year nc file does not exist, going to download last year's file instead"
-        )
-        current_year -= 1
-    eprint(f"Downloading netCDF of year {current_year} to see latest data coverage")
     latest_nc = download_year(dataset, current_year)
     eprint(
         f"Downloading netCDF of start year {start_year} to see earliest data coverage"
@@ -118,7 +115,11 @@ def get_available_timespan(ctx, dataset):
     ds_latest = xr.open_dataset(latest_nc)
     ds_earliest = xr.open_dataset(earliest_nc)
 
+    # Sometimes, right after the start of a new year, you'll get netCDf files just with no data in them
     if len(ds_latest.time) == 0:
+        eprint(
+            f"Found no data in nc file of year {current_year}, downloading prior year"
+        )
         latest_nc = download_year(dataset, current_year - 1)
         ds_latest = xr.open_dataset(latest_nc)
 
@@ -134,34 +135,17 @@ def get_available_timespan(ctx, dataset):
     print(f"{earliest} {latest}")
 
 
-def standardize(ds: xr.Dataset) -> xr.Dataset:
-    """Apply our standardizations to a CPC dataset."""
-    # CHIRPS nc files already have the long version
-    # ds = ds.rename({"lat": "latitude", "lon": "longitude"})
+@click.command
+@click.argument("dataset", type=datasets_choice)
+@click.argument("timestamp", type=click.DateTime())
+def download(dataset, timestamp: datetime):
+    """Download to the scratchspace the netCDF file that contains the data for the timestamp, which should be formatted in ISO8601.
 
-    # Results in about 1 MB sized chunks
-    # We chunk small in spatial, wide in time
-    ds = ds.chunk({"time": 1769, "latitude": 24, "longitude": 24})
-
-    # Reorder these coordinates to be ascending order only
-    ds = ds.sortby("latitude", ascending=True)
-    ds = ds.sortby("longitude", ascending=True)
-
-    for var in ds.data_vars:
-        da = ds[var]
-
-        # Apply compression
-        # clevel=9 means highest compression level (0-9 scale), we are optimizing for read speed
-        da.encoding["compressor"] = numcodecs.Blosc(clevel=9)
-
-        # Prefer Fill Value over missing_value
-        da.encoding["_FillValue"] = np.nan
-        if "missing_value" in da.attrs:
-            del da.attrs["missing_value"]
-        if "missing_value" in da.encoding:
-            del da.encoding["missing_value"]
-
-    return ds
+    e.g. uv run cpc.py download precip-conus 2014-01-01
+    """
+    year = timestamp.year
+    eprint(f"Downloading netCDF for year {year}")
+    download_year(dataset, year)
 
 
 @click.command
@@ -206,12 +190,7 @@ def append(
 
     This command requires the kubo daemon to be running.
     """
-    nc_path = make_nc_path(dataset, timestamp.year)
-    if not nc_path.exists():
-        eprint(
-            f"Did not find a netCDF file for year {timestamp.year} at the path {nc_path}"
-        )
-        sys.exit(1)
+    nc_path = download_year(dataset, timestamp.year)
 
     ipfs_store = IPFSStore()
     if gateway_uri_stem is not None:
@@ -221,12 +200,16 @@ def append(
 
     ds = xr.open_dataset(nc_path)
     ds = standardize(ds)
+
     if year:
         ds = ds.sel(
             time=str(timestamp.year)
         )  # convert to string auto aggregate all timestamps within the year
     else:
-        ds = ds.sel(time=timestamp)
+        ds = ds.sel(
+            time=slice(timestamp, timestamp)
+        )  # without slice, time becomes a scalar and an append will not succeed
+
     if instantiate:
         eprint("====== Writing this dataset to a new Zarr on IPFS ======")
         eprint(ds)
@@ -257,11 +240,14 @@ def append(
 
 @click.group
 def cli():
+    """
+    Various commands for ETLing CPC datasets. All these programs will create a scratch space directory for temporary files at ./scratchspace/cpc, relative to this file's location.
+    """
     pass
 
 
-cli.add_command(download)
 cli.add_command(get_available_timespan)
+cli.add_command(download)
 cli.add_command(append)
 
 if __name__ == "__main__":
