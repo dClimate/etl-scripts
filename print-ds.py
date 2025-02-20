@@ -1,3 +1,4 @@
+import code
 import sys
 from pathlib import Path
 
@@ -20,11 +21,19 @@ from etl_scripts.grabbag import eprint
     type=click.IntRange(min=0),
     help="Print the latest time coordinate values. If 0 then just print the Dataset. Prints in order from the latest time coordinate value to the most recent, assuming time coordinate is in ascending order. No guarantee on formatting in ISO8601, it just prints whatever xarray presents as the string value.",
 )
+@click.option(
+    "--repl",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Drop into python repl after regular operation. You will have access to the xarray Dataset in a variable `ds`.",
+)
 def ipfs(
     cid: str,
     gateway_uri_stem: str | None,
     rpc_uri_stem: str | None,
     print_latest_timestamps: int,
+    repl: bool,
 ):
     """
     Set CID to the root of a HAMT from py-hamt, load the zarr into xarray, and print the Dataset.
@@ -54,16 +63,36 @@ def ipfs(
         for i in range(0, print_latest_timestamps):
             print(ds["time"][l - 1 - i].values)
 
+    if repl:
+        code.interact(local=locals())
+
 
 @click.command
 @click.argument(
     "path",
-    type=click.Path(exists=True, readable=True, resolve_path=True, path_type=Path),
+    type=click.Path(
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        path_type=Path,
+    ),
 )
-def disk(path: Path):
+@click.option(
+    "--repl",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Drop into python repl after regular operation. You will have access to the xarray Dataset in a variable ds.",
+)
+def disk(path: Path, repl: bool):
     """Check on a dataset xarray can read from disk."""
     ds = xr.open_dataset(path)
     print(ds)
+
+    if repl:
+        code.interact(local=locals())
 
 
 @click.group
