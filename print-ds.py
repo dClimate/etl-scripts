@@ -19,7 +19,7 @@ from etl_scripts.grabbag import eprint
     default=0,
     show_default=True,
     type=click.IntRange(min=0),
-    help="Print the latest time coordinate values. If 0 then just print the Dataset. Prints in order from the latest time coordinate value to the most recent, assuming time coordinate is in ascending order. No guarantee on formatting in ISO8601, it just prints whatever xarray presents as the string value.",
+    help="Print the latest time coordinate values. If 0 then just print the Dataset. Prints in order from the latest to earliest time coordinate value, assuming time coordinate ascending order. No guarantee on formatting in ISO8601, it just prints whatever xarray presents as the string value.",
 )
 @click.option(
     "--repl",
