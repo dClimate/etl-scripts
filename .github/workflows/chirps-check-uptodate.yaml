@@ -37,6 +37,6 @@ jobs:
 
       - name: Check if each dataset is up to date
         run: |
-          uv run check-uptodate.py chirps/chirps.py final-p05 ${{vars.CHIRPS_FINAL_P05_CID}}
-          uv run check-uptodate.py chirps/chirps.py final-p25 ${{vars.CHIRPS_FINAL_P25_CID}}
-          uv run check-uptodate.py chirps/chirps.py prelim-p05 ${{vars.CHIRPS_PRELIM_P05_CID}}
+          uv run check-uptodate.py cpc-chirps.py chirps-final-p05 ${{vars.CHIRPS_FINAL_P05_CID}}
+          uv run check-uptodate.py cpc-chirps.py chirps-final-p25 ${{vars.CHIRPS_FINAL_P25_CID}}
+          uv run check-uptodate.py cpc-chirps.py chirps-prelim-p05 ${{vars.CHIRPS_PRELIM_P05_CID}}
