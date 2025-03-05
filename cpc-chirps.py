@@ -84,6 +84,10 @@ chunking_settings = {"time": 400, "latitude": 25, "longitude": 25}
 def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
     if dataset.startswith("cpc"):
         ds = ds.rename({"lat": "latitude", "lon": "longitude"})
+        # Removed, prefer using zarr's native shape metadata for seeing length of time coordinate
+        del ds.time.attrs["actual_range"]
+        del ds.time.attrs["delta_t"]
+        del ds.time.attrs["avg_period"]
     ds = ds.sortby("latitude", ascending=True)
     ds = ds.sortby("longitude", ascending=True)
 
