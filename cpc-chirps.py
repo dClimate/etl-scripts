@@ -235,7 +235,7 @@ def instantiate(
     if rpc_uri_stem is not None:
         ipfs_store.rpc_uri_stem = rpc_uri_stem
     hamt = HAMT(store=ipfs_store)
-    ds.to_zarr(store=hamt)
+    ds.to_zarr(store=hamt, write_empty_chunks=False)
     eprint("HAMT CID")
     print(hamt.root_node_id)
 
@@ -305,7 +305,7 @@ def append(
     if rpc_uri_stem is not None:
         ipfs_store.rpc_uri_stem = rpc_uri_stem
     hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid), read_only=False)
-    ds.to_zarr(store=hamt, append_dim="time")
+    ds.to_zarr(store=hamt, append_dim="time", write_empty_chunks=False)
     eprint("HAMT CID")
     print(hamt.root_node_id)
 

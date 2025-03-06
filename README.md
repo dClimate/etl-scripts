@@ -24,6 +24,8 @@ This repository contains ETLs to IFPS for publicly available datasets.
 + Chunking is set to 400 in time, 25 in latitude, 25 in longitude (for data variables that are float32)
   + With this setting, each chunk is exactly 1 Megabyte in size (400*25*25*(4 bytes per float32) = 1,000,000 bytes)
 + longitude is -180 to 180, latitude is -90 to 90. Both are sorted in ascending order.
++ Empty chunks are not written
++ Most metadata from source files are dropped. Note that this also includes the netCDF variables for scaling and additive shifts, which will be applied and then removed.
 
 # Datasets
 
