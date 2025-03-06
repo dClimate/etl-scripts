@@ -1,7 +1,8 @@
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
+from math import ceil
 from pathlib import Path
 
 import cdsapi
@@ -30,33 +31,63 @@ dataset_names = [
 ]
 datasets_choice = click.Choice(dataset_names)
 
-
-@click.command
-def get_available_timespan():
-    """
-    Gets the earliest and latest timestamps for this dataset and prints to stdout. Output looks like "earliest latest".
-    """
-    stac_response = requests.get(
-        "https://cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-single-levels"
-    )
-    stac_response.raise_for_status()
-    stac = stac_response.json()
-    earliest = stac["extent"]["temporal"]["interval"][0][0]
-    latest = stac["extent"]["temporal"]["interval"][0][1]
-    print(f"{earliest} {latest}")
+chunking_settings = {"time": 400, "latitude": 25, "longitude": 25}
 
 
-def make_grib_filepath(dataset: str, timestamp: datetime) -> Path:
+def make_grib_filepath(
+    dataset: str, timestamp: datetime, only_hour: bool = False
+) -> Path:
     if dataset not in dataset_names:
         raise ValueError(f"Invalid dataset value {dataset}")
 
-    # dataset-YYYYMMDDTHHMMSS.grib
-    return scratchspace / f"{dataset}-{timestamp.strftime('%Y%m%dT%H%M00')}.grib"
+    path: Path
+    if only_hour:
+        # ISO8601 compatible filename, don't use the variant with dashes and colons since mac filesystem turns colons into backslashes
+        # dataset-YYYYMMDDTHHMMSS.grib
+        path = scratchspace / f"{dataset}-{timestamp.strftime('%Y%m%dT%H0000')}.grib"
+    else:
+        # dataset-YYYYMMDD.grib
+        path = scratchspace / f"{dataset}-{timestamp.strftime('%Y%m%d')}.grib"
+
+    return path
 
 
-def download_grib(dataset: str, timestamp: datetime) -> Path:
+def download_grib(dataset: str, timestamp: datetime, only_hour: bool = False) -> Path:
     if dataset not in dataset_names:
         raise ValueError(f"Invalid dataset value {dataset}")
+
+    # List of times in the format HH:MM
+    request_times: list[str]
+    if only_hour:
+        request_times = [timestamp.strftime("%H:00")]
+    else:
+        # All 24 hours
+        request_times = [
+            "00:00",
+            "01:00",
+            "02:00",
+            "03:00",
+            "04:00",
+            "05:00",
+            "06:00",
+            "07:00",
+            "08:00",
+            "09:00",
+            "10:00",
+            "11:00",
+            "12:00",
+            "13:00",
+            "14:00",
+            "15:00",
+            "16:00",
+            "17:00",
+            "18:00",
+            "19:00",
+            "20:00",
+            "21:00",
+            "22:00",
+            "23:00",
+        ]
 
     request = {
         "product_type": ["reanalysis"],
@@ -64,13 +95,12 @@ def download_grib(dataset: str, timestamp: datetime) -> Path:
         "year": [timestamp.strftime("%Y")],  # YYYY
         "month": [timestamp.strftime("%m")],  # MM
         "day": [timestamp.strftime("%d")],  # DD
-        "time": [timestamp.strftime("%H:%M")],  # HH:MM
+        "time": request_times,
         "data_format": "grib",
         "download_format": "unarchived",
     }
 
-    # ISO8601 compatible filename, don't use the variant with dashes and colons since mac filesystem turns colons into backslashes
-    download_filepath = make_grib_filepath(dataset, timestamp)
+    download_filepath = make_grib_filepath(dataset, timestamp, only_hour=only_hour)
     client = cdsapi.Client()
     print(f"=== Downloading to {download_filepath}")
     client.retrieve("reanalysis-era5-single-levels", request, download_filepath)
@@ -80,12 +110,49 @@ def download_grib(dataset: str, timestamp: datetime) -> Path:
 
 @click.command
 @click.argument("dataset", type=datasets_choice)
+def get_available_timespan(dataset: str):
+    latest: str
+    try:
+        # If you send a request for a time beyond what is available, the API will tell you what is the latest available in an error message
+        request = {
+            "product_type": ["reanalysis"],
+            "variable": [dataset],
+            "year": ["3000"],  # YYYY
+            "month": ["01"],  # MM
+            "day": ["01"],  # DD
+            "time": ["00:00"],  # HH:MM
+            "data_format": "grib",
+            "download_format": "unarchived",
+        }
+        client = cdsapi.Client(quiet=True)
+        result = client.retrieve("reanalysis-era5-single-levels", request)
+    except Exception as e:
+        exc = e
+        error_message = str(exc)
+        latest = error_message[-16:].replace(" ", "T")
+        latest += ":00"
+
+        # A constant since all data starts at this time for ERA5
+        earliest = "1940-01-01T00:00:00"
+
+        print(f"{earliest} {latest}")
+
+
+@click.command
+@click.argument("dataset", type=datasets_choice)
 @click.argument("timestamp", type=click.DateTime())
-def download(dataset: str, timestamp: datetime):
+@click.option(
+    "--only-hour",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Download only an hour of the data, rather than the whole day.",
+)
+def download(dataset: str, timestamp: datetime, only_hour: bool):
     """
-    Downloads the GRIB file for the timestamp. Not idempotent since it works with the cdsapi.
+    Downloads the GRIB file for the timestamp. Not idempotent since it works with the cdsapi. By default, since this downloads the whole day of data, this ignores the hour/minute/second field.
     """
-    download_grib(dataset, timestamp)
+    download_grib(dataset, timestamp, only_hour=only_hour)
 
 
 def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
@@ -112,19 +179,16 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
 
     ds = ds.drop_vars(["number", "step", "surface", "time"])
     ds = ds.rename({"valid_time": "time"})
-    ds = ds.expand_dims("time")  # make time an actual coordinate, indexed as well
 
-    ds = ds.sortby(
-        "latitude", ascending=True
-    )  # Before processing, latitude goes from 90 to -90
-    # ds = ds.sortby("longitude", ascending=True) # usually already sorted
+    ds = ds.sortby("latitude", ascending=True)
+    ds = ds.sortby("longitude", ascending=True)
 
-    # GRIB files have longitude from 0 to 360, but dClimate standardizes from -180 to 180
+    # ERA5 GRIB files have longitude from 0 to 360, but dClimate standardizes from -180 to 180
     ds = ds.assign_coords(longitude=(ds.longitude - 180))
 
     # Results in about 1 MB sized chunks
     # We chunk small in spatial, wide in time
-    ds = ds.chunk({"time": 1769, "latitude": 24, "longitude": 24})
+    ds = ds.chunk(chunking_settings)
 
     for param in list(ds.attrs.keys()):
         del ds.attrs[param]
@@ -148,30 +212,78 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
 
 @click.command
 @click.argument("dataset", type=datasets_choice)
+@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
+@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option(
+    "--skip-download",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
+)
+def instantiate(
+    dataset: str,
+    gateway_uri_stem: str,
+    rpc_uri_stem: str,
+    skip_download: bool,
+):
+    time_chunk = chunking_settings["time"]
+    num_days_needed = ceil(time_chunk / 24)
+    # start and end date are an inclusive range
+    start_date: datetime = datetime.fromisoformat(
+        "1940-01-01T00:00:00"
+    )  # constant for all datasets
+    end_date: datetime = start_date + timedelta(days=num_days_needed)
+
+    grib_paths: list[Path] = []
+    for i in range(num_days_needed):
+        date = start_date + timedelta(days=i)
+        path: Path
+        if not skip_download:
+            eprint(f"Downloading GRIB for date {date}")
+            path = download_grib(dataset, date)
+        else:
+            eprint(
+                f"Told to skip download for date, otherwise would have downloaded date {date} here"
+            )
+            path = make_grib_filepath(dataset, date)
+        grib_paths.append(path)
+
+    eprint("====== Writing this dataset to a new Zarr on IPFS ======")
+    ds = xr.open_mfdataset(grib_paths)
+    ds = standardize(dataset, ds)
+    eprint(ds)
+
+    ipfs_store = IPFSStore()
+    if gateway_uri_stem is not None:
+        ipfs_store.gateway_uri_stem = gateway_uri_stem
+    if rpc_uri_stem is not None:
+        ipfs_store.rpc_uri_stem = rpc_uri_stem
+    hamt = HAMT(store=ipfs_store)
+    ds.to_zarr(store=hamt, write_empty_chunks=False)
+    eprint("HAMT CID")
+    print(hamt.root_node_id)
+
+
+@click.command
+@click.argument("dataset", type=datasets_choice)
 @click.argument("cid")
 @click.argument("timestamp", type=click.DateTime())
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 @click.option(
-    "--year",
+    "--only-hour",
     is_flag=True,
     show_default=True,
     default=False,
-    help="Append/instantiate with the entire year that this timestamp corresponds to.",
+    help="Only append an hour's worth of data.",
 )
 @click.option(
-    "--instantiate",
+    "--skip-download",
     is_flag=True,
     show_default=True,
     default=False,
-    help="Write this timestamp to a new Zarr entirely instead of appending. If set, then the command will ignore the CID.",
-)
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    show_default=True,
-    default=False,
-    help="Do a dry run, so load the datasets from disk and IFPS but don't actually append new data to ipfs. If instantiating, just print what we would have instantiated a new Zarr with.",
+    help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
 )
 def append(
     dataset,
@@ -179,73 +291,48 @@ def append(
     timestamp: datetime,
     gateway_uri_stem: str,
     rpc_uri_stem: str,
-    instantiate: bool,
-    year: bool,
-    dry_run: bool,
+    only_hour: bool,
+    skip_download: bool,
 ):
     """
     Append the data at timestamp onto the Dataset that cid points to, print out the CID of the new HAMT root.
 
     This command requires the kubo daemon to be running.
     """
-    grib_path = download_grib(dataset, timestamp)
+    eprint("====== Creating dataset for append ======")
+    grib_path: Path
+    if skip_download:
+        grib_path = make_grib_filepath(dataset, timestamp, only_hour=only_hour)
+    else:
+        eprint(f"Downloading GRIB for whole day at timestamp {timestamp}")
+        grib_path = download_grib(dataset, timestamp, only_hour=only_hour)
+    ds = xr.open_dataset(grib_path)
+    ds = standardize(dataset, ds)
+    eprint(ds)
 
+    eprint("====== Appending to IPFS ======")
     ipfs_store = IPFSStore()
     if gateway_uri_stem is not None:
         ipfs_store.gateway_uri_stem = gateway_uri_stem
     if rpc_uri_stem is not None:
         ipfs_store.rpc_uri_stem = rpc_uri_stem
-
-    ds = xr.open_dataset(grib_path)
-    ds = standardize(dataset, ds)
-
-    if year:
-        ds = ds.sel(
-            time=str(timestamp.year)
-        )  # convert to string auto aggregate all timestamps within the year
-    else:
-        ds = ds.sel(
-            time=slice(timestamp, timestamp)
-        )  # without slice, time becomes a scalar and an append will not succeed
-
-    if instantiate:
-        eprint("====== Writing this dataset to a new Zarr on IPFS ======")
-        eprint(ds)
-        if dry_run:
-            sys.exit(0)
-        hamt = HAMT(store=ipfs_store)
-        ds.to_zarr(store=hamt)
-        eprint("HAMT CID")
-        print(hamt.root_node_id)
-        sys.exit(0)
-
-    eprint("====== Appending this dataset ======")
-    eprint(ds)
-
     hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid), read_only=False)
-    ipfs_ds = xr.open_zarr(store=hamt)
-    eprint("====== Loaded in this Dataset from IPFS ======")
-    eprint(ipfs_ds)
-
-    eprint("====== Appending to IPFS ======")
-    if not dry_run:
-        ds.to_zarr(store=hamt, mode="a", append_dim="time")
-        eprint("New HAMT CID")
-        print(hamt.root_node_id)
-    else:
-        eprint("In dry run mode, otherwise would have printed new CID here")
+    ds.to_zarr(store=hamt, append_dim="time", write_empty_chunks=False)
+    eprint("New HAMT CID")
+    print(hamt.root_node_id)
 
 
 @click.group
 def cli():
     """
-    Various commands for ETLing ERA5. All these programs will create a scratch space directory for temporary files at ./scratchspace/era5, relative to this file's location.
+    Commands for ETLing ERA5. On invocation, a scratch space directory relative to this file will be created for data files at ./scratchspace/era5.
     """
     pass
 
 
 cli.add_command(get_available_timespan)
 cli.add_command(download)
+cli.add_command(instantiate)
 cli.add_command(append)
 
 if __name__ == "__main__":
