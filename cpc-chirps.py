@@ -1,6 +1,5 @@
 import os
 import subprocess
-import sys
 from datetime import UTC, datetime
 from math import ceil
 from pathlib import Path
@@ -17,17 +16,20 @@ from etl_scripts.grabbag import eprint
 scratchspace: Path = (Path(__file__).parent / "scratchspace" / "cpc-chirps").absolute()
 os.makedirs(scratchspace, exist_ok=True)
 
-datasets_choice = click.Choice(
-    [
-        "cpc-precip-conus",
-        "cpc-precip-global",
-        "cpc-tmin",
-        "cpc-tmax",
-        "chirps-final-p05",
-        "chirps-final-p25",
-        "chirps-prelim-p05",
-    ]
-)
+dataset_names = [
+    "cpc-precip-conus",
+    "cpc-precip-global",
+    "cpc-tmin",
+    "cpc-tmax",
+    "chirps-final-p05",
+    "chirps-final-p25",
+    "chirps-prelim-p05",
+]
+datasets_choice = click.Choice(dataset_names)
+
+
+def make_nc_path(dataset: str, year: int) -> Path:
+    return scratchspace / f"{dataset}_{year}.nc"
 
 
 def download_year(dataset: str, year: int) -> Path:
@@ -55,7 +57,7 @@ def download_year(dataset: str, year: int) -> Path:
         case _:
             raise ValueError(f"Invalid dataset {dataset}")
 
-    nc_path = scratchspace / f"{dataset}_{year}.nc"
+    nc_path = make_nc_path(dataset, year)
 
     curl_result = subprocess.run(
         [
@@ -75,19 +77,18 @@ def download_year(dataset: str, year: int) -> Path:
     return nc_path
 
 
-# Results in about 1 MB sized chunks
-# We chunk small spatial, wide time
-# The time chunking has been calculated by dividing 1 Megabyte by latitude and longitude and then the number of bytes per 32-bit float, 1,000,000/25/25/4 = 400
+# See README.md for chunking decision
 chunking_settings = {"time": 400, "latitude": 25, "longitude": 25}
 
 
 def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
     if dataset.startswith("cpc"):
         ds = ds.rename({"lat": "latitude", "lon": "longitude"})
-        # Removed, prefer using zarr's native shape metadata for seeing length of time coordinate
+        # Remove unneeded metadata
         del ds.time.attrs["actual_range"]
         del ds.time.attrs["delta_t"]
         del ds.time.attrs["avg_period"]
+
     ds = ds.sortby("latitude", ascending=True)
     ds = ds.sortby("longitude", ascending=True)
 
@@ -104,7 +105,7 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
         # clevel=9 means highest compression level (0-9 scale)
         da.encoding["compressor"] = numcodecs.Blosc(clevel=9)
 
-        # Prefer Fill Value over missing_value
+        # Prefer _FillValue over missing_value
         da.encoding["_FillValue"] = np.nan
         if "missing_value" in da.attrs:
             del da.attrs["missing_value"]
@@ -184,13 +185,18 @@ def download(dataset, timestamp: datetime):
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 @click.option(
-    "--dry-run",
+    "--skip-download",
     is_flag=True,
     show_default=True,
     default=False,
-    help="Do a dry run, so download all required netCDFs, create the xarray Dataset, but don't write to IPFS.",
+    help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
 )
-def instantiate(dataset: str, gateway_uri_stem: str, rpc_uri_stem: str, dry_run: bool):
+def instantiate(
+    dataset: str,
+    gateway_uri_stem: str,
+    rpc_uri_stem: str,
+    skip_download: bool,
+):
     """
     Create an entirely new zarr on ipfs for this dataset, return new HAMT CID on stdout.
 
@@ -207,18 +213,21 @@ def instantiate(dataset: str, gateway_uri_stem: str, rpc_uri_stem: str, dry_run:
     )
     nc_paths: list[Path] = []
     for year in range(start_year, end_year + 1):
-        eprint(f"Downloading year {year}")
-        path = download_year(dataset, year)
+        path: Path
+        if not skip_download:
+            eprint(f"Downloading year {year}")
+            path = download_year(dataset, year)
+        else:
+            eprint(
+                f"Told to skip download, otherwise would have downloaded year {year} here"
+            )
+            path = make_nc_path(dataset, year)
         nc_paths.append(path)
 
     eprint("====== Writing this dataset to a new Zarr on IPFS ======")
     ds = xr.open_mfdataset(nc_paths)
     ds = standardize(dataset, ds)
     eprint(ds)
-
-    if dry_run:
-        eprint("Dry run, would have printed CID of new Zarr here, exiting now")
-        sys.exit(0)
 
     ipfs_store = IPFSStore()
     if gateway_uri_stem is not None:
@@ -245,11 +254,11 @@ def instantiate(dataset: str, gateway_uri_stem: str, rpc_uri_stem: str, dry_run:
     help="Append the entire year of the timestamp. This will ignore the month and day of the timestamp.",
 )
 @click.option(
-    "--dry-run",
+    "--skip-download",
     is_flag=True,
     show_default=True,
     default=False,
-    help="Do a dry run, so load the datasets from disk and IFPS but don't actually append new data to ipfs. If instantiating, just print what we would have instantiated a new Zarr with.",
+    help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
 )
 def append(
     dataset,
@@ -258,7 +267,7 @@ def append(
     gateway_uri_stem: str,
     rpc_uri_stem: str,
     year: bool,
-    dry_run: bool,
+    skip_download: bool,
 ):
     """
     Append the data at timestamp onto the Dataset that CID points to, print new HAMT root CID to stdout.
@@ -266,8 +275,15 @@ def append(
     This command requires the kubo daemon to be running.
     """
     eprint("====== Creating dataset to append ======")
-    eprint(f"Downloading netCDF for year {timestamp.year}...")
-    nc_path = download_year(dataset, timestamp.year)
+    nc_path: Path
+    if not skip_download:
+        eprint(f"Downloading netCDF for year {timestamp.year}...")
+        nc_path = download_year(dataset, timestamp.year)
+    else:
+        eprint(
+            f"Skipping downloading netCDF for year {timestamp.year}, going to try use what's on disk"
+        )
+        nc_path = make_nc_path(dataset, timestamp.year)
     ds = xr.open_dataset(nc_path)
     ds = standardize(dataset, ds)
 
@@ -283,18 +299,15 @@ def append(
     eprint(ds)
 
     eprint("====== Appending to IPFS ======")
-    if not dry_run:
-        ipfs_store = IPFSStore()
-        if gateway_uri_stem is not None:
-            ipfs_store.gateway_uri_stem = gateway_uri_stem
-        if rpc_uri_stem is not None:
-            ipfs_store.rpc_uri_stem = rpc_uri_stem
-        hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid), read_only=False)
-        ds.to_zarr(store=hamt, append_dim="time")
-        eprint("HAMT CID")
-        print(hamt.root_node_id)
-    else:
-        eprint("In dry run mode, otherwise would have printed new CID here")
+    ipfs_store = IPFSStore()
+    if gateway_uri_stem is not None:
+        ipfs_store.gateway_uri_stem = gateway_uri_stem
+    if rpc_uri_stem is not None:
+        ipfs_store.rpc_uri_stem = rpc_uri_stem
+    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid), read_only=False)
+    ds.to_zarr(store=hamt, append_dim="time")
+    eprint("HAMT CID")
+    print(hamt.root_node_id)
 
 
 @click.command
@@ -349,7 +362,7 @@ def doall(dataset: str):
 @click.group
 def cli():
     """
-    Commands for ETLing CPC and CHRIPS datasets. All these programs will create a scratch space directory for temporary files at ./scratchspace/cpc-chirps, a relative path from this file's location.
+    Commands for ETLing CPC and CHRIPS datasets. On invocation, a scratch space directory relative to this file will be created for data files at ./scratchspace/cpc-chirps.
     """
     pass
 
