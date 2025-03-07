@@ -224,6 +224,7 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
 
     ds = ds.drop_vars(["number", "step", "surface", "time"])
     ds = ds.rename({"valid_time": "time"})
+    ds = ds.set_xindex("time")
 
     ds = ds.sortby("latitude", ascending=True)
     del ds.latitude.attrs["stored_direction"]  # normally says descending
