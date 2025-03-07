@@ -292,7 +292,7 @@ def instantiate(
     if rpc_uri_stem is not None:
         ipfs_store.rpc_uri_stem = rpc_uri_stem
     hamt = HAMT(store=ipfs_store)
-    ds.to_zarr(store=hamt, write_empty_chunks=False)
+    ds.to_zarr(store=hamt)
     eprint("HAMT CID")
     print(hamt.root_node_id)
 
@@ -352,7 +352,7 @@ def append(
         eprint(ds)
 
         eprint("====== Appending to IPFS ======")
-        ds.to_zarr(store=hamt, append_dim="time", write_empty_chunks=False)
+        ds.to_zarr(store=hamt, append_dim="time")
         if only_hour:
             eprint(
                 f"New HAMT CID after appending hour {working_ts.strftime('%Y-%m-%dT%H:00:00')}"
