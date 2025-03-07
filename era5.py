@@ -52,9 +52,19 @@ def make_grib_filepath(
     return path
 
 
-def download_grib(dataset: str, timestamp: datetime, only_hour: bool = False) -> Path:
+def download_grib(
+    dataset: str, timestamp: datetime, only_hour: bool = False, force=False
+) -> Path:
+    """
+    only_hour specifies if to only download an hour's worth of data, rather than just the whole day that hour belongs to.
+    If force is true, this always redownloads the data. Otherwise, it determines if the data is prelminiary using GRIB_expver, and if the data is finalized it will skip downloading.
+    """
     if dataset not in dataset_names:
         raise ValueError(f"Invalid dataset value {dataset}")
+
+    download_filepath = make_grib_filepath(dataset, timestamp, only_hour=only_hour)
+    if not force and download_filepath.exists():
+        return download_filepath
 
     # List of times in the format HH:MM
     request_times: list[str]
@@ -100,9 +110,9 @@ def download_grib(dataset: str, timestamp: datetime, only_hour: bool = False) ->
         "download_format": "unarchived",
     }
 
-    download_filepath = make_grib_filepath(dataset, timestamp, only_hour=only_hour)
     client = cdsapi.Client()
     print(f"=== Downloading to {download_filepath}")
+    # Note that this will overwrite an existing GRIB file, that's the CDS API default behavior when specifying the same filepath
     client.retrieve("reanalysis-era5-single-levels", request, download_filepath)
 
     return download_filepath
@@ -148,11 +158,46 @@ def get_available_timespan(dataset: str):
     default=False,
     help="Download only an hour of the data, rather than the whole day.",
 )
-def download(dataset: str, timestamp: datetime, only_hour: bool):
+@click.option(
+    "--force",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Force a redownload even if the data exists.",
+)
+def download(dataset: str, timestamp: datetime, only_hour: bool, force: bool):
     """
-    Downloads the GRIB file for the timestamp. Not idempotent since it works with the cdsapi. By default, since this downloads the whole day of data, this ignores the hour/minute/second field.
+    Downloads the GRIB file for the timestamp. Only downloads if the file does not already exist. By default since this downloads a day of data, this ignores the hour/minute/second field of the timestamp argument.
     """
-    download_grib(dataset, timestamp, only_hour=only_hour)
+    download_grib(dataset, timestamp, only_hour=only_hour, force=force)
+
+
+@click.command
+@click.argument(
+    "path",
+    type=click.Path(
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        path_type=Path,
+    ),
+)
+def check_finalized(path: Path):
+    """Checks if an ERA5 GRIB data file has finalized data. Assumes there is only one data variable inside the GRIB file, which is the case usually for ERA5. Writes true if finalized, false if preliminary."""
+    # assume path exist due to click argument verification
+
+    ds = xr.open_dataset(path, backend_kwargs={"read_keys": ["expver"]})
+
+    is_finalized: bool = False
+    for v in ds.data_vars:
+        is_finalized = int(ds[v].GRIB_expver) == 1
+
+    if is_finalized:
+        print("true")
+    else:
+        print("false")
 
 
 def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
@@ -181,6 +226,7 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
     ds = ds.rename({"valid_time": "time"})
 
     ds = ds.sortby("latitude", ascending=True)
+    del ds.latitude.attrs["stored_direction"]  # normally says descending
     ds = ds.sortby("longitude", ascending=True)
 
     # ERA5 GRIB files have longitude from 0 to 360, but dClimate standardizes from -180 to 180
@@ -214,18 +260,10 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
 @click.argument("dataset", type=datasets_choice)
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
-@click.option(
-    "--skip-download",
-    is_flag=True,
-    show_default=True,
-    default=False,
-    help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
-)
 def instantiate(
     dataset: str,
     gateway_uri_stem: str,
     rpc_uri_stem: str,
-    skip_download: bool,
 ):
     time_chunk = chunking_settings["time"]
     num_days_needed = ceil(time_chunk / 24)
@@ -239,14 +277,8 @@ def instantiate(
     for i in range(num_days_needed):
         date = start_date + timedelta(days=i)
         path: Path
-        if not skip_download:
-            eprint(f"Downloading GRIB for date {date}")
-            path = download_grib(dataset, date)
-        else:
-            eprint(
-                f"Told to skip download for date, otherwise would have downloaded date {date} here"
-            )
-            path = make_grib_filepath(dataset, date)
+        eprint(f"Downloading GRIB for date {date}")
+        path = download_grib(dataset, date)
         grib_paths.append(path)
 
     eprint("====== Writing this dataset to a new Zarr on IPFS ======")
@@ -278,13 +310,6 @@ def instantiate(
     default=False,
     help="Only append an hour's worth of data.",
 )
-@click.option(
-    "--skip-download",
-    is_flag=True,
-    show_default=True,
-    default=False,
-    help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
-)
 def append(
     dataset,
     cid: str,
@@ -292,7 +317,6 @@ def append(
     gateway_uri_stem: str,
     rpc_uri_stem: str,
     only_hour: bool,
-    skip_download: bool,
 ):
     """
     Append the data at timestamp onto the Dataset that cid points to, print out the CID of the new HAMT root.
@@ -300,12 +324,8 @@ def append(
     This command requires the kubo daemon to be running.
     """
     eprint("====== Creating dataset for append ======")
-    grib_path: Path
-    if skip_download:
-        grib_path = make_grib_filepath(dataset, timestamp, only_hour=only_hour)
-    else:
-        eprint(f"Downloading GRIB for whole day at timestamp {timestamp}")
-        grib_path = download_grib(dataset, timestamp, only_hour=only_hour)
+    eprint(f"Downloading GRIB for whole day at timestamp {timestamp}")
+    grib_path = download_grib(dataset, timestamp, only_hour=only_hour)
     ds = xr.open_dataset(grib_path)
     ds = standardize(dataset, ds)
     eprint(ds)
@@ -332,6 +352,7 @@ def cli():
 
 cli.add_command(get_available_timespan)
 cli.add_command(download)
+cli.add_command(check_finalized)
 cli.add_command(instantiate)
 cli.add_command(append)
 
