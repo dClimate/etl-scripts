@@ -92,9 +92,9 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
     ds = ds.sortby("latitude", ascending=True)
     ds = ds.sortby("longitude", ascending=True)
 
-    # CPC datasets have longitude from 0 to 360, but dClimate standardizes from -180 to 180
     if dataset.startswith("cpc"):
-        ds = ds.assign_coords(longitude=(ds.longitude - 180))
+        # CPC's longitude stretches from 0 to 360, increasing east (0) to west (360). This changes to proper -180 (west) to 180 (east)
+        ds = ds.assign_coords(longitude=(-ds.longitude + 180))
 
     ds = ds.chunk(chunking_settings)
 
