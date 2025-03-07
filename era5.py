@@ -310,6 +310,12 @@ def instantiate(
     default=False,
     help="Only append an hour's worth of data.",
 )
+@click.option(
+    "--count",
+    default=1,
+    show_default=True,
+    help="The number of days/hours to append. Usually 1, but if increased append will repeatedly print to stdout the CID of each successive append. This will essentially repeat the normal 1 count append command.",
+)
 def append(
     dataset,
     cid: str,
@@ -317,29 +323,45 @@ def append(
     gateway_uri_stem: str,
     rpc_uri_stem: str,
     only_hour: bool,
+    count: int,
 ):
     """
     Append the data at timestamp onto the Dataset that cid points to, print out the CID of the new HAMT root.
 
     This command requires the kubo daemon to be running.
     """
-    eprint("====== Creating dataset for append ======")
-    eprint(f"Downloading GRIB for whole day at timestamp {timestamp}")
-    grib_path = download_grib(dataset, timestamp, only_hour=only_hour)
-    ds = xr.open_dataset(grib_path)
-    ds = standardize(dataset, ds)
-    eprint(ds)
-
-    eprint("====== Appending to IPFS ======")
     ipfs_store = IPFSStore()
     if gateway_uri_stem is not None:
         ipfs_store.gateway_uri_stem = gateway_uri_stem
     if rpc_uri_stem is not None:
         ipfs_store.rpc_uri_stem = rpc_uri_stem
     hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid), read_only=False)
-    ds.to_zarr(store=hamt, append_dim="time", write_empty_chunks=False)
-    eprint("New HAMT CID")
-    print(hamt.root_node_id)
+    for c in range(count):
+        eprint("====== Creating dataset for append ======")
+        # day implicitly starts from 0 due to range, so no need to subtract 1 for creating a delta that equals 0 for the first day
+        working_ts: datetime  # working timestamp
+        if only_hour:
+            working_ts = timestamp + timedelta(hours=c)
+        else:
+            working_ts = timestamp + timedelta(days=c)
+
+        eprint(f"Downloading GRIB for whole day at timestamp {working_ts}")
+        grib_path = download_grib(dataset, working_ts, only_hour=only_hour)
+        ds = xr.open_dataset(grib_path)
+        ds = standardize(dataset, ds)
+        eprint(ds)
+
+        eprint("====== Appending to IPFS ======")
+        ds.to_zarr(store=hamt, append_dim="time", write_empty_chunks=False)
+        if only_hour:
+            eprint(
+                f"New HAMT CID after appending hour {working_ts.strftime('%Y-%m-%dT%H:00:00')}"
+            )
+        else:
+            eprint(
+                f"New HAMT CID after appending day {working_ts.strftime('%Y-%m-%d')}"
+            )
+        print(hamt.root_node_id)
 
 
 @click.group
