@@ -9,7 +9,6 @@ import cdsapi
 import click
 import numcodecs
 import numpy as np
-import requests
 import xarray as xr
 from multiformats import CID
 from py_hamt import HAMT, IPFSStore

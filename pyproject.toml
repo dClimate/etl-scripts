@@ -4,16 +4,22 @@ name = "etl-scripts"
 version = "0.1.0"
 requires-python = ">=3.12"
 
-# numcodecs, dask, pandas, numpy, and multiformats are imports in various files, but not in pyproject.toml dependencies, since they are required by xarray, so we just use the existing compatible versions that are installed when xarray is installed
 dependencies = [
+    # Used for talking to R2
+    "boto3>=1.37.9",
+    # For downloading ERA5 data from the CDS API
     "cdsapi>=0.7.5",
+    # xarray needs this to read GRIB files
     "cfgrib>=0.9.15.0",
+    # Used for creating CLI scripts
     "click>=8.1.7",
+    # Zarrs on IPFS
     "py-hamt",
-    "requests>=2.32.3",
+    # Lock versions of xarray and zarr to work with zarr v2
     "xarray[io,parallel,viz]==2024.11.0",
     "zarr==2.18.3",
 ]
+# numcodecs, dask, pandas, numpy, and multiformats are imports in various files, but not in pyproject.toml dependencies, since they are required by xarray, so we just use the existing compatible versions that are installed when xarray is installed
 
 [build-system]
 requires = ["hatchling"]
