@@ -5,11 +5,13 @@ from datetime import datetime, timedelta
 from math import ceil
 from pathlib import Path
 
+import boto3
 import cdsapi
 import click
 import numcodecs
 import numpy as np
 import xarray as xr
+from botocore.exceptions import ClientError as S3ClientError
 from multiformats import CID
 from py_hamt import HAMT, IPFSStore
 
@@ -17,6 +19,30 @@ from etl_scripts.grabbag import eprint
 
 scratchspace: Path = (Path(__file__).parent / "scratchspace" / "era5").absolute()
 os.makedirs(scratchspace, exist_ok=True)
+
+era5_env: dict[str, str]
+with open(Path(__file__).parent / "era5-env.json") as f:
+    era5_env = json.load(f)
+
+r2 = boto3.client(
+    service_name="s3",
+    endpoint_url=era5_env["ENDPOINT_URL"],
+    aws_access_key_id=era5_env["AWS_ACCESS_KEY_ID"],
+    aws_secret_access_key=era5_env["AWS_SECRET_ACCESS_KEY"],
+)
+
+
+def is_file_on_r2(key: str) -> bool:
+    try:
+        r2.head_object(Bucket=era5_env["BUCKET_NAME"], Key=key)
+        return True
+    except S3ClientError as e:
+        if e.response["Error"]["Code"] == "404":
+            return False
+        else:
+            # Something else has gone wrong
+            raise
+
 
 dataset_names = [
     "2m_temperature",
@@ -55,14 +81,34 @@ def download_grib(
     dataset: str, timestamp: datetime, only_hour: bool = False, force=False
 ) -> Path:
     """
+    See the download command for more on the logic of this function. That click command just exists as a wrapper to expose this to the CLI.
+
     only_hour specifies if to only download an hour's worth of data, rather than just the whole day that hour belongs to.
-    If force is true, this always redownloads the data. Otherwise, it determines if the data is prelminiary using GRIB_expver, and if the data is finalized it will skip downloading.
     """
     if dataset not in dataset_names:
         raise ValueError(f"Invalid dataset value {dataset}")
 
     download_filepath = make_grib_filepath(dataset, timestamp, only_hour=only_hour)
-    if not force and download_filepath.exists():
+    file_on_disk = download_filepath.exists()
+
+    filename = download_filepath.name
+    file_on_r2 = is_file_on_r2(filename)
+
+    upload_to_r2_at_end = False
+
+    # If we're either being forced to redownload, or the file is not on both R2 and disk, then redownload and upload to R2 when done
+    if force or (not file_on_r2 and not file_on_disk):
+        upload_to_r2_at_end = True
+    else:
+        if file_on_r2 and file_on_disk:
+            eprint(f"File {filename} on both R2 and disk, skipping download")
+            pass
+        elif file_on_r2 and not file_on_disk:
+            eprint(f"Downloading from R2 to local filepath {download_filepath}")
+            r2.download_file(era5_env["BUCKET_NAME"], filename, download_filepath)
+        elif not file_on_r2 and file_on_disk:
+            eprint(f"Uploading from local file {download_filepath} to R2")
+            r2.upload_file(download_filepath, era5_env["BUCKET_NAME"], filename)
         return download_filepath
 
     # List of times in the format HH:MM
@@ -114,6 +160,10 @@ def download_grib(
     # Note that this will overwrite an existing GRIB file, that's the CDS API default behavior when specifying the same filepath
     client.retrieve("reanalysis-era5-single-levels", request, download_filepath)
 
+    if upload_to_r2_at_end:
+        eprint(f"Uploading from local file {download_filepath} to R2")
+        r2.upload_file(download_filepath, era5_env["BUCKET_NAME"], filename)
+
     return download_filepath
 
 
@@ -162,11 +212,17 @@ def get_available_timespan(dataset: str):
     is_flag=True,
     show_default=True,
     default=False,
-    help="Force a redownload even if the data exists.",
+    help="Force a redownload even if the data exists on disk and/or R2. This will also overwrite any preexisting files on both disk and R2.",
 )
 def download(dataset: str, timestamp: datetime, only_hour: bool, force: bool):
     """
-    Downloads the GRIB file for the timestamp. Only downloads if the file does not already exist. By default since this downloads a day of data, this ignores the hour/minute/second field of the timestamp argument.
+    Downloads the GRIB file for the timestamp.
+
+    If the file is on R2 and not on disk, this downloads to disk.
+    If the file is on disk and not on R2, then this will upload a copy to R2.
+    If the file is in neither locations, this will download to disk and then upload to R2.
+
+    By default this downloads a day of data, which will ignore the hour/minute/second field of the timestamp argument.
     """
     download_grib(dataset, timestamp, only_hour=only_hour, force=force)
 
@@ -296,6 +352,10 @@ def instantiate(
     eprint("HAMT CID")
     print(hamt.root_node_id)
 
+    eprint("Now cleaning up GRIB files on disk by deleting them")
+    for path in grib_paths:
+        os.remove(path)
+
 
 @click.command
 @click.argument("dataset", type=datasets_choice)
@@ -360,20 +420,30 @@ def append(
             else:
                 ts = timestamp + timedelta(days=c + s)
             working_timestamps.append(ts)
+
+        # Keep a total list of all GRIBs downloaded for removal from disk at the end
+        grib_paths: list[Path] = []
         if stride == 1:
             ts = working_timestamps[0]
             eprint(f"Downloading GRIB for whole day at timestamp {ts}")
             grib_path = download_grib(dataset, ts, only_hour=only_hour)
+            grib_paths.append(grib_path)
             ds = xr.open_dataset(grib_path)
         else:
-            grib_paths: list[Path] = []
             for ts in working_timestamps:
                 grib_path = download_grib(dataset, ts, only_hour=only_hour)
-                grib_path = make_grib_filepath(dataset, ts, only_hour=only_hour)
                 grib_paths.append(grib_path)
             ds = xr.open_mfdataset(grib_paths)
 
         ds = standardize(dataset, ds)
+        # fix issues with zarr chunks and dask chunks overlapping
+        first_ds = xr.open_zarr(store=hamt)
+        ds_rechunked = (
+            xr.concat([first_ds, ds], dim="time")
+            .chunk(chunking_settings)
+            .sel(time=slice(ds.coords["time"][0], None))
+        )
+        ds = ds_rechunked
         eprint(ds)
 
         eprint("====== Appending to IPFS ======")
@@ -384,10 +454,15 @@ def append(
                 timestamps_str += ts.strftime("%Y-%m-%dT%H:00:00")
             else:
                 timestamps_str += ts.strftime("%Y-%m-%d")
+            timestamps_str += " "
         eprint(
             f"New HAMT CID after appending {'hours' if only_hour else 'days'} {timestamps_str}"
         )
         print(hamt.root_node_id)
+
+        eprint("Removing GRIBs on disk")
+        for path in grib_paths:
+            os.remove(path)
 
 
 @click.group

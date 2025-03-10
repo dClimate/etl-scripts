@@ -3,6 +3,7 @@ __pycache__
 
 *.cid
 .env
+era5-env.json
 pyrightconfig.json
 requirements.txt
 
