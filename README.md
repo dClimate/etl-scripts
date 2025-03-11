@@ -45,3 +45,11 @@ Final refers to finalized data. Prelim refers to data that may be changed by CHI
 + `final-p05` https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/netcdf/p05/
 + `final-p25` https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/netcdf/p25/
 + `prelim-p05` https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/netcdf/p05/
+
+## ERA5
+ERA5 provides a wide variety of hourly data variables and stretches back to 1940-01-01. See more here:
+https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=overview
+
+The ETL is only configured to accept the data variables dClimate is concerned with, but it is very easy to extend the list, other variables should work the same.
+
+Running the ETL requires a S3 compatible bucket to cache raw data files, you can configure that by taking the template in `era5-env.json.example` and writing that to a `era5-env.json` file.
