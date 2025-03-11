@@ -423,16 +423,13 @@ def append(
 
         # Keep a total list of all GRIBs downloaded for removal from disk at the end
         grib_paths: list[Path] = []
-        if stride == 1:
-            ts = working_timestamps[0]
-            eprint(f"Downloading GRIB for whole day at timestamp {ts}")
+        for ts in working_timestamps:
             grib_path = download_grib(dataset, ts, only_hour=only_hour)
             grib_paths.append(grib_path)
+        if stride == 1:
+            grib_path = grib_paths[0]
             ds = xr.open_dataset(grib_path)
         else:
-            for ts in working_timestamps:
-                grib_path = download_grib(dataset, ts, only_hour=only_hour)
-                grib_paths.append(grib_path)
             ds = xr.open_mfdataset(grib_paths)
 
         ds = standardize(dataset, ds)
