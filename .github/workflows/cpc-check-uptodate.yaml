@@ -37,7 +37,7 @@ jobs:
 
       - name: Check if each dataset is up to date
         run: |
-          uv run check-uptodate.py cpc/cpc.py precip-conus ${{vars.CPC_PRECIP_CONUS_CID}}
-          uv run check-uptodate.py cpc/cpc.py precip-global ${{vars.CPC_PRECIP_GLOBAL_CID}}
-          uv run check-uptodate.py cpc/cpc.py tmax ${{vars.CPC_TMAX_CID}}
-          uv run check-uptodate.py cpc/cpc.py tmin ${{vars.CPC_TMIN_CID}}
+          uv run check-uptodate.py cpc-chirps.py cpc-precip-conus ${{vars.CPC_PRECIP_CONUS_CID}}
+          uv run check-uptodate.py cpc-chirps.py cpc-precip-global ${{vars.CPC_PRECIP_GLOBAL_CID}}
+          uv run check-uptodate.py cpc-chirps.py cpc-tmax ${{vars.CPC_TMAX_CID}}
+          uv run check-uptodate.py cpc-chirps.py cpc-tmin ${{vars.CPC_TMIN_CID}}
