@@ -1,9 +1,9 @@
 import os
 import shutil
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
-import time
 
 import click
 import xarray as xr
@@ -27,6 +27,59 @@ dataset_to_prism_datatype = {
     "tmax-4km": "tmax",
     "tmin-4km": "tmin",
 }
+
+
+@click.command
+@click.argument("dataset", type=datasets_choice)
+def get_available_timespan(dataset: str):
+    """
+    TODO documentation
+    """
+    prism_datatype = dataset_to_prism_datatype[dataset]
+    years_list_url = f"https://ftp.prism.oregonstate.edu/daily/{prism_datatype}/"
+    years_list_subprocess = subprocess.run(
+        f"curl --silent {years_list_url}"
+        + r" | grep --extended-regexp '[1-2][0-9]{3}\/' | sed -E 's/.*>([1-2][0-9]{3})\/<.*/\1/' | sort",
+        shell=True,
+        capture_output=True,
+        text=True,
+    )
+    if years_list_subprocess.returncode != 0:
+        raise Exception("Encountered an error when getting the list of years")
+    years_list = years_list_subprocess.stdout.strip().split()
+    earliest_year = years_list[0]
+    latest_year = years_list[-1]
+
+    filter = r" | grep -oE '>PRISM_(ppt|tmax|tmin)_.*[0-9]{8}_bil\.zip<' | sed -E 's/.*([1-2][0-9]{3}[0-1][0-9][0-3][0-9]).*/\1/' | sort | head -n 1"
+    earliest_date_subprocess = subprocess.run(
+        f"curl --silent 'https://ftp.prism.oregonstate.edu/daily/{prism_datatype}/{earliest_year}/'"
+        + filter,
+        shell=True,
+        capture_output=True,
+        text=True,
+    )
+    if earliest_date_subprocess.returncode != 0:
+        raise Exception("Error while finding the earliest date")
+    latest_date_subprocess = subprocess.run(
+        f"curl --silent 'https://ftp.prism.oregonstate.edu/daily/{prism_datatype}/{latest_year}/'"
+        + filter,
+        shell=True,
+        capture_output=True,
+        text=True,
+    )
+    if latest_date_subprocess.returncode != 0:
+        raise Exception("Error while finding the latest date")
+
+    earliest_date_str = earliest_date_subprocess.stdout.strip()
+    e_y = earliest_date_str[0:4]
+    e_m = earliest_date_str[4:6]
+    e_d = earliest_date_str[6:8]
+    latest_date_str = latest_date_subprocess.stdout.strip()
+    l_y = latest_date_str[0:4]
+    l_m = latest_date_str[4:6]
+    l_d = latest_date_str[6:8]
+
+    print(f"{e_y}-{e_m}-{e_d} {l_y}-{l_m}-{l_d}")
 
 
 def make_nc_path(dataset: str, day: datetime, grid_count: int) -> Path:
@@ -147,6 +200,8 @@ def download_day(dataset: str, day: datetime, force=False) -> Path:
 @click.argument("dataset", type=datasets_choice)
 @click.argument("day", type=click.DateTime())
 def download(dataset: str, day: datetime):
+    """TODO documentation,
+    include fact about not downloading from source the same file twice a day"""
     download_day(dataset, day)
 
 
@@ -155,6 +210,7 @@ def cli():
     pass
 
 
+cli.add_command(get_available_timespan)
 cli.add_command(download)
 
 if __name__ == "__main__":
