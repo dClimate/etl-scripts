@@ -100,9 +100,6 @@ def disk(path: Path, repl: bool, grib_expver: bool):
     else:
         ds = xr.open_dataset(path, backend_kwargs={"read_keys": ["expver"]})
     print(ds)
-    for v in ds.data_vars:
-        print(f"ds.{v}.GRIB_expver")
-        print(ds[v].GRIB_expver)
 
     if repl:
         code.interact(local=locals())
