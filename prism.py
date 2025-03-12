@@ -2,10 +2,13 @@ import os
 import shutil
 import subprocess
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import click
+import numcodecs
+import numpy as np
+import pandas as pd
 import xarray as xr
 from multiformats import CID
 from py_hamt import HAMT, IPFSStore
@@ -27,14 +30,48 @@ dataset_to_prism_datatype = {
     "tmax-4km": "tmax",
     "tmin-4km": "tmin",
 }
+dataset_to_datatype = {
+    "precip-4km": "precip",
+    "tmax-4km": "temp",
+    "tmin-4km": "temp",
+}
+
+# See README.md for chunking decision
+chunking_settings = {"time": 400, "latitude": 25, "longitude": 25}
 
 
-@click.command
-@click.argument("dataset", type=datasets_choice)
-def get_available_timespan(dataset: str):
-    """
-    TODO documentation
-    """
+def add_time_dimension(ds: xr.Dataset, date: datetime) -> xr.Dataset:
+    pd_date = pd.to_datetime(date)
+    ds = ds.expand_dims(time=[pd_date])
+    return ds
+
+
+def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
+    del ds.attrs["GDAL"]
+    del ds.attrs["history"]
+    del ds.Band1.attrs["long_name"]
+    del ds.Band1.attrs["grid_mapping"]
+    ds = ds.drop_vars("crs")
+
+    da = ds["Band1"]
+    # Apply compression
+    # clevel=9 means highest compression level (0-9 scale)
+    da.encoding["compressor"] = numcodecs.Blosc(clevel=9)
+    # Make fill value a float NaN instead of the original -9999.0
+    da.encoding["_FillValue"] = np.nan
+
+    ds = ds.rename({"lat": "latitude", "lon": "longitude"})
+    ds = ds.sortby("latitude", ascending=True)
+    ds = ds.sortby("longitude", ascending=True)
+    # e.g. rename Band1 to precip
+    ds = ds.rename({"Band1": dataset_to_datatype[dataset]})
+
+    ds = ds.chunk(chunking_settings)
+
+    return ds
+
+
+def find_timespan(dataset: str) -> tuple[datetime, datetime]:
     prism_datatype = dataset_to_prism_datatype[dataset]
     years_list_url = f"https://ftp.prism.oregonstate.edu/daily/{prism_datatype}/"
     years_list_subprocess = subprocess.run(
@@ -71,19 +108,40 @@ def get_available_timespan(dataset: str):
         raise Exception("Error while finding the latest date")
 
     earliest_date_str = earliest_date_subprocess.stdout.strip()
-    e_y = earliest_date_str[0:4]
-    e_m = earliest_date_str[4:6]
-    e_d = earliest_date_str[6:8]
+    e_y = int(earliest_date_str[0:4])
+    e_m = int(earliest_date_str[4:6])
+    e_d = int(earliest_date_str[6:8])
     latest_date_str = latest_date_subprocess.stdout.strip()
-    l_y = latest_date_str[0:4]
-    l_m = latest_date_str[4:6]
-    l_d = latest_date_str[6:8]
+    l_y = int(latest_date_str[0:4])
+    l_m = int(latest_date_str[4:6])
+    l_d = int(latest_date_str[6:8])
 
-    print(f"{e_y}-{e_m}-{e_d} {l_y}-{l_m}-{l_d}")
+    earliest_date = datetime(year=e_y, month=e_m, day=e_d)
+    latest_date = datetime(year=l_y, month=l_m, day=l_d)
+
+    return (earliest_date, latest_date)
+
+
+@click.command
+@click.argument("dataset", type=datasets_choice)
+def get_available_timespan(dataset: str):
+    """
+    TODO documentation
+    """
+    earliest_date, latest_date = find_timespan(dataset)
+    print(f"{earliest_date.strftime('%Y-%m-%d')} {latest_date.strftime('%Y-%m-%d')}")
 
 
 def make_nc_path(dataset: str, day: datetime, grid_count: int) -> Path:
     return scratchspace / f"{dataset}_{day.strftime('%Y-%m-%d')}_{grid_count}.nc"
+
+
+def find_nc_path(dataset: str, day: datetime) -> Path:
+    """Only call if you are sure the file exists!"""
+    for grid_count in range(1, 9):
+        nc_path = make_nc_path(dataset, day, grid_count)
+        if nc_path.exists():
+            return nc_path
 
 
 def download_day(dataset: str, day: datetime, force=False) -> Path:
@@ -205,6 +263,54 @@ def download(dataset: str, day: datetime):
     download_day(dataset, day)
 
 
+@click.command
+@click.argument("dataset", type=datasets_choice)
+@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
+@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option(
+    "--skip-download",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
+)
+def instantiate(
+    dataset: str, gateway_uri_stem: str, rpc_uri_stem: str, skip_download: bool
+):
+    num_days_needed = chunking_settings["time"]
+    start_date: datetime = find_timespan(dataset)[0]
+    end_date: datetime = start_date + timedelta(num_days_needed)
+
+    # instantiate since we will need to concatenate these together
+    ds_list: list[xr.Dataset] = []
+    for i in range(0, num_days_needed):
+        date = start_date + timedelta(days=i)
+        nc_path: Path
+        if skip_download:
+            nc_path = find_nc_path(dataset, date)
+        else:
+            nc_path = download(dataset, date)
+        ds = xr.open_dataset(nc_path)
+        ds = add_time_dimension(ds, date)
+        ds_list.append(ds)
+
+    ds = xr.concat(ds_list, dim="time")
+    ds = standardize(dataset, ds)
+
+    eprint("====== Writing this dataset to a new Zarr on IPFS ======")
+    eprint(ds)
+
+    ipfs_store = IPFSStore()
+    if gateway_uri_stem is not None:
+        ipfs_store.gateway_uri_stem = gateway_uri_stem
+    if rpc_uri_stem is not None:
+        ipfs_store.rpc_uri_stem = rpc_uri_stem
+    hamt = HAMT(store=ipfs_store)
+    ds.to_zarr(store=hamt)
+    eprint("HAMT CID")
+    print(hamt.root_node_id)
+
+
 @click.group
 def cli():
     pass
@@ -212,6 +318,7 @@ def cli():
 
 cli.add_command(get_available_timespan)
 cli.add_command(download)
+cli.add_command(instantiate)
 
 if __name__ == "__main__":
     cli()
