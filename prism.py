@@ -148,7 +148,20 @@ def download_day(dataset: str, day: datetime, force=False) -> Path:
     """
     Downloads the nc file for that day and returns a path to it.
 
-    Checks if PRISM
+    PRISM's download process is more involved than usual, so a description of the important things to know is written here.
+
+    # bil vs nc, and FTP vs HTTPS
+    PRISM provides both FTP and HTTPS services for retrieving their data.
+
+    The FTP service is unencrypted and provides data in the `bil` format.  You can browse the FTP directories using your browser here: https://ftp.prism.oregonstate.edu/
+
+    The HTTPS service allows for downloading in both bil and netCDF. This is why we chose the HTTPS service, as it removes a layer of complexity of converting from the bil format, and allows for encrypted file transfer, as opposed to the unencrypted FTP.
+    You can see more information about the HTTPS service here: https://prism.oregonstate.edu/documents/PRISM_downloads_web_service.pdf
+
+    # PRISM Grid Count
+    Files downloaded for a dataset are named `YYYY-MM-DD_N.nc`. The YYYY-MM-DD specifies the date the data corresponds to, N is PRISM's grid count. Grid count ranges from 1-8, with a 1 specifying completely new and 8 representing finalized. PRISM assigns a higher numbers when data has been more finalized.
+
+    See more about the grid count at https://prism.oregonstate.edu/documents/PRISM_update_schedule.pdf
     """
     if dataset not in dataset_names:
         raise ValueError("Incorrect dataset name")
