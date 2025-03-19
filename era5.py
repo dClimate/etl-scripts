@@ -469,7 +469,7 @@ def append(
             case "hour":
                 next_starting_timestamp = next_starting_timestamp + timedelta(hours=1)
             case "day":
-                next_starting_timestamp = next_starting_timestamp + timedelta(hours=1)
+                next_starting_timestamp = next_starting_timestamp + timedelta(days=1)
             case "month":
                 next_starting_timestamp = next_month(next_starting_timestamp)
 
