@@ -55,30 +55,52 @@ dataset_names = [
     "total_precipitation",
 ]
 datasets_choice = click.Choice(dataset_names)
+period_options = ["hour", "day", "month"]
+period_choice = click.Choice(period_options)
 
 chunking_settings = {"time": 400, "latitude": 25, "longitude": 25}
 
 
-def make_grib_filepath(
-    dataset: str, timestamp: datetime, only_hour: bool = False
-) -> Path:
+def next_month(dt: datetime) -> datetime:
+    """Return the next month"""
+    y = dt.year
+    m = dt.month
+    if m == 12:
+        y += 1
+        m = 1
+    else:
+        m += 1
+    return dt.replace(year=y, month=m)
+
+
+def make_grib_filepath(dataset: str, timestamp: datetime, period: str) -> Path:
     if dataset not in dataset_names:
         raise ValueError(f"Invalid dataset value {dataset}")
+    if period not in period_options:
+        raise ValueError(f"Invalid period {period}")
 
-    path: Path
-    if only_hour:
-        # ISO8601 compatible filename, don't use the variant with dashes and colons since mac filesystem turns colons into backslashes
-        # dataset-YYYYMMDDTHHMMSS.grib
-        path = scratchspace / f"{dataset}-{timestamp.strftime('%Y%m%dT%H0000')}.grib"
-    else:
-        # dataset-YYYYMMDD.grib
-        path = scratchspace / f"{dataset}-{timestamp.strftime('%Y%m%d')}.grib"
+    path: Path = scratchspace
+    match period:
+        case "hour":
+            # ISO8601 compatible filename, don't use the variant with dashes and colons since mac filesystem turns colons into backslashes
+            # dataset-YYYYMMDDTHHMMSS.grib
+            path = path / f"{dataset}-{timestamp.strftime('%Y%m%dT%H0000')}.grib"
+        case "day":
+            # dataset-YYYYMMDD.grib
+            path = path / f"{dataset}-{timestamp.strftime('%Y%m%d')}.grib"
+        case "month":
+            # dataset-YYYYMM.grib
+            path = path / f"{dataset}-{timestamp.strftime('%Y%m')}.grib"
 
     return path
 
 
 def download_grib(
-    dataset: str, timestamp: datetime, only_hour: bool = False, force=False
+    dataset: str,
+    timestamp: datetime,
+    period: str,
+    force=False,
+    api_key: str | None = None,
 ) -> Path:
     """
     See the download command for more on the logic of this function. That click command just exists as a wrapper to expose this to the CLI.
@@ -87,8 +109,10 @@ def download_grib(
     """
     if dataset not in dataset_names:
         raise ValueError(f"Invalid dataset value {dataset}")
+    if period not in period_options:
+        raise ValueError(f"Invalid period {period}")
 
-    download_filepath = make_grib_filepath(dataset, timestamp, only_hour=only_hour)
+    download_filepath = make_grib_filepath(dataset, timestamp, period)
     file_on_disk = download_filepath.exists()
 
     filename = download_filepath.name
@@ -112,50 +136,65 @@ def download_grib(
         return download_filepath
 
     # List of times in the format HH:MM
-    request_times: list[str]
-    if only_hour:
-        request_times = [timestamp.strftime("%H:00")]
-    else:
-        # All 24 hours
-        request_times = [
-            "00:00",
-            "01:00",
-            "02:00",
-            "03:00",
-            "04:00",
-            "05:00",
-            "06:00",
-            "07:00",
-            "08:00",
-            "09:00",
-            "10:00",
-            "11:00",
-            "12:00",
-            "13:00",
-            "14:00",
-            "15:00",
-            "16:00",
-            "17:00",
-            "18:00",
-            "19:00",
-            "20:00",
-            "21:00",
-            "22:00",
-            "23:00",
-        ]
+    hour_request: list[str] = []
+    day_request: list[str] = []
+    all_hours = hour_request = [
+        "00:00",
+        "01:00",
+        "02:00",
+        "03:00",
+        "04:00",
+        "05:00",
+        "06:00",
+        "07:00",
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "12:00",
+        "13:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00",
+        "18:00",
+        "19:00",
+        "20:00",
+        "21:00",
+        "22:00",
+        "23:00",
+    ]
+    match period:
+        case "hour":
+            hour_request = [timestamp.strftime("%H:00")]
+            day_request = [timestamp.strftime("%d")]
+        case "day":
+            hour_request = all_hours
+            day_request = [timestamp.strftime("%d")]
+        case "month":
+            hour_request = all_hours
+            # doing a .replace returns a new datetime entirely, so we can just assign to our end date like this
+            end = next_month(timestamp)
+            delta = (end - timestamp).days
+            for i in range(0, delta):
+                day_request.append((timestamp + timedelta(days=i)).strftime("%d"))
 
     request = {
         "product_type": ["reanalysis"],
         "variable": [dataset],
         "year": [timestamp.strftime("%Y")],  # YYYY
         "month": [timestamp.strftime("%m")],  # MM
-        "day": [timestamp.strftime("%d")],  # DD
-        "time": request_times,
+        "day": day_request,  # list in DD format
+        "time": hour_request,
         "data_format": "grib",
         "download_format": "unarchived",
     }
 
-    client = cdsapi.Client()
+    client: cdsapi.Client
+    if api_key is None:
+        client = cdsapi.Client()
+    else:
+        client = cdsapi.Client(url="https://cds.climate.copernicus.eu/api", key=api_key)
     print(f"=== Downloading to {download_filepath}")
     # Note that this will overwrite an existing GRIB file, that's the CDS API default behavior when specifying the same filepath
     client.retrieve("reanalysis-era5-single-levels", request, download_filepath)
@@ -200,13 +239,7 @@ def get_available_timespan(dataset: str):
 @click.command
 @click.argument("dataset", type=datasets_choice)
 @click.argument("timestamp", type=click.DateTime())
-@click.option(
-    "--only-hour",
-    is_flag=True,
-    show_default=True,
-    default=False,
-    help="Download only an hour of the data, rather than the whole day.",
-)
+@click.argument("period", type=period_choice)
 @click.option(
     "--force",
     is_flag=True,
@@ -214,17 +247,20 @@ def get_available_timespan(dataset: str):
     default=False,
     help="Force a redownload even if the data exists on disk and/or R2. This will also overwrite any preexisting files on both disk and R2.",
 )
-def download(dataset: str, timestamp: datetime, only_hour: bool, force: bool):
+@click.option(
+    "--api-key", help="The CDS API key to use, as opposed to reading from ~/.cdsapirc."
+)
+def download(
+    dataset: str, timestamp: datetime, period: str, force: bool, api_key: str | None
+):
     """
-    Downloads the GRIB file for the timestamp.
+    Downloads the GRIB file for the timestamp. The period specifies whether to download data for the hour, day, or month that timestamp belongs in.
 
     If the file is on R2 and not on disk, this downloads to disk.
     If the file is on disk and not on R2, then this will upload a copy to R2.
     If the file is in neither locations, this will download to disk and then upload to R2.
-
-    By default this downloads a day of data, which will ignore the hour/minute/second field of the timestamp argument.
     """
-    download_grib(dataset, timestamp, only_hour=only_hour, force=force)
+    download_grib(dataset, timestamp, period, force=force, api_key=api_key)
 
 
 @click.command
@@ -316,10 +352,14 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
 @click.argument("dataset", type=datasets_choice)
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option(
+    "--api-key", help="The CDS API key to use, as opposed to reading from ~/.cdsapirc."
+)
 def instantiate(
     dataset: str,
-    gateway_uri_stem: str,
-    rpc_uri_stem: str,
+    gateway_uri_stem: str | None,
+    rpc_uri_stem: str | None,
+    api_key: str | None,
 ):
     time_chunk = chunking_settings["time"]
     num_days_needed = ceil(time_chunk / 24)
@@ -327,14 +367,17 @@ def instantiate(
     start_date: datetime = datetime.fromisoformat(
         "1940-01-01T00:00:00"
     )  # constant for all datasets
+
+    # end_date is exclusive
     end_date: datetime = start_date + timedelta(days=num_days_needed)
 
+    # Download the months that contain the start to end date
     grib_paths: list[Path] = []
-    for i in range(num_days_needed):
-        date = start_date + timedelta(days=i)
-        path: Path
-        eprint(f"Downloading GRIB for date {date}")
-        path = download_grib(dataset, date)
+    current = start_date
+    while current < end_date:
+        current = next_month(current)
+        eprint(f"Downloading GRIB for month of date {current}")
+        path = download_grib(dataset, current, "month", api_key=api_key)
         grib_paths.append(path)
 
     eprint("====== Writing this dataset to a new Zarr on IPFS ======")
@@ -361,34 +404,32 @@ def instantiate(
 @click.argument("dataset", type=datasets_choice)
 @click.argument("cid")
 @click.argument("timestamp", type=click.DateTime())
+@click.argument("period", type=period_choice)
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 @click.option(
-    "--only-hour",
-    is_flag=True,
-    show_default=True,
-    default=False,
-    help="Only append an hour's worth of data.",
+    "--api-key", help="The CDS API key to use, as opposed to reading from ~/.cdsapirc."
 )
 @click.option(
     "--count",
     default=1,
     show_default=True,
-    help="The number of days/hours to append. Usually 1, but if increased append will repeatedly print to stdout the CID of each successive append. This will essentially repeat the normal 1 count append command.",
+    help="The number of months/days/hours to append. Usually 1, but if increased append will repeatedly print to stdout the CID of each successive append. This will essentially repeat the normal 1 count append command.",
 )
 @click.option(
     "--stride",
     default=1,
     show_default=True,
-    help="The number of days/hours to append, all at once. This option is here since appending 5 days in succession takes longer than opening them all at once and appending at once. Count must be an integer multiple of stride.",
+    help="The number of months/days/hours to append, all at once. This option is here since appending one by one takes longer than appending multiple days at a time. Stride must be a divisor of count to be valid.",
 )
 def append(
     dataset,
     cid: str,
     timestamp: datetime,
+    period: str,
     gateway_uri_stem: str,
     rpc_uri_stem: str,
-    only_hour: bool,
+    api_key: str | None,
     count: int,
     stride: int,
 ):
@@ -396,6 +437,10 @@ def append(
     Append the data at timestamp onto the Dataset that cid points to, print out the CID of the new HAMT root.
 
     This command requires the kubo daemon to be running.
+
+    Appends in steps of months is recommended due to Copernicus recommending month-by-month downloading from their API.
+    https://confluence.ecmwf.int/display/CKB/Climate+Data+Store+%28CDS%29+documentation#ClimateDataStore(CDS)documentation-Efficiencytips
+    https://forum.ecmwf.int/t/ecmwf-apis-faq-api-data-documentation/6880
     """
     if stride < 1:
         return ValueError("Stride cannot be less than 1")
@@ -411,27 +456,34 @@ def append(
 
     for c in range(0, count, stride):
         eprint("====== Creating dataset for append ======")
-        ds: xr.Dataset
-        working_timestamps: list[datetime] = []
-        for s in range(0, stride):
-            ts: datetime
-            if only_hour:
-                ts = timestamp + timedelta(hours=c + s)
-            else:
-                ts = timestamp + timedelta(days=c + s)
-            working_timestamps.append(ts)
+        working_timestamps: list[datetime] = [timestamp]
+        for s in range(
+            1, stride
+        ):  # start range from 1 since we already have the current timestamp in there
+            latest = working_timestamps[-1]
+            match period:
+                case "hour":
+                    working_timestamps.append(latest + timedelta(hours=1))
+                case "day":
+                    working_timestamps.append(latest + timedelta(days=1))
+                case "month":
+                    working_timestamps.append(next_month(latest))
+        next_starting_timestamp = working_timestamps[-1]
+        match period:
+            case "hour":
+                next_starting_timestamp = next_starting_timestamp + timedelta(hours=1)
+            case "day":
+                next_starting_timestamp = next_starting_timestamp + timedelta(days=1)
+            case "month":
+                next_starting_timestamp = next_month(next_starting_timestamp)
 
         # Keep a total list of all GRIBs downloaded for removal from disk at the end
         grib_paths: list[Path] = []
         for ts in working_timestamps:
-            grib_path = download_grib(dataset, ts, only_hour=only_hour)
+            grib_path = download_grib(dataset, ts, period, api_key=api_key)
             grib_paths.append(grib_path)
-        if stride == 1:
-            grib_path = grib_paths[0]
-            ds = xr.open_dataset(grib_path)
-        else:
-            ds = xr.open_mfdataset(grib_paths)
 
+        ds = xr.open_mfdataset(grib_paths)
         ds = standardize(dataset, ds)
         # fix issues with zarr chunks and dask chunks overlapping
         first_ds = xr.open_zarr(store=hamt)
@@ -445,21 +497,17 @@ def append(
 
         eprint("====== Appending to IPFS ======")
         ds.to_zarr(store=hamt, append_dim="time")
-        timestamps_str: str = ""
-        for ts in working_timestamps:
-            if only_hour:
-                timestamps_str += ts.strftime("%Y-%m-%dT%H:00:00")
-            else:
-                timestamps_str += ts.strftime("%Y-%m-%d")
-            timestamps_str += " "
         eprint(
-            f"New HAMT CID after appending {'hours' if only_hour else 'days'} {timestamps_str}"
+            f"= New HAMT CID after appending from {working_timestamps[0]} to {working_timestamps[-1]} with a period of {period}"
         )
         print(hamt.root_node_id)
 
         eprint("Removing GRIBs on disk")
         for path in grib_paths:
             os.remove(path)
+
+        # increment to to the next starting month for our next stride calculation
+        timestamp = next_starting_timestamp
 
 
 @click.group
