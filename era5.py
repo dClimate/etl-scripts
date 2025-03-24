@@ -437,6 +437,10 @@ def append(
     Append the data at timestamp onto the Dataset that cid points to, print out the CID of the new HAMT root.
 
     This command requires the kubo daemon to be running.
+
+    Appends in steps of months is recommended due to Copernicus recommending month-by-month downloading from their API.
+    https://confluence.ecmwf.int/display/CKB/Climate+Data+Store+%28CDS%29+documentation#ClimateDataStore(CDS)documentation-Efficiencytips
+    https://forum.ecmwf.int/t/ecmwf-apis-faq-api-data-documentation/6880
     """
     if stride < 1:
         return ValueError("Stride cannot be less than 1")
