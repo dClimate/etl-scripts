@@ -35,4 +35,6 @@ quote-style = "double"
 py-hamt = { git = "https://github.com/dClimate/py-hamt" }
 
 [dependency-groups]
-dev = ["ruff>=0.8.0"]
+dev = [
+    "ruff>=0.11.2",
+]
