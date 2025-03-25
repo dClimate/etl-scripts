@@ -375,10 +375,10 @@ def instantiate(
     grib_paths: list[Path] = []
     current = start_date
     while current < end_date:
-        current = next_month(current)
         eprint(f"Downloading GRIB for month of date {current}")
         path = download_grib(dataset, current, "month", api_key=api_key)
         grib_paths.append(path)
+        current = next_month(current)
 
     eprint("====== Writing this dataset to a new Zarr on IPFS ======")
     ds = xr.open_mfdataset(grib_paths)
