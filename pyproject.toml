@@ -13,12 +13,12 @@ dependencies = [
     "cfgrib>=0.9.15.0",
     # Used for creating CLI scripts
     "click>=8.1.7",
-    # Zarrs on IPFS
-    "py-hamt",
-    # Lock versions of xarray and zarr to work with zarr v2
-    "xarray[io,parallel,viz]==2024.11.0",
-    "zarr==2.18.3",
+    "py-hamt>=2.4.0",
+    # Versions that work with zarr v3
+    "xarray[io,parallel,viz]>=2025.3.0",
+    "zarr>=3.0.6",
 ]
+
 # numcodecs, dask, pandas, numpy, and multiformats are imports in various files, but not in pyproject.toml dependencies, since they are required by xarray, so we just use the existing compatible versions that are installed when xarray is installed
 
 [build-system]
@@ -35,4 +35,6 @@ quote-style = "double"
 py-hamt = { git = "https://github.com/dClimate/py-hamt" }
 
 [dependency-groups]
-dev = ["ruff>=0.8.0"]
+dev = [
+    "ruff>=0.11.2",
+]
