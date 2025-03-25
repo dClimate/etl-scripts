@@ -13,7 +13,7 @@ import numpy as np
 import xarray as xr
 from botocore.exceptions import ClientError as S3ClientError
 from multiformats import CID
-from py_hamt import HAMT, IPFSStore
+from py_hamt import HAMT, IPFSStore, IPFSZarr3
 
 from etl_scripts.grabbag import eprint
 
@@ -391,9 +391,10 @@ def instantiate(
     if rpc_uri_stem is not None:
         ipfs_store.rpc_uri_stem = rpc_uri_stem
     hamt = HAMT(store=ipfs_store)
-    ds.to_zarr(store=hamt)
+    ipfszarr3 = IPFSZarr3(hamt)
+    ds.to_zarr(store=ipfszarr3)  # type: ignore
     eprint("HAMT CID")
-    print(hamt.root_node_id)
+    print(ipfszarr3.hamt.root_node_id)
 
     eprint("Now cleaning up GRIB files on disk by deleting them")
     for path in grib_paths:
@@ -452,7 +453,8 @@ def append(
         ipfs_store.gateway_uri_stem = gateway_uri_stem
     if rpc_uri_stem is not None:
         ipfs_store.rpc_uri_stem = rpc_uri_stem
-    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid), read_only=False)
+    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid))
+    ipfszarr3 = IPFSZarr3(hamt)
 
     for c in range(0, count, stride):
         eprint("====== Creating dataset for append ======")
@@ -496,11 +498,11 @@ def append(
         eprint(ds)
 
         eprint("====== Appending to IPFS ======")
-        ds.to_zarr(store=hamt, append_dim="time")
+        ds.to_zarr(store=ipfszarr3, append_dim="time")  # type: ignore
         eprint(
             f"= New HAMT CID after appending from {working_timestamps[0]} to {working_timestamps[-1]} with a period of {period}"
         )
-        print(hamt.root_node_id)
+        print(ipfszarr3.hamt.root_node_id)
 
         eprint("Removing GRIBs on disk")
         for path in grib_paths:
