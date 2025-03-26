@@ -323,13 +323,13 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
     ds = ds.drop_vars(["number", "step", "surface", "time"])
     ds = ds.rename({"valid_time": "time"})
 
-    ds = ds.sortby("latitude", ascending=True)
-    del ds.latitude.attrs["stored_direction"]  # normally says descending
-    ds = ds.sortby("longitude", ascending=True)
-
     # ERA5 GRIB files have longitude from 0 to 360, but dClimate standardizes from -180 to 180
     new_longitude = np.where(ds.longitude > 180, ds.longitude - 360, ds.longitude)
     ds = ds.assign_coords(longitude=new_longitude)
+
+    ds = ds.sortby("latitude", ascending=True)
+    del ds.latitude.attrs["stored_direction"]  # normally says descending
+    ds = ds.sortby("longitude", ascending=True)
 
     # Results in about 1 MB sized chunks
     # We chunk small in spatial, wide in time
