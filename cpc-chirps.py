@@ -5,11 +5,11 @@ from math import ceil
 from pathlib import Path
 
 import click
-import numcodecs
 import numpy as np
 import xarray as xr
+import zarr.codecs
 from multiformats import CID
-from py_hamt import HAMT, IPFSStore
+from py_hamt import HAMT, IPFSStore, IPFSZarr3
 
 from etl_scripts.grabbag import eprint
 
@@ -93,8 +93,9 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
     ds = ds.sortby("longitude", ascending=True)
 
     if dataset.startswith("cpc"):
-        # CPC's longitude stretches from 0 to 360, increasing east (0) to west (360). This changes to proper -180 (west) to 180 (east)
-        ds = ds.assign_coords(longitude=(-ds.longitude + 180))
+        # CPC's longitude stretches from 0 to 360, this changes to -180 (west) to 180 (east)
+        new_longitude = np.where(ds.longitude > 180, ds.longitude - 360, ds.longitude)
+        ds = ds.assign_coords(longitude=new_longitude)
 
     ds = ds.chunk(chunking_settings)
 
@@ -102,8 +103,7 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
         da = ds[var]
 
         # Apply compression
-        # clevel=9 means highest compression level (0-9 scale)
-        da.encoding["compressor"] = numcodecs.Blosc(clevel=9)
+        da.encoding["compressors"] = zarr.codecs.BloscCodec()
 
         # Prefer _FillValue over missing_value
         da.encoding["_FillValue"] = np.nan
@@ -234,10 +234,10 @@ def instantiate(
         ipfs_store.gateway_uri_stem = gateway_uri_stem
     if rpc_uri_stem is not None:
         ipfs_store.rpc_uri_stem = rpc_uri_stem
-    hamt = HAMT(store=ipfs_store)
-    ds.to_zarr(store=hamt)
+    ipfszarr3 = IPFSZarr3(HAMT(store=ipfs_store))
+    ds.to_zarr(store=ipfszarr3)  # type: ignore
     eprint("HAMT CID")
-    print(hamt.root_node_id)
+    print(ipfszarr3.hamt.root_node_id)
 
 
 @click.command
@@ -304,8 +304,9 @@ def append(
         ipfs_store.gateway_uri_stem = gateway_uri_stem
     if rpc_uri_stem is not None:
         ipfs_store.rpc_uri_stem = rpc_uri_stem
-    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid), read_only=False)
-    ds.to_zarr(store=hamt, append_dim="time")
+    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid))
+    ipfszarr3 = IPFSZarr3(HAMT(store=ipfs_store))
+    ds.to_zarr(store=ipfszarr3, append_dim="time")  # type: ignore
     eprint("HAMT CID")
     print(hamt.root_node_id)
 

@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 import click
@@ -6,7 +5,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from multiformats import CID
-from py_hamt import HAMT, IPFSStore
+from py_hamt import HAMT, IPFSStore, IPFSZarr3
+
+from etl_scripts.grabbag import eprint
 
 
 @click.command
@@ -28,9 +29,10 @@ def plot_random_point(cid: str, out_dir: Path):
 
     This script will save the files with a naming scheme of "plot-{cid}-{data_var}.png" inside the OUT_DIR, which is the output directory.
     """
-    hamt = HAMT(store=IPFSStore(), root_node_id=CID.decode(cid), read_only=True)
-    ds = xr.open_zarr(store=hamt)
-    print(ds, file=sys.stderr)
+    hamt = HAMT(store=IPFSStore(), root_node_id=CID.decode(cid))
+    ipfszarr3 = IPFSZarr3(hamt, read_only=True)
+    ds = xr.open_zarr(store=ipfszarr3)
+    eprint(ds)
 
     random_time = np.random.choice(ds.time)
     ds_slice = ds.sel(time=random_time)
