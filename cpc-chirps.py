@@ -305,10 +305,10 @@ def append(
     if rpc_uri_stem is not None:
         ipfs_store.rpc_uri_stem = rpc_uri_stem
     hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid))
-    ipfszarr3 = IPFSZarr3(HAMT(store=ipfs_store))
+    ipfszarr3 = IPFSZarr3(hamt)
     ds.to_zarr(store=ipfszarr3, append_dim="time")  # type: ignore
     eprint("HAMT CID")
-    print(hamt.root_node_id)
+    print(ipfszarr3.hamt.root_node_id)
 
 
 @click.command
