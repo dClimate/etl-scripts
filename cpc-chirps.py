@@ -93,8 +93,9 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
     ds = ds.sortby("longitude", ascending=True)
 
     if dataset.startswith("cpc"):
-        # CPC's longitude stretches from 0 to 360, increasing east (0) to west (360). This changes to proper -180 (west) to 180 (east)
-        ds = ds.assign_coords(longitude=(-ds.longitude + 180))
+        # CPC's longitude stretches from 0 to 360, this changes to -180 (west) to 180 (east)
+        new_longitude = np.where(ds.longitude > 180, ds.longitude - 360, ds.longitude)
+        ds = ds.assign_coords(longitude=new_longitude)
 
     ds = ds.chunk(chunking_settings)
 
