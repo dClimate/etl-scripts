@@ -11,6 +11,7 @@ import click
 import numcodecs
 import numpy as np
 import xarray as xr
+import zarr.codecs
 from botocore.exceptions import ClientError as S3ClientError
 from multiformats import CID
 from py_hamt import HAMT, IPFSStore, IPFSZarr3
@@ -313,16 +314,22 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
         case _:
             raise ValueError(f"Invalid dataset value {dataset}")
 
+    if len(ds.valid_time.dims) == 2:
+        # Monthly downloaded files have their time coordinate as an N-dimensional array, make this coordinate linear
+        ds_stack = ds.stack(throwaway=("time", "step"))
+        ds_linear = ds_stack.swap_dims({"throwaway": "valid_time"})
+        ds = ds_linear.drop_vars(["throwaway"])
+
     ds = ds.drop_vars(["number", "step", "surface", "time"])
     ds = ds.rename({"valid_time": "time"})
-    ds = ds.set_xindex("time")
 
     ds = ds.sortby("latitude", ascending=True)
     del ds.latitude.attrs["stored_direction"]  # normally says descending
     ds = ds.sortby("longitude", ascending=True)
 
     # ERA5 GRIB files have longitude from 0 to 360, but dClimate standardizes from -180 to 180
-    ds = ds.assign_coords(longitude=(ds.longitude - 180))
+    new_longitude = np.where(ds.longitude > 180, ds.longitude - 360, ds.longitude)
+    ds = ds.assign_coords(longitude=new_longitude)
 
     # Results in about 1 MB sized chunks
     # We chunk small in spatial, wide in time
@@ -335,8 +342,7 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
         da = ds[var]
 
         # Apply compression
-        # clevel=9 means highest compression level (0-9 scale)
-        da.encoding["compressor"] = numcodecs.Blosc(clevel=9)
+        da.encoding["compressors"] = zarr.codecs.BloscCodec()
 
         for param in list(da.attrs.keys()):
             if param.startswith("GRIB"):
