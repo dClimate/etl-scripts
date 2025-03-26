@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 import xarray as xr
 from multiformats import CID
-from py_hamt import HAMT, IPFSStore
+from py_hamt import HAMT, IPFSStore, IPFSZarr3
 
 from etl_scripts.grabbag import eprint
 
@@ -44,8 +44,10 @@ def ipfs(
     if rpc_uri_stem is not None:
         ipfs_store.rpc_uri_stem = rpc_uri_stem
 
-    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid), read_only=True)
-    ds = xr.open_zarr(store=hamt)
+    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid))
+    ipfszarr3 = IPFSZarr3(hamt, read_only=True)
+    ds = xr.open_zarr(store=ipfszarr3)
+
     if print_latest_timestamps == 0:
         print(ds)
     else:
