@@ -1224,8 +1224,8 @@ wheels = [
 
 [[package]]
 name = "py-hamt"
-version = "2.4.0"
-source = { git = "https://github.com/dClimate/py-hamt#3ac5d99d537b4727480ff388f91d2dc0e7b9a58b" }
+version = "2.4.1"
+source = { git = "https://github.com/dClimate/py-hamt#48b6b6d40a4ffc9a729b18d5cbc046e8f747ae7c" }
 dependencies = [
     { name = "dag-cbor" },
     { name = "msgspec" },
