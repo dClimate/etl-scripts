@@ -322,6 +322,7 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
 
     ds = ds.drop_vars(["number", "step", "surface", "time"])
     ds = ds.rename({"valid_time": "time"})
+    ds = ds.set_xindex("time")
 
     # ERA5 GRIB files have longitude from 0 to 360, but dClimate standardizes from -180 to 180
     new_longitude = np.where(ds.longitude > 180, ds.longitude - 360, ds.longitude)
@@ -494,7 +495,7 @@ def append(
         ds = xr.open_mfdataset(grib_paths)
         ds = standardize(dataset, ds)
         # fix issues with zarr chunks and dask chunks overlapping
-        first_ds = xr.open_zarr(store=hamt)
+        first_ds = xr.open_zarr(store=ipfszarr3)
         ds_rechunked = (
             xr.concat([first_ds, ds], dim="time")
             .chunk(chunking_settings)

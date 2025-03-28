@@ -13,7 +13,7 @@ dependencies = [
     "cfgrib>=0.9.15.0",
     # Used for creating CLI scripts
     "click>=8.1.7",
-    "py-hamt>=2.4.0",
+    "py-hamt",
     # Versions that work with zarr v3
     "xarray[io,parallel,viz]>=2025.3.0",
     "zarr>=3.0.6",
