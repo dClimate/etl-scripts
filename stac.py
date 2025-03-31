@@ -29,7 +29,7 @@ def gen_geometry(ds: xr.Dataset) -> dict:
                 [right, bottom],
                 [right, top],
                 [left, top],
-                [left, left, bottom],
+                [left, bottom],
                 [right, bottom],
             ]
         ],
