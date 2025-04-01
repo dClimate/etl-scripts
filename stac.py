@@ -247,18 +247,26 @@ def gen(
 
 
 @click.command
-@click.argument("type", type=click.Choice(["collection", "item"]))
+@click.argument("type", type=click.Choice(["collection", "item", "all"]))
 @click.argument("catalog-cid")
+@click.option(
+    "--plain",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Print just the CIDs stdout, with newlines in between.",
+)
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 def collect(
-    type: Literal["collection"] | Literal["item"],
+    type: Literal["collection"] | Literal["item"] | Literal["all"],
     catalog_cid: str,
+    plain: bool,
     gateway_uri_stem: str | None,
     rpc_uri_stem: str | None,
 ):
     """
-    Print a JSON with the CIDs for all STAC collections, or items to stdout.
+    Print a JSON with the CIDs for all STAC collections, or items to stdout. If set to "all", this will also print the catalog CID, the collections, and the items.
     """
     ipfs_store = IPFSStore()
     if gateway_uri_stem is not None:
@@ -270,36 +278,39 @@ def collect(
         return json.loads(ipfs_store.load(CID.decode(cid)))
 
     catalog = read_from_ipfs(catalog_cid)
+    catalog_json_out = {catalog["id"]: catalog_cid}
 
-    output = dict()
-
-    if type == "collection":
-        eprint("=== Collections")
     collections = []
+    collections_json_out = {}
     for link in catalog["links"]:
         cid = link["href"][6:]  # [6:] removes the /ipfs/ at the beginning of the href
         collection = read_from_ipfs(cid)
+        collections_json_out[collection["id"]] = cid
+        collections.append(collection)
 
-        if type == "collection":
-            output[collection["id"]] = cid
-        else:
-            collections.append(collection)
-
-    if type == "collection":
-        pprint.pp(output)
-        return
-
-    eprint("=== Items")
+    items_json_out = {}
     for collection in collections:
         for link in collection["links"]:
             cid = link["href"][6:]
             item = read_from_ipfs(cid)
 
             # type must be item to reach here so don't do a check
-            output[item["id"]] = cid
+            items_json_out[item["id"]] = cid
 
-    # type must be item to reach here so don't do a check
-    pprint.pp(output)
+    json_out = {}
+    if type == "all":
+        json_out = catalog_json_out | collections_json_out | items_json_out
+    elif type == "collection":
+        json_out = collections_json_out
+    elif type == "item":
+        json_out = items_json_out
+
+    if plain:
+        for id in json_out:
+            cid = json_out[id]
+            print(cid)
+    else:
+        pprint.pp(json_out)
 
 
 @click.group
