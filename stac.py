@@ -6,6 +6,10 @@ https://github.com/radiantearth/stac-spec
 """
 
 import json
+import pprint
+import sys
+from pathlib import Path
+from typing import Literal
 
 import click
 import pandas as pd
@@ -14,6 +18,11 @@ from multiformats import CID
 from py_hamt import HAMT, IPFSStore, IPFSZarr3
 
 from etl_scripts.grabbag import eprint
+
+
+# Pretty print a dict to stderr
+def epp(d: dict):
+    pprint.pp(d, stream=sys.stderr)
 
 
 # Returns a GeoJSON as a dict
@@ -37,47 +46,34 @@ def gen_geometry(ds: xr.Dataset) -> dict:
 
 
 @click.command
-@click.argument("cpc-precip-conus")
-@click.argument("cpc-precip-global")
-@click.argument("cpc-tmax")
-@click.argument("cpc-tmin")
-@click.argument("chirps-final-p05")
-@click.argument("chirps-final-p25")
-@click.argument("chirps-prelim-p05")
-@click.argument("era5-2m_temperature")
-@click.argument("era5-10m_u_component-of-wind")
-@click.argument("era5-10m_v_component_of_wind")
-@click.argument("era5-100m_u_component_of_wind")
-@click.argument("era5-100m_v_component_of_wind")
-@click.argument("era5-surface_pressure")
-@click.argument("era5-surface_solar_radiation_downwards")
-@click.argument("era5-total_precipitation")
+@click.argument(
+    "stac-input-path",
+    type=click.Path(
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        path_type=Path,
+    ),
+)
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
-def cli(
-    cpc_precip_conus: str,
-    cpc_precip_global: str,
-    cpc_tmax: str,
-    cpc_tmin: str,
-    chirps_final_p05: str,
-    chirps_final_p25: str,
-    chirps_prelim_p05: str,
-    era5_2m_temperature: str,
-    era5_10m_u_component_of_wind: str,
-    era5_10m_v_component_of_wind: str,
-    era5_100m_u_component_of_wind: str,
-    era5_100m_v_component_of_wind: str,
-    era5_surface_pressure: str,
-    era5_surface_solar_radiation_downwards: str,
-    era5_total_precipitation: str,
+def gen(
+    stac_input_path: Path,
     gateway_uri_stem: str | None,
     rpc_uri_stem: str | None,
 ):
     """
-    Used for creating a STAC catalog of the datasets from etl-scripts, using the CID of each dataset, and uses that to generate the STAC.
+    Creates a STAC catalog of the datasets from etl-scripts, using the CID of each dataset.
+
+    These CIDs should be written to a JSON file, see the `stac-gen-input-template.json` file for what this should look like. For manual use, it is advised to create a copy named stac-gen-input.json and fill cids out in there since that is in the gitignore.
 
     If a CID is 'null', then stac.py will ignore it entirely, and not generate the STAC item entry.
     """
+    stac_input: dict[str, str]
+    with open(stac_input_path, "r") as f:
+        stac_input = json.load(f)
 
     ipfs_store = IPFSStore()
     if gateway_uri_stem is not None:
@@ -92,16 +88,16 @@ def cli(
             )
         )
 
-    # Basic strategy is to generate each item, then the collection, then the catalog
-
-    item_cids: dict[str, CID] = {}
-
     def save_to_ipfs(d: dict) -> CID:
         return ipfs_store.save_raw(json.dumps(d).encode())
 
-    def save_item(id: str, ds_cid: str):
+    # Generate the items, then collections, and finally the catalog
+
+    item_cids: dict[str, CID] = {}
+    for id in stac_input:
+        ds_cid = stac_input[id]
         if ds_cid == "null":
-            return
+            continue
         ds = open_ds(ds_cid)
         # e.g. "2023-09-25T17:47:10Z"
         time_format = "%Y-%m-%dT%H:%M:%SZ"
@@ -135,27 +131,6 @@ def cli(
                 "assets": {},
             },
         )
-
-    # CPC
-    save_item("cpc-precip-conus", cpc_precip_conus)
-    save_item("cpc-precip-global", cpc_precip_global)
-    save_item("cpc-tmax", cpc_tmax)
-    save_item("cpc-tmin", cpc_tmin)
-
-    save_item("chirps-final-p05", chirps_final_p05)
-    save_item("chirps-final-p25", chirps_final_p25)
-    save_item("chirps-prelim-p05", chirps_prelim_p05)
-
-    save_item("era5-2m_temperature", era5_2m_temperature)
-    save_item("era5-10m_u_component_of_wind", era5_10m_u_component_of_wind)
-    save_item("era5-10m_v_component_of_wind", era5_10m_v_component_of_wind)
-    save_item("era5-100m_u_component_of_wind", era5_100m_u_component_of_wind)
-    save_item("era5-100m_v_component_of_wind", era5_100m_v_component_of_wind)
-    save_item("era5-surface_pressure", era5_surface_pressure)
-    save_item(
-        "era5-surface_solar_radiation_downwards", era5_surface_solar_radiation_downwards
-    )
-    save_item("era5-total_precipitation", era5_total_precipitation)
 
     # Collections
     def add_links_collection(collection: dict, item_ids: list[str]):
@@ -214,7 +189,7 @@ def cli(
     era5_collection = {
         "type": "Collection",
         "stac_version": "1.0.0",
-        "id": "CHIRPS",
+        "id": "ERA5",
         "description": "",
         "license": "noassertion",
         "extent": {
@@ -265,11 +240,76 @@ def cli(
     catalog_cid = save_to_ipfs(catalog)
 
     eprint("=== Catalog")
-    eprint(catalog)
+    epp(catalog)
 
     eprint("=== Catalog CID")
     print(catalog_cid)
 
+
+@click.command
+@click.argument("type", type=click.Choice(["collection", "item"]))
+@click.argument("catalog-cid")
+@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
+@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+def collect(
+    type: Literal["collection"] | Literal["item"],
+    catalog_cid: str,
+    gateway_uri_stem: str | None,
+    rpc_uri_stem: str | None,
+):
+    """
+    Print a JSON with the CIDs for all STAC collections, or items to stdout.
+    """
+    ipfs_store = IPFSStore()
+    if gateway_uri_stem is not None:
+        ipfs_store.gateway_uri_stem = gateway_uri_stem
+    if rpc_uri_stem is not None:
+        ipfs_store.rpc_uri_stem = rpc_uri_stem
+
+    def read_from_ipfs(cid: str) -> dict:
+        return json.loads(ipfs_store.load(CID.decode(cid)))
+
+    catalog = read_from_ipfs(catalog_cid)
+
+    output = dict()
+
+    if type == "collection":
+        eprint("=== Collections")
+    collections = []
+    for link in catalog["links"]:
+        cid = link["href"][6:]  # [6:] removes the /ipfs/ at the beginning of the href
+        collection = read_from_ipfs(cid)
+
+        if type == "collection":
+            output[collection["id"]] = cid
+        else:
+            collections.append(collection)
+
+    if type == "collection":
+        pprint.pp(output)
+        return
+
+    eprint("=== Items")
+    for collection in collections:
+        for link in collection["links"]:
+            cid = link["href"][6:]
+            item = read_from_ipfs(cid)
+
+            # type must be item to reach here so don't do a check
+            output[item["id"]] = cid
+
+    # type must be item to reach here so don't do a check
+    pprint.pp(output)
+
+
+@click.group
+def cli():
+    """Tools for creating and navigating the dClimate data catalog STAC."""
+    pass
+
+
+cli.add_command(gen)
+cli.add_command(collect)
 
 if __name__ == "__main__":
     cli()

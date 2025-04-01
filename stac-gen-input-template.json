@@ -1,0 +1,17 @@
+{
+  "cpc-precip-conus": "null",
+  "cpc-precip-global": "null",
+  "cpc-tmax": "null",
+  "cpc-tmin": "null",
+  "chirps-final-p05": "null",
+  "chirps-final-p25": "null",
+  "chirps-prelim-p05": "null",
+  "era5-2m_temperature": "null",
+  "era5-10m_u_component_of_wind": "null",
+  "era5-10m_v_component_of_wind": "null",
+  "era5-100m_u_component_of_wind": "null",
+  "era5-100m_v_component_of_wind": "null",
+  "era5-surface_pressure": "null",
+  "era5-surface_solar_radiation_downwards": "null",
+  "era5-total_precipitation": "null"
+}

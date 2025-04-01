@@ -8,3 +8,4 @@ pyrightconfig.json
 requirements.txt
 
 scratchspace
+stac-gen-input.json
