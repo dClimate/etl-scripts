@@ -297,7 +297,7 @@ def collect(
             item = read_from_ipfs(cid)
 
             # type must be item to reach here so don't do a check
-            items_json_out[item["id"]] = item["assets"]["hamt-zarr"]["href"][6:]
+            items_json_out[item["id"]] = cid
 
     json_out = {}
     if type == "all":
