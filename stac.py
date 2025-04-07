@@ -128,7 +128,9 @@ def gen(
                 },
                 # links is impossible since we cannot know the CID of the parent or this very own item ahead of time
                 "links": [],
-                "assets": {},
+                "assets": {"hamt-zarr": {
+                    "href": f"/ipfs/{ds_cid}"
+                }},
             },
         )
 
@@ -295,7 +297,7 @@ def collect(
             item = read_from_ipfs(cid)
 
             # type must be item to reach here so don't do a check
-            items_json_out[item["id"]] = cid
+            items_json_out[item["id"]] = item["assets"]["hamt-zarr"]["href"][6:]
 
     json_out = {}
     if type == "all":
