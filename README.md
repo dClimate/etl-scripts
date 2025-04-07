@@ -53,3 +53,6 @@ https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=ove
 The ETL is only configured to accept the data variables dClimate is concerned with, but it is very easy to extend the list, other variables should work the same.
 
 Running the ETL requires a S3 compatible bucket to cache raw data files, you can configure that by taking the template in `era5-env.json.example` and writing that to a `era5-env.json` file.
+
+## One-Shots
+The `one-shots` folder contains ETLs for data that only needs to be ETLed once, and does not need to be maintained. This is why many of the ETLs are also added as Jupyter notebooks, for ease of use by data scientists exploring and molding the data before it is provided to dClimate for storage in our system.
