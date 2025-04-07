@@ -5,4 +5,4 @@
 
 cid=$1
 
-uv run stac.py collect all --plain $cid | xargs -n 1 echo ipfs pin add --recursive false
+uv run stac.py collect all --plain $cid | xargs -n 1 ipfs pin add --recursive=false
