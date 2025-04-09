@@ -64,7 +64,9 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
     ds = ds.sortby("latitude", ascending=True)
     ds = ds.sortby("longitude", ascending=True)
 
-    ds = ds.rename({"Band1": dataset_to_datatype[dataset]}) # e.g. rename Band1 to precip
+    ds = ds.rename(
+        {"Band1": dataset_to_datatype[dataset]}
+    )  # e.g. rename Band1 to precip
 
     ds = ds.chunk(chunking_settings)
 
@@ -325,6 +327,7 @@ def instantiate(
     eprint("HAMT CID")
     print(hamt.root_node_id)
 
+
 @click.command
 @click.argument("dataset", type=datasets_choice)
 @click.argument("cid")
@@ -394,7 +397,7 @@ def append(
         ds = standardize(dataset, ds)
 
         eprint("====== Appending to IPFS ======")
-        ds.to_zarr(store=ipfszarr3, append_dim="time") # type: ignore
+        ds.to_zarr(store=ipfszarr3, append_dim="time")  # type: ignore
         eprint(
             f"= New HAMT CID after appending from {working_timestamps[0]} to {working_timestamps[-1]}"
         )

@@ -59,12 +59,12 @@ def gen_geometry(ds: xr.Dataset) -> dict:
     ),
 )
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
-@click.option("--rpc-uri-stem", help="Stem of url for Kubo RPC API http endpoint. Also used for IPFSStore.", default="http://127.0.0.1:5001")
-def gen(
-    stac_input_path: Path,
-    gateway_uri_stem: str | None,
-    rpc_uri_stem: str
-):
+@click.option(
+    "--rpc-uri-stem",
+    help="Stem of url for Kubo RPC API http endpoint. Also used for IPFSStore.",
+    default="http://127.0.0.1:5001",
+)
+def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
     """
     Creates a STAC catalog of the datasets from etl-scripts, using the CID of each dataset.
 
@@ -142,9 +142,7 @@ def gen(
                 },
                 # links is impossible since we cannot know the CID of the parent or this very own item ahead of time
                 "links": [],
-                "assets": {"hamt-zarr": {
-                    "href": f"/ipfs/{ds_cid}"
-                }},
+                "assets": {"hamt-zarr": {"href": f"/ipfs/{ds_cid}"}},
             },
         )
 
