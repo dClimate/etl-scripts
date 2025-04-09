@@ -10,10 +10,11 @@ import numcodecs
 import numpy as np
 import pandas as pd
 import xarray as xr
+import zarr.codecs
 from multiformats import CID
-from py_hamt import HAMT, IPFSStore
+from py_hamt import HAMT, IPFSStore, IPFSZarr3
 
-from etl_scripts.grabbag import eprint
+from etl_scripts.grabbag import eprint, npdt_to_pydt
 
 scratchspace: Path = (Path(__file__).parent / "scratchspace" / "prism").absolute()
 os.makedirs(scratchspace, exist_ok=True)
@@ -55,16 +56,15 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
 
     da = ds["Band1"]
     # Apply compression
-    # clevel=9 means highest compression level (0-9 scale)
-    da.encoding["compressor"] = numcodecs.Blosc(clevel=9)
+    da.encoding["compressors"] = zarr.codecs.BloscCodec()
     # Make fill value a float NaN instead of the original -9999.0
     da.encoding["_FillValue"] = np.nan
 
     ds = ds.rename({"lat": "latitude", "lon": "longitude"})
     ds = ds.sortby("latitude", ascending=True)
     ds = ds.sortby("longitude", ascending=True)
-    # e.g. rename Band1 to precip
-    ds = ds.rename({"Band1": dataset_to_datatype[dataset]})
+
+    ds = ds.rename({"Band1": dataset_to_datatype[dataset]}) # e.g. rename Band1 to precip
 
     ds = ds.chunk(chunking_settings)
 
@@ -126,7 +126,7 @@ def find_timespan(dataset: str) -> tuple[datetime, datetime]:
 @click.argument("dataset", type=datasets_choice)
 def get_available_timespan(dataset: str):
     """
-    TODO documentation
+    Find the timespan of available data for a dataset.
     """
     earliest_date, latest_date = find_timespan(dataset)
     print(f"{earliest_date.strftime('%Y-%m-%d')} {latest_date.strftime('%Y-%m-%d')}")
@@ -136,7 +136,7 @@ def make_nc_path(dataset: str, day: datetime, grid_count: int) -> Path:
     return scratchspace / f"{dataset}_{day.strftime('%Y-%m-%d')}_{grid_count}.nc"
 
 
-def find_nc_path(dataset: str, day: datetime) -> Path:
+def find_nc_path(dataset: str, day: datetime) -> Path:  # type: ignore
     """Only call if you are sure the file exists!"""
     for grid_count in range(1, 9):
         nc_path = make_nc_path(dataset, day, grid_count)
@@ -271,8 +271,7 @@ def download_day(dataset: str, day: datetime, force=False) -> Path:
 @click.argument("dataset", type=datasets_choice)
 @click.argument("day", type=click.DateTime())
 def download(dataset: str, day: datetime):
-    """TODO documentation,
-    include fact about not downloading from source the same file twice a day"""
+    """Download a day's worth of data. This does not redownload unless the data has been updated, but checking whether data has been updated does include a network request."""
     download_day(dataset, day)
 
 
@@ -288,7 +287,10 @@ def download(dataset: str, day: datetime):
     help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
 )
 def instantiate(
-    dataset: str, gateway_uri_stem: str, rpc_uri_stem: str, skip_download: bool
+    dataset: str,
+    gateway_uri_stem: str,
+    rpc_uri_stem: str,
+    skip_download: bool,
 ):
     num_days_needed = chunking_settings["time"]
     start_date: datetime = find_timespan(dataset)[0]
@@ -323,6 +325,81 @@ def instantiate(
     eprint("HAMT CID")
     print(hamt.root_node_id)
 
+@click.command
+@click.argument("dataset", type=datasets_choice)
+@click.argument("cid")
+@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
+@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option(
+    "--count",
+    default=1,
+    show_default=True,
+    help="The number of days to append. Usually 1, but if increased append will repeatedly print to stdout the CID of each successive append. This will essentially repeat the normal 1 count append command.",
+)
+@click.option(
+    "--stride",
+    default=1,
+    show_default=True,
+    help="The number of days to append, all at once. This option is here since appending one by one takes longer than appending multiple days at a time. Stride must be a divisor of count to be valid.",
+)
+def append(
+    dataset,
+    cid: str,
+    gateway_uri_stem: str,
+    rpc_uri_stem: str,
+    count: int,
+    stride: int,
+):
+    """
+    Append the data at timestamp onto the Dataset that cid points to, print out the CID of the new HAMT root.
+
+    This command requires the kubo daemon to be running.
+    """
+    if stride < 1:
+        return ValueError("Stride cannot be less than 1")
+    if count % stride != 0:
+        return ValueError("Count must be a multiple of stride")
+
+    ipfs_store = IPFSStore()
+    if gateway_uri_stem is not None:
+        ipfs_store.gateway_uri_stem = gateway_uri_stem
+    if rpc_uri_stem is not None:
+        ipfs_store.rpc_uri_stem = rpc_uri_stem
+    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid))
+    ipfszarr3 = IPFSZarr3(hamt)
+
+    # Get the latest timestamp to figure out where we should start appending from
+    ipfs_ds = xr.open_zarr(store=ipfszarr3)
+    ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
+
+    # Initialize with the first day before what we need to append
+    working_timestamps: list[datetime] = [ipfs_latest_timestamp]
+
+    for c in range(0, count, stride):
+        eprint("====== Creating dataset for append ======")
+        # Restart with the day after the latest one that was added
+        working_timestamps = [working_timestamps[-1] + timedelta(days=1)]
+
+        for _ in range(
+            1, stride
+        ):  # start range from 1 since we already have the current timestamp in there
+            working_timestamps.append(working_timestamps[-1] + timedelta(days=1))
+
+        nc_paths: list[Path] = []
+        for ts in working_timestamps:
+            nc_path = download_day(dataset, ts)
+            nc_paths.append(nc_path)
+
+        ds = xr.open_mfdataset(nc_paths)
+        ds = standardize(dataset, ds)
+
+        eprint("====== Appending to IPFS ======")
+        ds.to_zarr(store=ipfszarr3, append_dim="time") # type: ignore
+        eprint(
+            f"= New HAMT CID after appending from {working_timestamps[0]} to {working_timestamps[-1]}"
+        )
+        print(ipfszarr3.hamt.root_node_id)
+
 
 @click.group
 def cli():
@@ -332,6 +409,7 @@ def cli():
 cli.add_command(get_available_timespan)
 cli.add_command(download)
 cli.add_command(instantiate)
+cli.add_command(append)
 
 if __name__ == "__main__":
     cli()
