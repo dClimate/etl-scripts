@@ -13,6 +13,7 @@ from typing import Literal
 
 import click
 import pandas as pd
+import requests
 import xarray as xr
 from multiformats import CID
 from py_hamt import HAMT, IPFSStore, IPFSZarr3
@@ -58,11 +59,11 @@ def gen_geometry(ds: xr.Dataset) -> dict:
     ),
 )
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
-@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option("--rpc-uri-stem", help="Stem of url for Kubo RPC API http endpoint. Also used for IPFSStore.", default="http://127.0.0.1:5001")
 def gen(
     stac_input_path: Path,
     gateway_uri_stem: str | None,
-    rpc_uri_stem: str | None,
+    rpc_uri_stem: str
 ):
     """
     Creates a STAC catalog of the datasets from etl-scripts, using the CID of each dataset.
@@ -75,8 +76,7 @@ def gen(
     with open(stac_input_path, "r") as f:
         stac_input = json.load(f)
 
-    # Use sha2-256 for the hashing, since this is more common
-    ipfs_store = IPFSStore(hasher="sha2-256")
+    ipfs_store = IPFSStore()
     if gateway_uri_stem is not None:
         ipfs_store.gateway_uri_stem = gateway_uri_stem
     if rpc_uri_stem is not None:
@@ -91,7 +91,19 @@ def gen(
 
     def save_to_ipfs(d: dict) -> CID:
         # Save with dag-json, we are not at danger of saving the final dataset since the dataset HAMT root CIDs are not actually linked with the {"/":"cid"} format
-        return ipfs_store.save(json.dumps(d).encode(), cid_codec="dag-json")
+        url = f"{rpc_uri_stem}/api/v0/block/put?cid-codec=dag-json&mhtype=sha2-256"
+        data = json.dumps(d).encode()
+        response = requests.post(
+            url,
+            files={"files": data},
+        )
+        response.raise_for_status()
+
+        cid_str: str = json.loads(response.content)["Key"]
+        cid = CID.decode(cid_str)
+        cid = cid.set(base="base58btc")
+
+        return cid
 
     # Generate the items, then collections, and finally the catalog
 
