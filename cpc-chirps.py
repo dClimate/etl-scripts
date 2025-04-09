@@ -1,6 +1,6 @@
 import os
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from math import ceil
 from pathlib import Path
 
@@ -11,7 +11,7 @@ import zarr.codecs
 from multiformats import CID
 from py_hamt import HAMT, IPFSStore, IPFSZarr3
 
-from etl_scripts.grabbag import eprint
+from etl_scripts.grabbag import eprint, npdt_to_pydt
 
 scratchspace: Path = (Path(__file__).parent / "scratchspace" / "cpc-chirps").absolute()
 os.makedirs(scratchspace, exist_ok=True)
@@ -243,7 +243,6 @@ def instantiate(
 @click.command
 @click.argument("dataset", type=datasets_choice)
 @click.argument("cid")
-@click.argument("timestamp", type=click.DateTime())
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 @click.option(
@@ -260,45 +259,26 @@ def instantiate(
     default=False,
     help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
 )
+@click.option(
+    "--count",
+    default=1,
+    show_default=True,
+    help="The number of days/years to append. Usually 1, but if increased append will repeatedly print to stdout the CID of each successive append. This will essentially repeat the normal 1 count append command.",
+)
 def append(
     dataset,
     cid: str,
-    timestamp: datetime,
     gateway_uri_stem: str,
     rpc_uri_stem: str,
     year: bool,
     skip_download: bool,
+    count: int,
 ):
     """
     Append the data at timestamp onto the Dataset that CID points to, print new HAMT root CID to stdout.
 
     This command requires the kubo daemon to be running.
     """
-    eprint("====== Creating dataset to append ======")
-    nc_path: Path
-    if not skip_download:
-        eprint(f"Downloading netCDF for year {timestamp.year}...")
-        nc_path = download_year(dataset, timestamp.year)
-    else:
-        eprint(
-            f"Skipping downloading netCDF for year {timestamp.year}, going to try use what's on disk"
-        )
-        nc_path = make_nc_path(dataset, timestamp.year)
-    ds = xr.open_dataset(nc_path)
-    ds = standardize(dataset, ds)
-
-    if year:
-        ds = ds.sel(
-            time=str(timestamp.year)
-        )  # conversion to string aggregates all timestamps within the year
-    else:
-        ds = ds.sel(
-            time=slice(timestamp, timestamp)
-        )  # without slice, time becomes a scalar and an append will not succeed
-
-    eprint(ds)
-
-    eprint("====== Appending to IPFS ======")
     ipfs_store = IPFSStore()
     if gateway_uri_stem is not None:
         ipfs_store.gateway_uri_stem = gateway_uri_stem
@@ -306,59 +286,44 @@ def append(
         ipfs_store.rpc_uri_stem = rpc_uri_stem
     hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid))
     ipfszarr3 = IPFSZarr3(hamt)
-    ds.to_zarr(store=ipfszarr3, append_dim="time")  # type: ignore
-    eprint("HAMT CID")
-    print(ipfszarr3.hamt.root_node_id)
+    ipfs_ds = xr.open_zarr(store=ipfszarr3)
+    ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
 
+    timestamp: datetime = ipfs_latest_timestamp
+    for c in range(0, count):
+        if year:
+            timestamp = timestamp.replace(year=timestamp.year+1)
+        else:
+            timestamp = timestamp + timedelta(days=1)
 
-@click.command
-@click.argument("dataset", type=datasets_choice)
-def doall(dataset: str):
-    """ETL all available data for this dataset."""
-    # Not meant to be a robust solution sinec that would require significant code complexity to reuse functions as well as make them click commands.
-    instantiate = subprocess.run(
-        [
-            "uv",
-            "run",
-            "cpc-chirps.py",  # Specify output filepath
-            "instantiate",
-            dataset,
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if instantiate.returncode != 0:
-        raise Exception("instantiate returned nonzero exit code")
+        eprint("====== Creating dataset to append ======")
+        nc_path: Path
+        if not skip_download:
+            eprint(f"Downloading netCDF for year {timestamp.year}...")
+            nc_path = download_year(dataset, timestamp.year)
+        else:
+            eprint(
+                f"Skipping downloading netCDF for year {timestamp.year}, going to try use what's on disk"
+            )
+            nc_path = make_nc_path(dataset, timestamp.year)
+        ds = xr.open_dataset(nc_path)
+        ds = standardize(dataset, ds)
 
-    cid = instantiate.stdout.strip()
-    eprint(f"Got cid {cid} after instantiating")
-    # 2 accounts for instantiate already doing 2 years
-    start_year = dataset_start_years[dataset] + 2
-    end_year = datetime.now(UTC).year
-    eprint(f"Starting appends from start year {start_year} to {end_year}")
-    for year in range(start_year, end_year + 1):
-        append = subprocess.run(
-            [
-                "uv",
-                "run",
-                "cpc-chirps.py",  # Specify output filepath
-                "append",
-                dataset,
-                cid,
-                "--year",
-                f"{year}-01-01",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if append.returncode != 0:
-            raise Exception("append returned nonzero exit code")
-        cid = append.stdout.strip()
-        eprint(f"Got cid {cid} after appending year {year}")
+        if year:
+            ds = ds.sel(
+                time=str(timestamp.year)
+            )  # conversion to string aggregates all timestamps within the year
+        else:
+            ds = ds.sel(
+                time=slice(timestamp, timestamp)
+            )  # without slice, time becomes a scalar and an append will not succeed
 
-    eprint("Final CID")
-    print(cid)
+        eprint(ds)
 
+        eprint("====== Appending to IPFS ======")
+        ds.to_zarr(store=ipfszarr3, append_dim="time")  # type: ignore
+        eprint("HAMT CID")
+        print(ipfszarr3.hamt.root_node_id)
 
 @click.group
 def cli():
