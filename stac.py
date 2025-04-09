@@ -75,7 +75,8 @@ def gen(
     with open(stac_input_path, "r") as f:
         stac_input = json.load(f)
 
-    ipfs_store = IPFSStore()
+    # Use sha2-256 for the hashing, since this is more common
+    ipfs_store = IPFSStore(hasher="sha2-256")
     if gateway_uri_stem is not None:
         ipfs_store.gateway_uri_stem = gateway_uri_stem
     if rpc_uri_stem is not None:
@@ -89,7 +90,8 @@ def gen(
         )
 
     def save_to_ipfs(d: dict) -> CID:
-        return ipfs_store.save_raw(json.dumps(d).encode())
+        # Save with dag-json, we are not at danger of saving the final dataset since the dataset HAMT root CIDs are not actually linked with the {"/":"cid"} format
+        return ipfs_store.save(json.dumps(d).encode(), cid_codec="dag-json")
 
     # Generate the items, then collections, and finally the catalog
 
@@ -128,7 +130,9 @@ def gen(
                 },
                 # links is impossible since we cannot know the CID of the parent or this very own item ahead of time
                 "links": [],
-                "assets": {},
+                "assets": {"hamt-zarr": {
+                    "href": f"/ipfs/{ds_cid}"
+                }},
             },
         )
 
