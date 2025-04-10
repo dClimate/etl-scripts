@@ -13,5 +13,6 @@ def eprint(arg):
     """Print one argument to stderr"""
     print(arg, file=sys.stderr)
 
+
 def npdt_to_pydt(dt64: np.datetime64) -> datetime:
-    return pd.Timestamp(dt64).to_pydatetime() # type: ignore
+    return pd.Timestamp(dt64).to_pydatetime()  # type: ignore
