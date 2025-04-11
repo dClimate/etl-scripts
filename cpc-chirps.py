@@ -292,7 +292,7 @@ def append(
     timestamp: datetime = ipfs_latest_timestamp
     for c in range(0, count):
         if year:
-            timestamp = timestamp.replace(year=timestamp.year+1)
+            timestamp = timestamp.replace(year=timestamp.year + 1)
         else:
             timestamp = timestamp + timedelta(days=1)
 
@@ -324,6 +324,7 @@ def append(
         ds.to_zarr(store=ipfszarr3, append_dim="time")  # type: ignore
         eprint("HAMT CID")
         print(ipfszarr3.hamt.root_node_id)
+
 
 @click.group
 def cli():
