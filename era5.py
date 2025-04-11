@@ -4,6 +4,7 @@ import sys
 from datetime import datetime, timedelta
 from math import ceil
 from pathlib import Path
+from typing import Literal
 
 import boto3
 import cdsapi
@@ -16,7 +17,7 @@ from botocore.exceptions import ClientError as S3ClientError
 from multiformats import CID
 from py_hamt import HAMT, IPFSStore, IPFSZarr3
 
-from etl_scripts.grabbag import eprint
+from etl_scripts.grabbag import eprint, npdt_to_pydt
 
 scratchspace: Path = (Path(__file__).parent / "scratchspace" / "era5").absolute()
 os.makedirs(scratchspace, exist_ok=True)
@@ -411,7 +412,6 @@ def instantiate(
 @click.command
 @click.argument("dataset", type=datasets_choice)
 @click.argument("cid")
-@click.argument("timestamp", type=click.DateTime())
 @click.argument("period", type=period_choice)
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
@@ -433,8 +433,7 @@ def instantiate(
 def append(
     dataset,
     cid: str,
-    timestamp: datetime,
-    period: str,
+    period: Literal["hour"] | Literal["day"] | Literal["month"],
     gateway_uri_stem: str,
     rpc_uri_stem: str,
     api_key: str | None,
@@ -462,29 +461,27 @@ def append(
         ipfs_store.rpc_uri_stem = rpc_uri_stem
     hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid))
     ipfszarr3 = IPFSZarr3(hamt)
+    ipfs_ds = xr.open_zarr(store=ipfszarr3)
+    ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
+
+    working_timestamps: list[datetime] = [ipfs_latest_timestamp]
 
     for c in range(0, count, stride):
         eprint("====== Creating dataset for append ======")
-        working_timestamps: list[datetime] = [timestamp]
-        for s in range(
-            1, stride
-        ):  # start range from 1 since we already have the current timestamp in there
-            latest = working_timestamps[-1]
+        # Start by incrementing from the one aded in the last stride
+        latest = working_timestamps[-1]
+        new_ts: list[datetime] = []
+        for s in range(0, stride):
             match period:
                 case "hour":
-                    working_timestamps.append(latest + timedelta(hours=1))
+                    new_ts.append(latest + timedelta(hours=1))
                 case "day":
-                    working_timestamps.append(latest + timedelta(days=1))
+                    new_ts.append(latest + timedelta(days=1))
                 case "month":
-                    working_timestamps.append(next_month(latest))
-        next_starting_timestamp = working_timestamps[-1]
-        match period:
-            case "hour":
-                next_starting_timestamp = next_starting_timestamp + timedelta(hours=1)
-            case "day":
-                next_starting_timestamp = next_starting_timestamp + timedelta(days=1)
-            case "month":
-                next_starting_timestamp = next_month(next_starting_timestamp)
+                    new_ts.append(next_month(latest))
+            latest = new_ts[-1]
+
+        working_timestamps = new_ts
 
         # Keep a total list of all GRIBs downloaded for removal from disk at the end
         grib_paths: list[Path] = []
@@ -499,6 +496,7 @@ def append(
         ds_rechunked = (
             xr.concat([first_ds, ds], dim="time")
             .chunk(chunking_settings)
+            # When the second part of a slice is None, it selects as much as possible
             .sel(time=slice(ds.coords["time"][0], None))
         )
         ds = ds_rechunked
@@ -514,9 +512,6 @@ def append(
         eprint("Removing GRIBs on disk")
         for path in grib_paths:
             os.remove(path)
-
-        # increment to to the next starting month for our next stride calculation
-        timestamp = next_starting_timestamp
 
 
 @click.group

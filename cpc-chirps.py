@@ -338,7 +338,6 @@ cli.add_command(get_available_timespan)
 cli.add_command(download)
 cli.add_command(instantiate)
 cli.add_command(append)
-cli.add_command(doall)
 
 if __name__ == "__main__":
     cli()
