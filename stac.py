@@ -101,6 +101,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
 
         cid_str: str = json.loads(response.content)["Key"]
         cid = CID.decode(cid_str)
+        # https://ipld.io/docs/codecs/known/dag-json/ says that CIDs need to be in base58 or base32 for it to be a proper link
         cid = cid.set(base="base58btc")
 
         return cid
@@ -140,8 +141,8 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
                         time_format
                     ),
                 },
-                # links is impossible since we cannot know the CID of the parent or this very own item ahead of time
                 "links": [],
+                # Don't use a proper {"/":cid} since that would mean pinning the entire dataset on trying to pin the stac
                 "assets": {"hamt-zarr": {"href": f"/ipfs/{ds_cid}"}},
             },
         )
@@ -155,7 +156,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
                 collection["links"].append(
                     {
                         "rel": "item",
-                        "href": f"/ipfs/{cid}",
+                        "href": {"/": str(cid)},
                         "type": "application/json",
                         "title": item_id,
                     }
@@ -243,7 +244,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
                 catalog["links"].append(
                     {
                         "rel": "child",
-                        "href": f"/ipfs/{cid}",
+                        "href": {"/": str(cid)},
                         "type": "application/json",
                         "title": collection_id,
                     }
