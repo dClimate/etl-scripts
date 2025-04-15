@@ -306,7 +306,7 @@ def instantiate(
         if skip_download:
             nc_path = find_nc_path(dataset, date)
         else:
-            nc_path = download(dataset, date)
+            nc_path = download_day(dataset, date)
         ds = xr.open_dataset(nc_path)
         ds = add_time_dimension(ds, date)
         ds_list.append(ds)
@@ -323,9 +323,10 @@ def instantiate(
     if rpc_uri_stem is not None:
         ipfs_store.rpc_uri_stem = rpc_uri_stem
     hamt = HAMT(store=ipfs_store)
-    ds.to_zarr(store=hamt)
+    ipfszarr3 = IPFSZarr3(hamt)
+    ds.to_zarr(store=ipfszarr3)  # type: ignore
     eprint("HAMT CID")
-    print(hamt.root_node_id)
+    print(ipfszarr3.hamt.root_node_id)
 
 
 @click.command
