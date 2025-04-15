@@ -231,6 +231,29 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
     if len(era5_collection["links"]) > 0:
         collection_cids["ERA5"] = save_to_ipfs(era5_collection)
 
+    prism_collection = {
+        "type": "Collection",
+        "stac_version": "1.0.0",
+        "id": "ERA5",
+        "description": "",
+        "license": "noassertion",
+        "extent": {
+            "spatial": {"bbox": [[-125.0, 24.08, -66.5, 49.91]]},
+            "temporal": {"interval": [["1981-01-01T00:00:00Z", "null"]]},  # TODO
+        },
+        "links": [],
+    }
+    add_links_collection(
+        prism_collection,
+        [
+            "prism-precip-4km",
+            "prism-tmax-4km",
+            "prism-tmin-4km",
+        ],
+    )
+    if len(prism_collection["links"]) > 0:
+        collection_cids["PRISM"] = save_to_ipfs(prism_collection)
+
     catalog = {
         "type": "Catalog",
         "stac_version": "1.0.0",
@@ -252,7 +275,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
                     }
                 )
 
-    add_links_catalog(catalog, ["CPC", "CHIRPS", "ERA5"])
+    add_links_catalog(catalog, ["CPC", "CHIRPS", "ERA5", "PRISM"])
 
     catalog_cid = save_to_ipfs(catalog)
 
