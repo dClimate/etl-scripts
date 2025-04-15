@@ -71,6 +71,8 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
     These CIDs should be written to a JSON file, see the `stac-gen-input-template.json` file for what this should look like. For manual use, it is advised to create a copy named stac-gen-input.json and fill cids out in there since that is in the gitignore.
 
     If a CID is 'null', then stac.py will ignore it entirely, and not generate the STAC item entry.
+
+    Warning: This adds JSONs directly as IPFS blocks, so long all STAC JSON need to stay under the 1 MB bitswap limit, which they are currently well in the clear of.
     """
     stac_input: dict[str, str]
     with open(stac_input_path, "r") as f:
@@ -162,7 +164,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
                     }
                 )
 
-    collection_cids: dict[str, CID] = dict()
+    collection_cids: dict[str, CID] = {}
 
     cpc_collection = {
         "type": "Collection",
@@ -171,7 +173,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
         "description": "",
         "license": "noassertion",
         "extent": {
-            "spatial": {"bbox": [[-180, 90, 180, 90]]},
+            "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
             "temporal": {"interval": [["1979-01-01T00:00:00Z", "null"]]},
         },
         "links": [],
@@ -190,7 +192,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
         "description": "",
         "license": "noassertion",
         "extent": {
-            "spatial": {"bbox": [[-180, 90, 180, 90]]},
+            "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
             "temporal": {"interval": [["1981-01-01T00:00:00Z", "null"]]},
         },
         "links": [],
@@ -208,7 +210,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
         "description": "",
         "license": "noassertion",
         "extent": {
-            "spatial": {"bbox": [[-180, 90, 180, 90]]},
+            "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
             "temporal": {"interval": [["1940-01-01T00:00:00Z", "null"]]},
         },
         "links": [],
@@ -228,6 +230,29 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
     )
     if len(era5_collection["links"]) > 0:
         collection_cids["ERA5"] = save_to_ipfs(era5_collection)
+
+    prism_collection = {
+        "type": "Collection",
+        "stac_version": "1.0.0",
+        "id": "ERA5",
+        "description": "",
+        "license": "noassertion",
+        "extent": {
+            "spatial": {"bbox": [[-125.0, 24.08, -66.5, 49.91]]},
+            "temporal": {"interval": [["1981-01-01T00:00:00Z", "null"]]},  # TODO
+        },
+        "links": [],
+    }
+    add_links_collection(
+        prism_collection,
+        [
+            "prism-precip-4km",
+            "prism-tmax-4km",
+            "prism-tmin-4km",
+        ],
+    )
+    if len(prism_collection["links"]) > 0:
+        collection_cids["PRISM"] = save_to_ipfs(prism_collection)
 
     catalog = {
         "type": "Catalog",
@@ -250,7 +275,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
                     }
                 )
 
-    add_links_catalog(catalog, ["CPC", "CHIRPS", "ERA5"])
+    add_links_catalog(catalog, ["CPC", "CHIRPS", "ERA5", "PRISM"])
 
     catalog_cid = save_to_ipfs(catalog)
 
@@ -298,7 +323,7 @@ def collect(
     collections = []
     collections_json_out = {}
     for link in catalog["links"]:
-        cid = link["href"][6:]  # [6:] removes the /ipfs/ at the beginning of the href
+        cid = link["href"]["/"]
         collection = read_from_ipfs(cid)
         collections_json_out[collection["id"]] = cid
         collections.append(collection)
@@ -306,7 +331,7 @@ def collect(
     items_json_out = {}
     for collection in collections:
         for link in collection["links"]:
-            cid = link["href"][6:]
+            cid = link["href"]["/"]
             item = read_from_ipfs(cid)
 
             # type must be item to reach here so don't do a check

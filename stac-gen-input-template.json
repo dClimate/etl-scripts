@@ -13,5 +13,8 @@
   "era5-100m_v_component_of_wind": "null",
   "era5-surface_pressure": "null",
   "era5-surface_solar_radiation_downwards": "null",
-  "era5-total_precipitation": "null"
+  "era5-total_precipitation": "null",
+  "prism-precip-4km": "null",
+  "prism-tmax-4km": "null",
+  "prism-tmin-4km": "null"
 }
