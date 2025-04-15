@@ -389,12 +389,14 @@ def append(
         ):  # start range from 1 since we already have the current timestamp in there
             working_timestamps.append(working_timestamps[-1] + timedelta(days=1))
 
-        nc_paths: list[Path] = []
+        ds_list: list[xr.Dataset] = []
         for ts in working_timestamps:
             nc_path = download_day(dataset, ts)
-            nc_paths.append(nc_path)
+            ds = xr.open_dataset(nc_path)
+            ds = add_time_dimension(ds, ts)
+            ds_list.append(ds)
 
-        ds = xr.open_mfdataset(nc_paths)
+        ds = xr.concat(ds_list, dim="time")
         ds = standardize(dataset, ds)
 
         eprint("====== Appending to IPFS ======")
