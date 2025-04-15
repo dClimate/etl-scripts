@@ -173,7 +173,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
         "description": "",
         "license": "noassertion",
         "extent": {
-            "spatial": {"bbox": [[-180, 90, 180, 90]]},
+            "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
             "temporal": {"interval": [["1979-01-01T00:00:00Z", "null"]]},
         },
         "links": [],
@@ -192,7 +192,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
         "description": "",
         "license": "noassertion",
         "extent": {
-            "spatial": {"bbox": [[-180, 90, 180, 90]]},
+            "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
             "temporal": {"interval": [["1981-01-01T00:00:00Z", "null"]]},
         },
         "links": [],
@@ -210,7 +210,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
         "description": "",
         "license": "noassertion",
         "extent": {
-            "spatial": {"bbox": [[-180, 90, 180, 90]]},
+            "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
             "temporal": {"interval": [["1940-01-01T00:00:00Z", "null"]]},
         },
         "links": [],
