@@ -234,7 +234,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
     prism_collection = {
         "type": "Collection",
         "stac_version": "1.0.0",
-        "id": "ERA5",
+        "id": "PRISM",
         "description": "",
         "license": "noassertion",
         "extent": {
