@@ -1,4 +1,4 @@
-name: cpc-availability-check
+name: prism-availability-check
 
 on:
   workflow_dispatch:
@@ -39,15 +39,13 @@ jobs:
           GATEWAY_PORT=$(uv run temp-kubo.py port gateway $IPFS_PATH)
           RPC_PORT=$(uv run temp-kubo.py port rpc $IPFS_PATH)
 
-          CPC_PRECIP_CONUS_CID=$(uv run stac.py collect hamt-root --search cpc-precip-conus $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
-          CPC_PRECIP_GLOBAL_CID=$(uv run stac.py collect hamt-root --search cpc-precip-global $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
-          CPC_TMAX_CID=$(uv run stac.py collect hamt-root --search cpc-tmax $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
-          CPC_TMIN_CID=$(uv run stac.py collect hamt-root --search cpc-tmin $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
+          PRISM_PRECIP_CID=$(uv run stac.py collect hamt-root --search prism-precip-4km $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
+          PRISM_TMAX_CID=$(uv run stac.py collect hamt-root --search prism-tmax-4km $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
+          PRISM_TMIN_CID=$(uv run stac.py collect hamt-root --search prism-tmin-4km $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
 
-          uv run plot-random-timepoint.py $CPC_PRECIP_CONUS_CID /tmp
-          uv run plot-random-timepoint.py $CPC_PRECIP_GLOBAL_CID /tmp
-          uv run plot-random-timepoint.py $CPC_TMAX_CID /tmp
-          uv run plot-random-timepoint.py $CPC_TMIN_CID /tmp
+          uv run plot-random-timepoint.py $PRISM_PRECIP_CID /tmp
+          uv run plot-random-timepoint.py $PRISM_TMAX_CID /tmp
+          uv run plot-random-timepoint.py $PRISM_TMIN_CID /tmp
 
       - uses: actions/upload-artifact@v4
         with:
