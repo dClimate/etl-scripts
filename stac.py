@@ -234,7 +234,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
     prism_collection = {
         "type": "Collection",
         "stac_version": "1.0.0",
-        "id": "ERA5",
+        "id": "PRISM",
         "description": "",
         "license": "noassertion",
         "extent": {
@@ -262,20 +262,23 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
         "links": [],
     }
 
-    def add_links_catalog(catalog: dict, collection_ids: list[str]):
-        for collection_id in collection_ids:
-            if collection_id in collection_cids:
-                cid = collection_cids[collection_id]
+    def add_links_catalog(catalog: dict, collections: list[dict]):
+        for collection in collections:
+            id = collection["id"]
+            if id in collection_cids:
+                cid = collection_cids[id]
                 catalog["links"].append(
                     {
                         "rel": "child",
                         "href": {"/": str(cid)},
                         "type": "application/json",
-                        "title": collection_id,
+                        "title": id,
                     }
                 )
 
-    add_links_catalog(catalog, ["CPC", "CHIRPS", "ERA5", "PRISM"])
+    add_links_catalog(
+        catalog, [cpc_collection, chirps_collection, era5_collection, prism_collection]
+    )
 
     catalog_cid = save_to_ipfs(catalog)
 
