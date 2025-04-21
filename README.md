@@ -13,6 +13,12 @@ This repository contains ETLs to IFPS for publicly available datasets.
 + longitude is -180 to 180, latitude is -90 to 90. Both are sorted in ascending order.
 + Most metadata from source files are dropped. Note that this also includes the netCDF variables for scaling and additive shifts, which will be applied and then removed.
 
+# Dataset Dashboard
+[![cpc-availability-check](https://github.com/dClimate/etl-scripts/actions/workflows/cpc-availablity-check.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/cpc-availablity-check.yaml)
+[![chirps-availability-check](https://github.com/dClimate/etl-scripts/actions/workflows/chirps-availability-check.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/chirps-availability-check.yaml)
+[![era5-availability-check](https://github.com/dClimate/etl-scripts/actions/workflows/era5-availability-check.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/era5-availability-check.yaml)
+[![prism-availability-check](https://github.com/dClimate/etl-scripts/actions/workflows/prism-availability-check.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/prism-availability-check.yaml)
+
 # Datasets
 Each heading is a set of data variables from some source, with the data variables listed inside.
 
