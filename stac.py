@@ -6,7 +6,6 @@ https://github.com/radiantearth/stac-spec
 """
 
 import json
-import pprint
 import sys
 from pathlib import Path
 from typing import Literal
@@ -290,26 +289,31 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
 
 
 @click.command
-@click.argument("type", type=click.Choice(["collection", "item", "all"]))
+@click.argument("type", type=click.Choice(["collection", "item", "hamt-root"]))
 @click.argument("catalog-cid")
 @click.option(
     "--plain",
     is_flag=True,
     show_default=True,
     default=False,
-    help="Print just the CIDs stdout, with newlines in between.",
+    help="Print just names with CIDs after them, with newlines in between.",
+)
+@click.option(
+    "--search",
+    help="Find a specific id and print its value within the normal output. If nothing is found, this will print nothing. This search term case-sensitive.",
 )
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 def collect(
-    type: Literal["collection"] | Literal["item"] | Literal["all"],
+    type: str,
     catalog_cid: str,
     plain: bool,
+    search: str | None,
     gateway_uri_stem: str | None,
     rpc_uri_stem: str | None,
 ):
     """
-    Print a JSON with the CIDs for all STAC collections, or items to stdout. If set to "all", this will also print the catalog CID, the collections, and the items.
+    Print a JSON with the CIDs for all STAC collections, item JSONs, or dataset hamt roots to stdout.
     """
     ipfs_store = IPFSStore()
     if gateway_uri_stem is not None:
@@ -319,6 +323,18 @@ def collect(
 
     def read_from_ipfs(cid: str) -> dict:
         return json.loads(ipfs_store.load(CID.decode(cid)))
+
+    def format_and_print(d: dict):
+        if search is not None:
+            if search in d:
+                print(d[search])
+            return
+
+        if plain:
+            for id, cid in d.items():
+                print(f"{id} {cid}")
+        else:
+            print(json.dumps(d, indent=4, sort_keys=True))
 
     catalog = read_from_ipfs(catalog_cid)
     catalog_json_out = {catalog["id"]: catalog_cid}
@@ -331,6 +347,10 @@ def collect(
         collections_json_out[collection["id"]] = cid
         collections.append(collection)
 
+    if type == "collection":
+        format_and_print(collections_json_out)
+        return
+
     items_json_out = {}
     for collection in collections:
         for link in collection["links"]:
@@ -340,20 +360,19 @@ def collect(
             # type must be item to reach here so don't do a check
             items_json_out[item["id"]] = cid
 
-    json_out = {}
-    if type == "all":
-        json_out = catalog_json_out | collections_json_out | items_json_out
-    elif type == "collection":
-        json_out = collections_json_out
-    elif type == "item":
-        json_out = items_json_out
+    if type == "item":
+        format_and_print(items_json_out)
+        return
 
-    if plain:
-        for id in json_out:
-            cid = json_out[id]
-            print(cid)
-    else:
-        pprint.pp(json_out)
+    hamt_roots = {}
+    for id, item_json_cid in items_json_out.items():
+        item_json = read_from_ipfs(item_json_cid)
+        hamt_root = item_json["assets"]["hamt-zarr"]["href"][6:]
+        hamt_roots[id] = hamt_root
+
+    if type == "hamt-root":
+        format_and_print(hamt_roots)
+        return
 
 
 @click.group

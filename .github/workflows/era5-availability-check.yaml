@@ -21,12 +21,6 @@ jobs:
           ipfs_version: ${{vars.IPFS_VERSION}}
           run_daemon: true
 
-      - name: Swarm peering add to our IPFS Servers
-        run: |
-          ipfs swarm peering add "${{vars.FLUORINE_MULTIADDRESS}}"
-          ipfs swarm peering add "${{vars.CERIUM_MULTIADDRESS}}"
-          ipfs swarm peering add "${{vars.BISMUTH_MULTIADDRESS}}"
-
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -37,15 +31,19 @@ jobs:
 
       - name: Load xarray Datasets and plot random timepoint for each
         run: |
-          uv run plot-random-timepoint.py ${{vars.ERA5_LAND_SEA_MASK_CID}} /tmp
-          uv run plot-random-timepoint.py ${{vars.ERA5_SURFACE_PRESSURE_CID}} /tmp
-          uv run plot-random-timepoint.py ${{vars.ERA5_SURFACE_SOLAR_RADIATION_DOWNWARDS_CID}} /tmp
-          uv run plot-random-timepoint.py ${{vars.ERA5_TOTAL_PRECIPITATION_CID}} /tmp
-          uv run plot-random-timepoint.py ${{vars.ERA5_2M_TEMPERATURE_CID}} /tmp
-          uv run plot-random-timepoint.py ${{vars.ERA5_10M_U_COMPONENT_OF_WIND_CID}} /tmp
-          uv run plot-random-timepoint.py ${{vars.ERA5_10M_V_COMPONENT_OF_WIND_CID}} /tmp
-          uv run plot-random-timepoint.py ${{vars.ERA5_100M_U_COMPONENT_OF_WIND_CID}} /tmp
-          uv run plot-random-timepoint.py ${{vars.ERA5_100M_V_COMPONENT_OF_WIND_CID}} /tmp
+          export IPFS_PATH=$(uv run temp-kubo.py create)
+          ipfs daemon &
+          sleep 5 # wait for ipfs daemon to finish starting up
+
+          CATALOG_CID=$(ipfs name resolve /ipns/k51qzi5uqu5dk89atnl883sr0g1cb2py631ckz9ng45qhk6dg0pj141jtxtx6l | awk -F'/' '{print $3}')
+          GATEWAY_PORT=$(uv run temp-kubo.py port gateway $IPFS_PATH)
+          RPC_PORT=$(uv run temp-kubo.py port rpc $IPFS_PATH)
+
+          ERA5_2M_TEMPERATURE_CID=$(uv run stac.py collect hamt-root --search era5-2m_temperature $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
+          ERA5_10M_U_COMPONENT_CID=$(uv run stac.py collect hamt-root --search era5-10m_u_component_of_wind $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
+
+          uv run plot-random-timepoint.py $ERA5_2M_TEMPERATURE_CID /tmp
+          uv run plot-random-timepoint.py $ERA5_10M_U_COMPONENT_CID /tmp
 
       - uses: actions/upload-artifact@v4
         with:
