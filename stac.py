@@ -6,6 +6,7 @@ https://github.com/radiantearth/stac-spec
 """
 
 import json
+import pprint
 import sys
 from pathlib import Path
 from typing import Literal
