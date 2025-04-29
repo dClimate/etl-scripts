@@ -42,8 +42,8 @@ jobs:
           ERA5_2M_TEMPERATURE_CID=$(uv run stac.py collect hamt-root --search era5-2m_temperature $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
           ERA5_10M_U_COMPONENT_CID=$(uv run stac.py collect hamt-root --search era5-10m_u_component_of_wind $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
 
-          uv run plot-random-timepoint.py $ERA5_2M_TEMPERATURE_CID /tmp
-          uv run plot-random-timepoint.py $ERA5_10M_U_COMPONENT_CID /tmp
+          uv run plot-random-timepoint.py $ERA5_2M_TEMPERATURE_CID /tmp --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT"
+          uv run plot-random-timepoint.py $ERA5_10M_U_COMPONENT_CID /tmp --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT"
 
       - uses: actions/upload-artifact@v4
         with:

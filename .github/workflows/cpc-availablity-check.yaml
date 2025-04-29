@@ -44,10 +44,10 @@ jobs:
           CPC_TMAX_CID=$(uv run stac.py collect hamt-root --search cpc-tmax $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
           CPC_TMIN_CID=$(uv run stac.py collect hamt-root --search cpc-tmin $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
 
-          uv run plot-random-timepoint.py $CPC_PRECIP_CONUS_CID /tmp
-          uv run plot-random-timepoint.py $CPC_PRECIP_GLOBAL_CID /tmp
-          uv run plot-random-timepoint.py $CPC_TMAX_CID /tmp
-          uv run plot-random-timepoint.py $CPC_TMIN_CID /tmp
+          uv run plot-random-timepoint.py $CPC_PRECIP_CONUS_CID /tmp --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT"
+          uv run plot-random-timepoint.py $CPC_PRECIP_GLOBAL_CID /tmp --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT"
+          uv run plot-random-timepoint.py $CPC_TMAX_CID /tmp --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT"
+          uv run plot-random-timepoint.py $CPC_TMIN_CID /tmp --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT"
 
       - uses: actions/upload-artifact@v4
         with:

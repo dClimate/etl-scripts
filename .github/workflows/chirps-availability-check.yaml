@@ -42,9 +42,9 @@ jobs:
           CHIRPS_FINAL_P25_CID=$(uv run stac.py collect hamt-root --search chirps-final-p25 $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
           CHIRPS_PRELIM_P05_CID=$(uv run stac.py collect hamt-root --search chirps-prelim-p05 $CATALOG_CID --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT")
 
-          uv run plot-random-timepoint.py $CHIRPS_FINAL_P05_CID /tmp
-          uv run plot-random-timepoint.py $CHIRPS_FINAL_P25_CID /tmp
-          uv run plot-random-timepoint.py $CHIRPS_PRELIM_P05_CID /tmp
+          uv run plot-random-timepoint.py $CHIRPS_FINAL_P05_CID /tmp --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT"
+          uv run plot-random-timepoint.py $CHIRPS_FINAL_P25_CID /tmp --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT"
+          uv run plot-random-timepoint.py $CHIRPS_PRELIM_P05_CID /tmp --rpc-uri-stem "http://127.0.0.1:$RPC_PORT" --gateway-uri-stem "http://127.0.0.1:$GATEWAY_PORT"
 
       - uses: actions/upload-artifact@v4
         with:
