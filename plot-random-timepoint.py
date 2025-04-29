@@ -38,13 +38,25 @@ def rand_islice(da: xr.DataArray, width: int) -> slice:
         path_type=Path,
     ),
 )
-def plot_random_point(cid: str, out_dir: Path):
+@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
+@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+def plot_random_point(
+    cid: str,
+    out_dir: Path,
+    gateway_uri_stem: str,
+    rpc_uri_stem: str,
+):
     """
     Plot a random timepoint for each data variable in the zarr at the CID. The zarr should have a variable "time" for this to work.
 
     This script will save the files with a naming scheme of "plot-{cid}-{data_var}.png" inside the OUT_DIR, which is the output directory.
     """
-    hamt = HAMT(store=IPFSStore(), root_node_id=CID.decode(cid))
+    ipfs_store = IPFSStore()
+    if gateway_uri_stem is not None:
+        ipfs_store.gateway_uri_stem = gateway_uri_stem
+    if rpc_uri_stem is not None:
+        ipfs_store.rpc_uri_stem = rpc_uri_stem
+    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid))
     ipfszarr3 = IPFSZarr3(hamt, read_only=True)
     ds = xr.open_zarr(store=ipfszarr3)
     eprint(ds)
