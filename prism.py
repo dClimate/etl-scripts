@@ -311,7 +311,8 @@ def instantiate(
         ds = add_time_dimension(ds, date)
         ds_list.append(ds)
 
-    ds = xr.concat(ds_list, dim="time")
+    # join = left specifies to never combine the dimensions, just always use the first dimension
+    ds = xr.concat(ds_list, dim="time", join="left")
     ds = standardize(dataset, ds)
 
     eprint("====== Writing this dataset to a new Zarr on IPFS ======")
