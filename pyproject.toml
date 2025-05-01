@@ -14,9 +14,9 @@ dependencies = [
     # Used for creating CLI scripts
     "click>=8.1.7",
     "py-hamt",
-    # Versions that work with zarr v3
-    "xarray[io,parallel,viz]>=2025.3.0",
-    "zarr>=3.0.6",
+    "xarray[io,parallel,viz]==2024.11.0",
+    "zarr==2.18.3",
+    "numcodecs==0.12.1",
 ]
 
 # numcodecs, dask, pandas, numpy, and multiformats are imports in various files, but not in pyproject.toml dependencies, since they are required by xarray, so we just use the existing compatible versions that are installed when xarray is installed
@@ -32,7 +32,8 @@ select = ["I"]
 quote-style = "double"
 
 [tool.uv.sources]
-py-hamt = { git = "https://github.com/dClimate/py-hamt" }
+py-hamt = { git = "https://github.com/dClimate/py-hamt", rev = "v2.2.0" }
+
 
 [dependency-groups]
 dev = [
