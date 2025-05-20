@@ -13,8 +13,8 @@ dependencies = [
     "cfgrib>=0.9.15.0",
     # Used for creating CLI scripts
     "click>=8.1.7",
-    "py-hamt",
     # Versions that work with zarr v3
+    "py-hamt",
     "xarray[io,parallel,viz]>=2025.3.0",
     "zarr>=3.0.6",
 ]
@@ -32,7 +32,7 @@ select = ["I"]
 quote-style = "double"
 
 [tool.uv.sources]
-py-hamt = { git = "https://github.com/dClimate/py-hamt" }
+py-hamt = { git = "https://github.com/dclimate/py-hamt", rev = "26f9bfc4de0f9a2bddf96c48f21864fde9723b2f" }
 
 [dependency-groups]
 dev = [
