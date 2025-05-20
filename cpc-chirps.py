@@ -295,6 +295,7 @@ def append(
     ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
 
     timestamp: datetime = ipfs_latest_timestamp
+    dses: list[xr.Dataset] = []
     for c in range(0, count):
         if year:
             timestamp = timestamp.replace(year=timestamp.year + 1)
@@ -322,10 +323,13 @@ def append(
             ds = ds.sel(
                 time=slice(timestamp, timestamp)
             )  # without slice, time becomes a scalar and an append will not succeed
+        dses.append(ds)
 
-        eprint("====== Appending this xarray.Dataset to IPFS ======")
-        eprint(ds)
-        ds.to_zarr(store=zhs, append_dim="time")  # type: ignore
+    ds = xr.concat(dses, dim="time", join="left")
+
+    eprint("====== Appending this xarray.Dataset to IPFS ======")
+    eprint(ds)
+    ds.to_zarr(store=zhs, append_dim="time")  # type: ignore
 
     eprint("=== Flushing in memory tree to IPFS")
     asyncio.run(hamt.make_read_only())
