@@ -5,15 +5,15 @@ from pathlib import Path
 import click
 import xarray as xr
 from multiformats import CID
-from py_hamt import HAMT, IPFSStore, IPFSZarr3
+from py_hamt import HAMT, KuboCAS, ZarrHAMTStore
 
 from etl_scripts.grabbag import eprint
 
 
 @click.command()
 @click.argument("cid")
-@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
-@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option("-g", "--gateway-base-url", help="Pass through to KuboCAS")
+@click.option("-r", "--rpc-base-url", help="Pass through to KuboCAS")
 @click.option(
     "--print-latest-timestamps",
     default=0,
@@ -30,23 +30,28 @@ from etl_scripts.grabbag import eprint
 )
 def ipfs(
     cid: str,
-    gateway_uri_stem: str | None,
-    rpc_uri_stem: str | None,
+    gateway_base_url: str | None,
+    rpc_base_url: str | None,
     print_latest_timestamps: int,
     repl: bool,
 ):
     """
     Set CID to the root of a HAMT from py-hamt, load the zarr into xarray, and print the Dataset.
     """
-    ipfs_store = IPFSStore()
-    if gateway_uri_stem is not None:
-        ipfs_store.gateway_uri_stem = gateway_uri_stem
-    if rpc_uri_stem is not None:
-        ipfs_store.rpc_uri_stem = rpc_uri_stem
+    if gateway_base_url is None:
+        gateway_base_url = KuboCAS.KUBO_DEFAULT_LOCAL_GATEWAY_BASE_URL
+    if rpc_base_url is None:
+        rpc_base_url = KuboCAS.KUBO_DEFAULT_LOCAL_RPC_BASE_URL
+    kubo_cas = KuboCAS(gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url)
 
-    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid))
-    ipfszarr3 = IPFSZarr3(hamt, read_only=True)
-    ds = xr.open_zarr(store=ipfszarr3)
+    hamt = HAMT(
+        cas=kubo_cas,
+        root_node_id=CID.decode(cid),
+        values_are_bytes=True,
+        read_only=True,
+    )
+    zhs = ZarrHAMTStore(hamt, read_only=True)
+    ds = xr.open_zarr(store=zhs)
 
     if print_latest_timestamps == 0:
         print(ds)
