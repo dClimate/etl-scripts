@@ -184,8 +184,8 @@ def download(dataset, timestamp: datetime):
 
 @click.command
 @click.argument("dataset", type=datasets_choice)
-@click.option("--gateway-base-url", help="Pass through to KuboCAS")
-@click.option("--rpc-base-url", help="Pass through to KuboCAS")
+@click.option("-g", "--gateway-base-url", help="Pass through to KuboCAS")
+@click.option("-r", "--rpc-base-url", help="Pass through to KuboCAS")
 @click.option(
     "--skip-download",
     is_flag=True,
@@ -247,8 +247,8 @@ def instantiate(
 @click.command
 @click.argument("dataset", type=datasets_choice)
 @click.argument("cid")
-@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
-@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option("-g", "--gateway-base-url", help="Pass through to KuboCAS")
+@click.option("-r", "--rpc-base-url", help="Pass through to KuboCAS")
 @click.option(
     "--year",
     is_flag=True,
@@ -272,8 +272,8 @@ def instantiate(
 def append(
     dataset,
     cid: str,
-    gateway_uri_stem: str,
-    rpc_uri_stem: str,
+    gateway_base_url: str | None,
+    rpc_base_url: str | None,
     year: bool,
     skip_download: bool,
     count: int,
@@ -283,14 +283,15 @@ def append(
 
     This command requires the kubo daemon to be running.
     """
-    ipfs_store = IPFSStore()
-    if gateway_uri_stem is not None:
-        ipfs_store.gateway_uri_stem = gateway_uri_stem
-    if rpc_uri_stem is not None:
-        ipfs_store.rpc_uri_stem = rpc_uri_stem
-    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid))
-    ipfszarr3 = IPFSZarr3(hamt)
-    ipfs_ds = xr.open_zarr(store=ipfszarr3)
+
+    if gateway_base_url is None:
+        gateway_base_url = KuboCAS.KUBO_DEFAULT_LOCAL_GATEWAY_BASE_URL
+    if rpc_base_url is None:
+        rpc_base_url = KuboCAS.KUBO_DEFAULT_LOCAL_RPC_BASE_URL
+    kubo_cas = KuboCAS(gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url)
+    hamt = HAMT(cas=kubo_cas, root_node_id=CID.decode(cid), values_are_bytes=True)
+    zhs = ZarrHAMTStore(hamt)
+    ipfs_ds = xr.open_zarr(store=zhs)
     ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
 
     timestamp: datetime = ipfs_latest_timestamp
@@ -300,7 +301,7 @@ def append(
         else:
             timestamp = timestamp + timedelta(days=1)
 
-        eprint("====== Creating dataset to append ======")
+        eprint("=== Creating dataset to append")
         nc_path: Path
         if not skip_download:
             eprint(f"Downloading netCDF for year {timestamp.year}...")
@@ -322,12 +323,14 @@ def append(
                 time=slice(timestamp, timestamp)
             )  # without slice, time becomes a scalar and an append will not succeed
 
+        eprint("====== Appending this xarray.Dataset to IPFS ======")
         eprint(ds)
+        ds.to_zarr(store=zhs, append_dim="time")  # type: ignore
 
-        eprint("====== Appending to IPFS ======")
-        ds.to_zarr(store=ipfszarr3, append_dim="time")  # type: ignore
-        eprint("HAMT CID")
-        print(ipfszarr3.hamt.root_node_id)
+    eprint("=== Flushing in memory tree to IPFS")
+    asyncio.run(hamt.make_read_only())
+    eprint("=== HAMT CID")
+    print(hamt.root_node_id)
 
 
 @click.group
