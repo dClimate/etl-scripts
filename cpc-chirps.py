@@ -1,3 +1,4 @@
+import asyncio
 import os
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -9,7 +10,7 @@ import numpy as np
 import xarray as xr
 import zarr.codecs
 from multiformats import CID
-from py_hamt import HAMT, IPFSStore, IPFSZarr3
+from py_hamt import HAMT, KuboCAS, ZarrHAMTStore
 
 from etl_scripts.grabbag import eprint, npdt_to_pydt
 
@@ -183,8 +184,8 @@ def download(dataset, timestamp: datetime):
 
 @click.command
 @click.argument("dataset", type=datasets_choice)
-@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
-@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option("--gateway-base-url", help="Pass through to KuboCAS")
+@click.option("--rpc-base-url", help="Pass through to KuboCAS")
 @click.option(
     "--skip-download",
     is_flag=True,
@@ -194,8 +195,8 @@ def download(dataset, timestamp: datetime):
 )
 def instantiate(
     dataset: str,
-    gateway_uri_stem: str,
-    rpc_uri_stem: str,
+    gateway_base_url: str | None,
+    rpc_base_url: str | None,
     skip_download: bool,
 ):
     """
@@ -230,15 +231,17 @@ def instantiate(
     ds = standardize(dataset, ds)
     eprint(ds)
 
-    ipfs_store = IPFSStore()
-    if gateway_uri_stem is not None:
-        ipfs_store.gateway_uri_stem = gateway_uri_stem
-    if rpc_uri_stem is not None:
-        ipfs_store.rpc_uri_stem = rpc_uri_stem
-    ipfszarr3 = IPFSZarr3(HAMT(store=ipfs_store))
-    ds.to_zarr(store=ipfszarr3)  # type: ignore
+    if gateway_base_url is None:
+        gateway_base_url = KuboCAS.KUBO_DEFAULT_LOCAL_GATEWAY_BASE_URL
+    if rpc_base_url is None:
+        rpc_base_url = KuboCAS.KUBO_DEFAULT_LOCAL_RPC_BASE_URL
+    kubo_cas = KuboCAS(gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url)
+    hamt = asyncio.run(HAMT.build(cas=kubo_cas, values_are_bytes=True))
+    zhs = ZarrHAMTStore(hamt)
+    ds.to_zarr(store=zhs)  # type: ignore
+    asyncio.run(hamt.make_read_only())
     eprint("HAMT CID")
-    print(ipfszarr3.hamt.root_node_id)
+    print(hamt.root_node_id)
 
 
 @click.command
