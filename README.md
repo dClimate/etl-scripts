@@ -7,11 +7,11 @@
 This repository contains ETLs to IFPS for publicly available datasets.
 
 # Dataset Standardization Practices
-+ zarr chunks are wide in time and short spatially, to allow for better long timeseries calculations
-+ Chunking is set to 400 in time, 25 in latitude, 25 in longitude (for data variables that are float32)
-  + With this setting, each chunk is exactly 1 Megabyte in size (400 time points * 25 longitude points * 25 latitude points *(4 bytes per float32) = 1,000,000 bytes)
++ Zarr chunks are optimized for long timeseries calculations: they are wide in time and short in spatial
++ Chunking is set to 400 in time, 25 in latitude, 25 in longitude (for data variables that are float32, which is all of them)
+  + With this setting, each uncompressed chunk is exactly 1 Megabyte in size
 + longitude is -180 to 180, latitude is -90 to 90. Both are sorted in ascending order.
-+ Most metadata from source files are dropped. Note that this also includes the netCDF variables for scaling and additive shifts, which will be applied and then removed.
++ Source file metadata, including netCDF scaling and additive shift variables (which are applied and then removed), is largely dropped
 
 # Dataset Dashboard
 [![cpc-availability-check](https://github.com/dClimate/etl-scripts/actions/workflows/cpc-availablity-check.yaml/badge.svg)](https://github.com/dClimate/etl-scripts/actions/workflows/cpc-availablity-check.yaml)
