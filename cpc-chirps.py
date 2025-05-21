@@ -231,10 +231,6 @@ def instantiate(
     ds = standardize(dataset, ds)
     eprint(ds)
 
-    if gateway_base_url is None:
-        gateway_base_url = KuboCAS.KUBO_DEFAULT_LOCAL_GATEWAY_BASE_URL
-    if rpc_base_url is None:
-        rpc_base_url = KuboCAS.KUBO_DEFAULT_LOCAL_RPC_BASE_URL
     kubo_cas = KuboCAS(gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url)
     hamt = asyncio.run(HAMT.build(cas=kubo_cas, values_are_bytes=True))
     zhs = ZarrHAMTStore(hamt)
@@ -284,25 +280,20 @@ def append(
     This command requires the kubo daemon to be running.
     """
 
-    if gateway_base_url is None:
-        gateway_base_url = KuboCAS.KUBO_DEFAULT_LOCAL_GATEWAY_BASE_URL
-    if rpc_base_url is None:
-        rpc_base_url = KuboCAS.KUBO_DEFAULT_LOCAL_RPC_BASE_URL
     kubo_cas = KuboCAS(gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url)
+
     hamt = HAMT(cas=kubo_cas, root_node_id=CID.decode(cid), values_are_bytes=True)
     zhs = ZarrHAMTStore(hamt)
     ipfs_ds = xr.open_zarr(store=zhs)
     ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
 
     timestamp: datetime = ipfs_latest_timestamp
-    dses: list[xr.Dataset] = []
     for c in range(0, count):
         if year:
             timestamp = timestamp.replace(year=timestamp.year + 1)
         else:
             timestamp = timestamp + timedelta(days=1)
 
-        eprint("=== Creating dataset to append")
         nc_path: Path
         if not skip_download:
             eprint(f"Downloading netCDF for year {timestamp.year}...")
@@ -323,13 +314,10 @@ def append(
             ds = ds.sel(
                 time=slice(timestamp, timestamp)
             )  # without slice, time becomes a scalar and an append will not succeed
-        dses.append(ds)
 
-    ds = xr.concat(dses, dim="time", join="left")
-
-    eprint("====== Appending this xarray.Dataset to IPFS ======")
-    eprint(ds)
-    ds.to_zarr(store=zhs, append_dim="time")  # type: ignore
+        eprint("====== Appending this xarray.Dataset to IPFS ======")
+        eprint(ds)
+        ds.to_zarr(store=zhs, append_dim="time", mode="a", zarr_format=3)  # type: ignore
 
     eprint("=== Flushing in memory tree to IPFS")
     asyncio.run(hamt.make_read_only())
