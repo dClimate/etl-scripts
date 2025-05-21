@@ -38,10 +38,6 @@ def ipfs(
     """
     Set CID to the root of a HAMT from py-hamt, load the zarr into xarray, and print the Dataset.
     """
-    if gateway_base_url is None:
-        gateway_base_url = KuboCAS.KUBO_DEFAULT_LOCAL_GATEWAY_BASE_URL
-    if rpc_base_url is None:
-        rpc_base_url = KuboCAS.KUBO_DEFAULT_LOCAL_RPC_BASE_URL
     kubo_cas = KuboCAS(gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url)
 
     hamt = HAMT(
