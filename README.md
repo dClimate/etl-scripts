@@ -69,3 +69,8 @@ PRISM creates both 800 meter and 4 km precision versions. Only the [4 km version
 
 ## One-Shots
 The `one-shots` folder contains ETLs for data that only needs to be ETLed once, and does not need to be maintained. This is why many of the ETLs are also added as Jupyter notebooks, for ease of use by data scientists exploring and molding the data before it is provided to dClimate for storage in our system.
+
+# Configuration
+
+`uv venv`
+`uv pip install -r pyproject.toml`
