@@ -193,7 +193,7 @@ def download(dataset, timestamp: datetime):
     default=False,
     help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
 )
-def instantiate(
+async def instantiate(
     dataset: str,
     gateway_base_url: str | None,
     rpc_base_url: str | None,
