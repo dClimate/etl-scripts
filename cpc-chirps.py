@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from math import ceil
 from pathlib import Path
 
-import click
+import asyncclick as click
 import numpy as np
 import xarray as xr
 import zarr.codecs
