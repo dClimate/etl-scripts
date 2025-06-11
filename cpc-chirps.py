@@ -5,11 +5,10 @@ from datetime import UTC, datetime, timedelta
 from math import ceil
 from pathlib import Path
 
-import click
+import asyncclick as click
 import numpy as np
 import xarray as xr
 import zarr.codecs
-from multiformats import CID
 from py_hamt import HAMT, KuboCAS, ZarrHAMTStore
 
 from etl_scripts.grabbag import eprint, npdt_to_pydt
@@ -193,7 +192,7 @@ def download(dataset, timestamp: datetime):
     default=False,
     help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
 )
-def instantiate(
+async def instantiate(
     dataset: str,
     gateway_base_url: str | None,
     rpc_base_url: str | None,
@@ -231,13 +230,15 @@ def instantiate(
     ds = standardize(dataset, ds)
     eprint(ds)
 
-    kubo_cas = KuboCAS(gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url)
-    hamt = asyncio.run(HAMT.build(cas=kubo_cas, values_are_bytes=True))
-    zhs = ZarrHAMTStore(hamt)
-    ds.to_zarr(store=zhs)  # type: ignore
-    asyncio.run(hamt.make_read_only())
-    eprint("HAMT CID")
-    print(hamt.root_node_id)
+    async with KuboCAS(
+        gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url
+    ) as kubo_cas:
+        hamt = await HAMT.build(cas=kubo_cas, values_are_bytes=True)
+        zhs = ZarrHAMTStore(hamt)
+        ds.to_zarr(store=zhs)  # type: ignore
+        await hamt.make_read_only()
+        eprint("HAMT CID")
+        print(hamt.root_node_id)
 
 
 @click.command
@@ -265,7 +266,7 @@ def instantiate(
     show_default=True,
     help="The number of days/years to append. Usually 1, but if increased append will repeatedly print to stdout the CID of each successive append. This will essentially repeat the normal 1 count append command.",
 )
-def append(
+async def append(
     dataset,
     cid: str,
     gateway_base_url: str | None,
@@ -280,57 +281,61 @@ def append(
     This command requires the kubo daemon to be running.
     """
 
-    kubo_cas = KuboCAS(gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url)
+    async with KuboCAS(
+        gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url
+    ) as kubo_cas:
+        hamt = await HAMT.build(cas=kubo_cas, values_are_bytes=True)
+        zhs = ZarrHAMTStore(hamt)
+        ipfs_ds = xr.open_zarr(store=zhs)
+        ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
 
-    hamt = HAMT(cas=kubo_cas, root_node_id=CID.decode(cid), values_are_bytes=True)
-    zhs = ZarrHAMTStore(hamt)
-    ipfs_ds = xr.open_zarr(store=zhs)
-    ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
+        eprint("HAMT CID")
+        print(hamt.root_node_id)
 
-    timestamp: datetime = ipfs_latest_timestamp
-    for c in range(0, count):
-        if year:
-            timestamp = timestamp.replace(year=timestamp.year + 1)
-        else:
-            timestamp = timestamp + timedelta(days=1)
+        timestamp: datetime = ipfs_latest_timestamp
+        for _ in range(0, count):
+            if year:
+                timestamp = timestamp.replace(year=timestamp.year + 1)
+            else:
+                timestamp = timestamp + timedelta(days=1)
 
-        nc_path: Path
-        if not skip_download:
-            eprint(f"Downloading netCDF for year {timestamp.year}...")
-            nc_path = download_year(dataset, timestamp.year)
-        else:
-            eprint(
-                f"Skipping downloading netCDF for year {timestamp.year}, going to try use what's on disk"
-            )
-            nc_path = make_nc_path(dataset, timestamp.year)
-        ds = xr.open_dataset(nc_path)
-        ds = standardize(dataset, ds)
+            nc_path: Path
+            if not skip_download:
+                eprint(f"Downloading netCDF for year {timestamp.year}...")
+                nc_path = download_year(dataset, timestamp.year)
+            else:
+                eprint(
+                    f"Skipping downloading netCDF for year {timestamp.year}, going to try use what's on disk"
+                )
+                nc_path = make_nc_path(dataset, timestamp.year)
+            ds = xr.open_dataset(nc_path)
+            ds = standardize(dataset, ds)
 
-        if year:
-            ds = ds.sel(
-                time=str(timestamp.year)
-            )  # conversion to string aggregates all timestamps within the year
-        else:
-            ds = ds.sel(
-                time=slice(timestamp, timestamp)
-            )  # without slice, time becomes a scalar and an append will not succeed
+            if year:
+                ds = ds.sel(
+                    time=str(timestamp.year)
+                )  # conversion to string aggregates all timestamps within the year
+            else:
+                ds = ds.sel(
+                    time=slice(timestamp, timestamp)
+                )  # without slice, time becomes a scalar and an append will not succeed
 
-        eprint("====== Appending this xarray.Dataset to IPFS ======")
-        eprint(ds)
-        ds.to_zarr(store=zhs, append_dim="time", mode="a", zarr_format=3)  # type: ignore
+            eprint("====== Appending this xarray.Dataset to IPFS ======")
+            eprint(ds)
+            ds.to_zarr(store=zhs, append_dim="time", mode="a", zarr_format=3)  # type: ignore
 
-    eprint("=== Flushing in memory tree to IPFS")
-    asyncio.run(hamt.make_read_only())
-    eprint("=== HAMT CID")
-    print(hamt.root_node_id)
+        eprint("=== Flushing in memory tree to IPFS")
+        asyncio.run(hamt.make_read_only())
+        eprint("=== HAMT CID")
+        print(hamt.root_node_id)
 
 
 @click.group
 def cli():
+    """Commands for ETLing CPC and CHRIPS datasets.
+    On invocation, a scratch space directory relative to this file
+    will be created for data files at ./scratchspace/cpc-chirps.
     """
-    Commands for ETLing CPC and CHRIPS datasets. On invocation, a scratch space directory relative to this file will be created for data files at ./scratchspace/cpc-chirps.
-    """
-    pass
 
 
 cli.add_command(get_available_timespan)
