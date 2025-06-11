@@ -231,13 +231,15 @@ def instantiate(
     ds = standardize(dataset, ds)
     eprint(ds)
 
-    kubo_cas = KuboCAS(gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url)
-    hamt = asyncio.run(HAMT.build(cas=kubo_cas, values_are_bytes=True))
-    zhs = ZarrHAMTStore(hamt)
-    ds.to_zarr(store=zhs)  # type: ignore
-    asyncio.run(hamt.make_read_only())
-    eprint("HAMT CID")
-    print(hamt.root_node_id)
+    async with KuboCAS(
+        gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url
+    ) as kubo_cas:
+        hamt = await HAMT.build(cas=kubo_cas, values_are_bytes=True)
+        zhs = ZarrHAMTStore(hamt)
+        ds.to_zarr(store=zhs)  # type: ignore
+        await hamt.make_read_only()
+        eprint("HAMT CID")
+        print(hamt.root_node_id)
 
 
 @click.command
