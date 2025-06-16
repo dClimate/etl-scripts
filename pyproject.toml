@@ -32,7 +32,7 @@ select = ["I"]
 quote-style = "double"
 
 [tool.uv.sources]
-py-hamt = { git = "https://github.com/dClimate/py-hamt" }
+py-hamt = { git = "https://github.com/dClimate/py-hamt", rev = "5eeaedfc045790919e7d6eb38632a3318108ce51" }
 
 [dependency-groups]
 dev = [
