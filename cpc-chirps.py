@@ -289,9 +289,6 @@ async def append(
         ipfs_ds = xr.open_zarr(store=zhs)
         ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
 
-        eprint("HAMT CID")
-        print(hamt.root_node_id)
-
         timestamp: datetime = ipfs_latest_timestamp
         for _ in range(0, count):
             if year:
@@ -325,7 +322,7 @@ async def append(
             ds.to_zarr(store=zhs, append_dim="time", mode="a", zarr_format=3)  # type: ignore
 
         eprint("=== Flushing in memory tree to IPFS")
-        asyncio.run(hamt.make_read_only())
+        await hamt.make_read_only()
         eprint("=== HAMT CID")
         print(hamt.root_node_id)
 
