@@ -16,7 +16,7 @@ dependencies = [
     "click>=8.1.7",
     "numcodecs==0.15.1", # temporary until new release after 0.16 which was yanked
     # Versions that work with zarr v3
-    "py-hamt==3.0.1",
+    "py-hamt>=3.2.0",
     "xarray[io,parallel,viz]>=2025.3.0",
     "zarr>=3.0.8",
 ]
