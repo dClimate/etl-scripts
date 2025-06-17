@@ -139,11 +139,21 @@ def make_nc_path(dataset: str, day: datetime, grid_count: int) -> Path:
 
 
 def find_nc_path(dataset: str, day: datetime) -> Path:  # type: ignore
-    """Only call if you are sure the file exists!"""
+    """Return the path to the netCDF file for ``day``.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no file exists for the provided ``day`` and ``dataset``.
+    """
     for grid_count in range(1, 9):
         nc_path = make_nc_path(dataset, day, grid_count)
         if nc_path.exists():
             return nc_path
+
+    raise FileNotFoundError(
+        f"No file found for {dataset!r} on {day.strftime('%Y-%m-%d')}"
+    )
 
 
 def download_day(dataset: str, day: datetime, force=False) -> Path:
