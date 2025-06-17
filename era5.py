@@ -303,7 +303,7 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
         case "10m_v_component_of_wind":
             ds = ds.rename({"v10": dataset})
         case "100m_u_component_of_wind":
-            ds = ds.rename({"v100": dataset})
+            ds = ds.rename({"u100": dataset})
         case "100m_v_component_of_wind":
             ds = ds.rename({"v100": dataset})
         case "surface_pressure":
