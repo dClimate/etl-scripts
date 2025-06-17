@@ -235,7 +235,7 @@ async def instantiate(
     ) as kubo_cas:
         hamt = await HAMT.build(cas=kubo_cas, values_are_bytes=True)
         zhs = ZarrHAMTStore(hamt)
-        ds.to_zarr(store=zhs)  # type: ignore
+        ds.to_zarr(store=zhs, zarr_format=3)  # type: ignore
         await hamt.make_read_only()
         eprint("HAMT CID")
         print(hamt.root_node_id)
