@@ -145,9 +145,19 @@ def find_nc_path(dataset: str, day: datetime) -> Path:  # type: ignore
             return nc_path
 
 
-def download_day(dataset: str, day: datetime, force=False) -> Path:
+def download_day(dataset: str, day: datetime, force: bool = False) -> Path:
     """
     Downloads the nc file for that day and returns a path to it.
+
+    Parameters
+    ----------
+    dataset : str
+        The PRISM dataset name to download.
+    day : datetime
+        The day to download data for.
+    force : bool, default ``False``
+        If ``True``, always download the data even if a copy already exists
+        locally with the latest grid count.
 
     PRISM's download process is more involved than usual, so a description of the important things to know is written here.
 
@@ -169,14 +179,15 @@ def download_day(dataset: str, day: datetime, force=False) -> Path:
 
     # Check to see if a file already exists, and whether it has the latest grid count
     existing_nc_path: Path | None = None
-    for grid_count in range(1, 9):
-        nc_path = make_nc_path(dataset, day, grid_count)
-        if nc_path.exists():
-            # already at maximum, just return immediately
-            if grid_count == 8:
-                return nc_path
-            existing_nc_path = nc_path
-            break
+    if not force:
+        for grid_count in range(1, 9):
+            nc_path = make_nc_path(dataset, day, grid_count)
+            if nc_path.exists():
+                # already at maximum, just return immediately
+                if grid_count == 8:
+                    return nc_path
+                existing_nc_path = nc_path
+                break
 
     prism_datatype = dataset_to_prism_datatype[dataset]
     yyyymmdd = day.strftime("%Y%m%d")
@@ -193,7 +204,7 @@ def download_day(dataset: str, day: datetime, force=False) -> Path:
         raise Exception("Querying for source grid count returned an error")
     response = source_grid_count_query.stdout.strip().split()
     source_grid_count = int(response[3])
-    if existing_nc_path is not None and existing_nc_path.exists():
+    if (not force) and existing_nc_path is not None and existing_nc_path.exists():
         disk_grid_count = int(existing_nc_path.name[-4])
 
         if disk_grid_count > source_grid_count:
