@@ -36,7 +36,6 @@ import xarray as xr
 from multiformats import CID
 from utils import (
     download_tiff,
-    ipfs_hamt_store,
     standardise,
     tiff_to_dataarray,
     tiff_url,
@@ -44,6 +43,7 @@ from utils import (
 )
 
 from etl_scripts.grabbag import eprint, npdt_to_pydt
+from etl_scripts.hamt_store_contextmanager import ipfs_hamt_store
 
 dask.config.set(scheduler="threads", num_workers=os.cpu_count())
 

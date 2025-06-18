@@ -39,9 +39,10 @@ from fpar import download_tiff, tiff_to_dataarray, yield_dekad_dates
 from fpar_minmax import MAX_PATH, MIN_PATH, get_dekad_index
 from multiformats import CID
 from py_hamt import ZarrHAMTStore
-from utils import ipfs_hamt_store, standardise
+from utils import standardise
 
 from etl_scripts.grabbag import eprint, npdt_to_pydt
+from etl_scripts.hamt_store_contextmanager import ipfs_hamt_store
 
 # ── helpers ──────────────────────────────────────────────────────────
 
