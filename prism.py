@@ -5,16 +5,15 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import click
-import numcodecs
+import asyncclick as click
 import numpy as np
 import pandas as pd
 import xarray as xr
 import zarr.codecs
 from multiformats import CID
-from py_hamt import HAMT, IPFSStore, IPFSZarr3
 
 from etl_scripts.grabbag import eprint, npdt_to_pydt
+from etl_scripts.hamt_store_contextmanager import ipfs_hamt_store
 
 scratchspace: Path = (Path(__file__).parent / "scratchspace" / "prism").absolute()
 os.makedirs(scratchspace, exist_ok=True)
@@ -288,7 +287,7 @@ def download(dataset: str, day: datetime):
     default=False,
     help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
 )
-def instantiate(
+async def instantiate(
     dataset: str,
     gateway_uri_stem: str,
     rpc_uri_stem: str,
@@ -318,16 +317,11 @@ def instantiate(
     eprint("====== Writing this dataset to a new Zarr on IPFS ======")
     eprint(ds)
 
-    ipfs_store = IPFSStore()
-    if gateway_uri_stem is not None:
-        ipfs_store.gateway_uri_stem = gateway_uri_stem
-    if rpc_uri_stem is not None:
-        ipfs_store.rpc_uri_stem = rpc_uri_stem
-    hamt = HAMT(store=ipfs_store)
-    ipfszarr3 = IPFSZarr3(hamt)
-    ds.to_zarr(store=ipfszarr3)  # type: ignore
+    async with ipfs_hamt_store(gateway_uri_stem, rpc_uri_stem) as (store, hamt):
+        ds.to_zarr(store=store, zarr_format=3)  # type: ignore
+
     eprint("HAMT CID")
-    print(ipfszarr3.hamt.root_node_id)
+    print(hamt.root_node_id)
 
 
 @click.command
@@ -347,7 +341,7 @@ def instantiate(
     show_default=True,
     help="The number of days to append, all at once. This option is here since appending one by one takes longer than appending multiple days at a time. Stride must be a divisor of count to be valid.",
 )
-def append(
+async def append(
     dataset,
     cid: str,
     gateway_uri_stem: str,
@@ -365,47 +359,43 @@ def append(
     if count % stride != 0:
         return ValueError("Count must be a multiple of stride")
 
-    ipfs_store = IPFSStore()
-    if gateway_uri_stem is not None:
-        ipfs_store.gateway_uri_stem = gateway_uri_stem
-    if rpc_uri_stem is not None:
-        ipfs_store.rpc_uri_stem = rpc_uri_stem
-    hamt = HAMT(store=ipfs_store, root_node_id=CID.decode(cid))
-    ipfszarr3 = IPFSZarr3(hamt)
+    async with ipfs_hamt_store(
+        gateway_uri_stem, rpc_uri_stem, root_cid=CID.decode(cid)
+    ) as (store, hamt):
+        # Get the latest timestamp to figure out where we should start appending from
+        ipfs_ds = xr.open_zarr(store=store)
+        ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
 
-    # Get the latest timestamp to figure out where we should start appending from
-    ipfs_ds = xr.open_zarr(store=ipfszarr3)
-    ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
+        # Initialize with the first day before what we need to append
+        working_timestamps: list[datetime] = [ipfs_latest_timestamp]
 
-    # Initialize with the first day before what we need to append
-    working_timestamps: list[datetime] = [ipfs_latest_timestamp]
+        for _ in range(0, count, stride):
+            eprint("====== Creating dataset for append ======")
+            # Restart with the day after the latest one that was added
+            working_timestamps = [working_timestamps[-1] + timedelta(days=1)]
 
-    for c in range(0, count, stride):
-        eprint("====== Creating dataset for append ======")
-        # Restart with the day after the latest one that was added
-        working_timestamps = [working_timestamps[-1] + timedelta(days=1)]
+            for _ in range(
+                1, stride
+            ):  # start range from 1 since we already have the current timestamp in there
+                working_timestamps.append(working_timestamps[-1] + timedelta(days=1))
 
-        for _ in range(
-            1, stride
-        ):  # start range from 1 since we already have the current timestamp in there
-            working_timestamps.append(working_timestamps[-1] + timedelta(days=1))
+            ds_list: list[xr.Dataset] = []
+            for ts in working_timestamps:
+                nc_path = download_day(dataset, ts)
+                ds = xr.open_dataset(nc_path)
+                ds = add_time_dimension(ds, ts)
+                ds_list.append(ds)
 
-        ds_list: list[xr.Dataset] = []
-        for ts in working_timestamps:
-            nc_path = download_day(dataset, ts)
-            ds = xr.open_dataset(nc_path)
-            ds = add_time_dimension(ds, ts)
-            ds_list.append(ds)
+            ds = xr.concat(ds_list, dim="time")
+            ds = standardize(dataset, ds)
 
-        ds = xr.concat(ds_list, dim="time")
-        ds = standardize(dataset, ds)
+            eprint("====== Appending to IPFS ======")
+            ds.to_zarr(store=store, append_dim="time")  # type: ignore
 
-        eprint("====== Appending to IPFS ======")
-        ds.to_zarr(store=ipfszarr3, append_dim="time")  # type: ignore
-        eprint(
-            f"= New HAMT CID after appending from {working_timestamps[0]} to {working_timestamps[-1]}"
-        )
-        print(ipfszarr3.hamt.root_node_id)
+    eprint(
+        f"= New HAMT CID after appending from {working_timestamps[0]} to {working_timestamps[-1]}"
+    )
+    print(hamt.root_node_id)
 
 
 @click.group

@@ -1,4 +1,3 @@
-import asyncio
 import os
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -9,9 +8,10 @@ import asyncclick as click
 import numpy as np
 import xarray as xr
 import zarr.codecs
-from py_hamt import HAMT, KuboCAS, ZarrHAMTStore
+from multiformats import CID
 
 from etl_scripts.grabbag import eprint, npdt_to_pydt
+from etl_scripts.hamt_store_contextmanager import ipfs_hamt_store
 
 scratchspace: Path = (Path(__file__).parent / "scratchspace" / "cpc-chirps").absolute()
 os.makedirs(scratchspace, exist_ok=True)
@@ -230,15 +230,11 @@ async def instantiate(
     ds = standardize(dataset, ds)
     eprint(ds)
 
-    async with KuboCAS(
-        gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url
-    ) as kubo_cas:
-        hamt = await HAMT.build(cas=kubo_cas, values_are_bytes=True)
-        zhs = ZarrHAMTStore(hamt)
-        ds.to_zarr(store=zhs, zarr_format=3)  # type: ignore
-        await hamt.make_read_only()
-        eprint("HAMT CID")
-        print(hamt.root_node_id)
+    async with ipfs_hamt_store(gateway_base_url, rpc_base_url) as (store, hamt):
+        ds.to_zarr(store=store, zarr_format=3)  # type: ignore
+
+    eprint("HAMT CID")
+    print(hamt.root_node_id)
 
 
 @click.command
@@ -275,18 +271,14 @@ async def append(
     skip_download: bool,
     count: int,
 ):
-    """
-    Append the data at timestamp onto the Dataset that CID points to, print new HAMT root CID to stdout.
-
+    """Append the data at timestamp onto the Dataset that CID points to, print new HAMT root CID to stdout.
     This command requires the kubo daemon to be running.
     """
 
-    async with KuboCAS(
-        gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url
-    ) as kubo_cas:
-        hamt = await HAMT.build(cas=kubo_cas, values_are_bytes=True)
-        zhs = ZarrHAMTStore(hamt)
-        ipfs_ds = xr.open_zarr(store=zhs)
+    async with ipfs_hamt_store(
+        gateway_base_url, rpc_base_url, root_cid=CID.decode(cid)
+    ) as (store, hamt):
+        ipfs_ds = xr.open_zarr(store=store)
         ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
 
         timestamp: datetime = ipfs_latest_timestamp
@@ -318,13 +310,10 @@ async def append(
                 )  # without slice, time becomes a scalar and an append will not succeed
 
             eprint("====== Appending this xarray.Dataset to IPFS ======")
-            eprint(ds)
-            ds.to_zarr(store=zhs, append_dim="time", mode="a", zarr_format=3)  # type: ignore
+            ds.to_zarr(store=store, append_dim="time", mode="a", zarr_format=3)  # type: ignore
 
-        eprint("=== Flushing in memory tree to IPFS")
-        await hamt.make_read_only()
-        eprint("=== HAMT CID")
-        print(hamt.root_node_id)
+    eprint("=== HAMT CID")
+    print(hamt.root_node_id)
 
 
 @click.group

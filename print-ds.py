@@ -2,12 +2,12 @@ import code
 import sys
 from pathlib import Path
 
-import click
+import asyncclick as click
 import xarray as xr
 from multiformats import CID
-from py_hamt import HAMT, KuboCAS, ZarrHAMTStore
 
 from etl_scripts.grabbag import eprint
+from etl_scripts.hamt_store_contextmanager import ipfs_hamt_store
 
 
 @click.command()
@@ -28,7 +28,7 @@ from etl_scripts.grabbag import eprint
     default=False,
     help="Drop into python repl after regular operation. You will have access to the xarray Dataset in a variable `ds`.",
 )
-def ipfs(
+async def ipfs(
     cid: str,
     gateway_base_url: str | None,
     rpc_base_url: str | None,
@@ -38,16 +38,11 @@ def ipfs(
     """
     Set CID to the root of a HAMT from py-hamt, load the zarr into xarray, and print the Dataset.
     """
-    kubo_cas = KuboCAS(gateway_base_url=gateway_base_url, rpc_base_url=rpc_base_url)
 
-    hamt = HAMT(
-        cas=kubo_cas,
-        root_node_id=CID.decode(cid),
-        values_are_bytes=True,
-        read_only=True,
-    )
-    zhs = ZarrHAMTStore(hamt, read_only=True)
-    ds = xr.open_zarr(store=zhs)
+    async with ipfs_hamt_store(
+        gateway_base_url, rpc_base_url, root_cid=CID.decode(cid)
+    ) as (store, _):
+        ds = xr.open_zarr(store=store)
 
     if print_latest_timestamps == 0:
         print(ds)
