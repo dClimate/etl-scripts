@@ -9,8 +9,10 @@ import time
 from zarr.storage import MemoryStore
 import itertools
 import dask.array as da
+import subprocess
+import warnings
 
-
+import aioboto3
 import boto3
 import cdsapi
 import click
@@ -39,9 +41,10 @@ r2 = boto3.client(
 )
 
 
-def is_file_on_r2(key: str) -> bool:
+async def is_file_on_r2(key: str, r2_client) -> bool:
+    """Asynchronously checks if a file exists in the R2 bucket."""
     try:
-        r2.head_object(Bucket=era5_env["BUCKET_NAME"], Key=key)
+        await r2_client.head_object(Bucket=era5_env["BUCKET_NAME"], Key=key)
         return True
     except S3ClientError as e:
         if e.response["Error"]["Code"] == "404":
@@ -102,6 +105,97 @@ def make_grib_filepath(dataset: str, timestamp: datetime, period: str) -> Path:
 
     return path
 
+
+
+async def download_grib_async(
+    dataset: str,
+    timestamp: datetime,
+    period: str,
+    s3_client,
+    force=False,
+    api_key: str | None = None,
+) -> Path:
+    """
+    Asynchronously downloads a GRIB file, coordinating between local disk, R2, and the Copernicus API.
+    """
+    if dataset not in dataset_names:
+        raise ValueError(f"Invalid dataset value {dataset}")
+    if period not in period_options:
+        raise ValueError(f"Invalid period {period}")
+
+    download_filepath = make_grib_filepath(dataset, timestamp, period)
+    # Run synchronous file check in a thread to avoid blocking the event loop
+    file_on_disk = await asyncio.to_thread(download_filepath.exists)
+
+    filename = download_filepath.name
+    file_on_r2 = await is_file_on_r2(filename, s3_client)
+
+    upload_to_r2_at_end = False
+
+    # Decide if a fresh download from Copernicus is needed
+    if force or (not file_on_r2 and not file_on_disk):
+        upload_to_r2_at_end = True
+    else:
+        if file_on_r2 and file_on_disk:
+            eprint(f"File {filename} on both R2 and disk, skipping download.")
+        elif file_on_r2 and not file_on_disk:
+            eprint(f"Downloading {filename} from R2 to {download_filepath}")
+            await s3_client.download_file(era5_env["BUCKET_NAME"], filename, str(download_filepath))
+        elif not file_on_r2 and file_on_disk:
+            eprint(f"Uploading local file {download_filepath} to R2")
+            await s3_client.upload_file(str(download_filepath), era5_env["BUCKET_NAME"], filename)
+        return download_filepath
+
+    # --- Prepare and execute Copernicus API request ---
+    all_hours = [f"{h:02d}:00" for h in range(24)]
+    hour_request: list[str]
+    day_request: list[str]
+
+    match period:
+        case "hour":
+            hour_request = [timestamp.strftime("%H:00")]
+            day_request = [timestamp.strftime("%d")]
+        case "day":
+            hour_request = all_hours
+            day_request = [timestamp.strftime("%d")]
+        case "month":
+            hour_request = all_hours
+            end = next_month(timestamp)
+            delta = (end - timestamp).days
+            day_request = [(timestamp + timedelta(days=i)).strftime("%d") for i in range(delta)]
+
+    request = {
+        "product_type": "reanalysis",
+        "variable": dataset,
+        "year": timestamp.strftime("%Y"),
+        "month": timestamp.strftime("%m"),
+        "day": day_request,
+        "time": hour_request,
+        "format": "grib", # Use 'format' for CDS API, 'data_format' is for older APIs
+    }
+    
+    # Instantiate CDS API client
+    client_args = {"quiet": True}
+    if api_key:
+        client_args['url'] = "https://cds.climate.copernicus.eu/api/v2"
+        client_args['key'] = api_key
+    client = cdsapi.Client(**client_args)
+
+    eprint(f"Requesting download from Copernicus to {download_filepath}...")
+    
+    # Run the blocking 'retrieve' call in a separate thread
+    await asyncio.to_thread(
+        client.retrieve,
+        "reanalysis-era5-single-levels",
+        request,
+        str(download_filepath)
+    )
+
+    if upload_to_r2_at_end:
+        eprint(f"Uploading {filename} to R2...")
+        await s3_client.upload_file(str(download_filepath), era5_env["BUCKET_NAME"], filename)
+
+    return download_filepath
 
 def download_grib(
     dataset: str,
@@ -273,7 +367,17 @@ def download(
     If the file is on disk and not on R2, then this will upload a copy to R2.
     If the file is in neither locations, this will download to disk and then upload to R2.
     """
-    download_grib(dataset, timestamp, period, force=force, api_key=api_key)
+    async def main():
+        session = aioboto3.Session()
+        async with session.client(
+            "s3",
+            endpoint_url=era5_env["ENDPOINT_URL"],
+            aws_access_key_id=era5_env["AWS_ACCESS_KEY_ID"],
+            aws_secret_access_key=era5_env["AWS_SECRET_ACCESS_KEY"],
+        ) as s3_client:
+            await download_grib_async(dataset, timestamp, period, s3_client, force=force, api_key=api_key)
+
+    asyncio.run(main())
 
 
 @click.command
@@ -326,18 +430,29 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
         case _:
             raise ValueError(f"Invalid dataset value {dataset}")
 
-    if len(ds.valid_time.dims) == 2:
-        # Monthly downloaded files have their time coordinate as an N-dimensional array, make this coordinate linear
+
+
+    if "valid_time" in ds.coords and len(ds.valid_time.dims) == 2:
+        print("Processing multi-dimensional valid_time...")
         ds_stack = ds.stack(throwaway=("time", "step"))
-        ds_linear = ds_stack.swap_dims({"throwaway": "valid_time"})
-        ds = ds_linear.drop_vars(["throwaway"])
+        ds_linear = ds_stack.rename({"throwaway": "valid_time"})  # Rename stacked dim to valid_time
+        ds = ds_linear.drop_vars(["throwaway"], errors="ignore")
+        print("After handling multi-dimensional valid_time:")
+        print("Dimensions:", ds.dims)
+        print("Coordinates:", ds.coords)
 
     ds = ds.drop_vars(["number", "step", "surface", "time"])
-    ds = ds.rename({"valid_time": "time"})
-    try:
-        ds = ds.set_xindex("time")
-    except ValueError:
-        eprint("Time Index already exists, not setting it again.")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, message="rename 'valid_time' to 'time'")
+        # UserWarning: rename 'valid_time' to 'time' does not create an index anymore. Try using swap_dims instead or use set_index after rename to create an indexed coordinate.
+        # Surpess this warning since we are renaming valid_time to time, which is the standard name in dClimate.
+        # We properply set the index after renaming.
+        ds = ds.rename({"valid_time": "time"})
+        try:
+            ds = ds.set_xindex("time")
+        except ValueError:
+            eprint("Time Index already exists, not setting it again.")
+
     # ERA5 GRIB files have longitude from 0 to 360, but dClimate standardizes from -180 to 180
     new_longitude = np.where(ds.longitude > 180, ds.longitude - 360, ds.longitude)
     ds = ds.assign_coords(longitude=new_longitude)
@@ -386,96 +501,115 @@ def instantiate(
     Creates a new, chunk-aligned Zarr store on IPFS, initialized with
     the first 1200 hours (50 days) of data.
     """
+    async def main():
+        # We want the initial store to contain 1200 hours of data, which is
+        # exactly 3 Zarr time chunks (3 * 400h) and 50 days (50 * 24h).
+        INITIAL_HOURS_TO_DOWNLOAD = 1200
 
-    # We want the initial store to contain 1200 hours of data, which is
-    # exactly 3 Zarr time chunks (3 * 400h) and 50 days (50 * 24h).
-    INITIAL_HOURS_TO_DOWNLOAD = 1200
+        NUM_DAYS_NEEDED = INITIAL_HOURS_TO_DOWNLOAD // 24
 
-    NUM_DAYS_NEEDED = INITIAL_HOURS_TO_DOWNLOAD // 24
+        start_date = datetime(1940, 1, 1)
 
-    start_date = datetime(1940, 1, 1)
+        eprint(f"Downloading initial {NUM_DAYS_NEEDED} days of data to create aligned store...")
 
-    eprint(f"Downloading initial {NUM_DAYS_NEEDED} days of data to create aligned store...")
+        session = aioboto3.Session()
+        grib_paths: list[Path] = []
+        async with session.client(
+            "s3",
+            endpoint_url=era5_env["ENDPOINT_URL"],
+            aws_access_key_id=era5_env["AWS_ACCESS_KEY_ID"],
+            aws_secret_access_key=era5_env["AWS_SECRET_ACCESS_KEY"],
+        ) as s3_client:
+            download_tasks = []
+            for i in range(NUM_DAYS_NEEDED):
+                current_day = start_date + timedelta(days=i)
+                task = download_grib_async(dataset, current_day, "day", s3_client, api_key=api_key)
+                download_tasks.append(task)
+            
+            grib_paths = await asyncio.gather(*download_tasks)
 
-    grib_paths: list[Path] = []
-    current_day = start_date - timedelta(days=1) # Start before the first day to make loop simpler
-    for _ in range(NUM_DAYS_NEEDED):
-        current_day += timedelta(days=1)
-        path = download_grib(dataset, current_day, "day", api_key=api_key)
-        grib_paths.append(path)
+        
+        # current_day = start_date - timedelta(days=1) # Start before the first day to make loop simpler
+        # for _ in range(NUM_DAYS_NEEDED):
+        #     current_day += timedelta(days=1)
+        #     path = download_grib(dataset, current_day, "day", api_key=api_key)
+        #     grib_paths.append(path)
 
-    # Download the months that contain the start to end date
-    # current = start_date
-    # while current < end_date:
-    #     eprint(f"Downloading GRIB for month of date {current}")
-    #     path = download_grib(dataset, current, "month", api_key=api_key)
-    #     grib_paths.append(path)
-    #     current = next_month(current)
+        # Download the months that contain the start to end date
+        # current = start_date
+        # while current < end_date:
+        #     eprint(f"Downloading GRIB for month of date {current}")
+        #     path = download_grib(dataset, current, "month", api_key=api_key)
+        #     grib_paths.append(path)
+        #     current = next_month(current)
 
 
-    eprint("====== Writing this dataset to a new Zarr on IPFS ======")
-    ds = xr.open_mfdataset(grib_paths)
-    ds = standardize(dataset, ds)
-    eprint(ds)
+        eprint("====== Writing this dataset to a new Zarr on IPFS ======")
+        ds = xr.open_mfdataset(grib_paths, decode_timedelta=False)
+        ds = standardize(dataset, ds)
+        eprint(ds)
 
-    eprint(f"Forcing encoding with chunk settings: {chunking_settings}")
-    
-    # Set encoding for the data variable
-    encoding_chunks = tuple(chunking_settings.get(dim) for dim in ds[dataset].dims)
-    ds[dataset].encoding['chunks'] = encoding_chunks
 
-    for coord_name, coord_array in ds.coords.items():
-        if coord_name in chunking_settings:
-            ds[coord_name].encoding['chunks'] = (chunking_settings[coord_name],)
+        eprint(f"Forcing encoding with chunk settings: {chunking_settings}")
+        
+        # Set encoding for the data variable
+        encoding_chunks = tuple(chunking_settings.get(dim) for dim in ds[dataset].dims)
+        ds[dataset].encoding['chunks'] = encoding_chunks
 
-    ordered_dims = list(ds.dims)
-    array_shape = tuple(ds.dims[dim] for dim in ordered_dims)
-    chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
+        for coord_name, coord_array in ds.coords.items():
+            if coord_name in chunking_settings:
+                ds[coord_name].encoding['chunks'] = (chunking_settings[coord_name],)
 
-    # Reorder to be time, latitude, longitude
-    if ordered_dims != ["time", "latitude", "longitude"]:
-        ordered_dims = ["time", "latitude", "longitude"]
-        ds = ds.transpose(*ordered_dims)
-        array_shape = tuple(ds.dims[dim] for dim in ordered_dims)
+        ordered_dims = list(ds.dims)
+        array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
         chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
-    eprint("Ordered dimensions, array shape, chunk shape:")
 
-    print(ordered_dims, array_shape, chunk_shape)
+        # Reorder to be time, latitude, longitude
+        if ordered_dims != ["time", "latitude", "longitude"]:
+            ordered_dims = ["time", "latitude", "longitude"]
+            ds = ds.transpose(*ordered_dims)
+            array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
+            chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
+        eprint("Ordered dimensions, array shape, chunk shape:")
+
+        print(ordered_dims, array_shape, chunk_shape)
 
 
-    async def _upload_to_ipfs():
-        async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
-            store_write = await ShardedZarrStore.open(
-                cas=kubo_cas,
-                array_shape=array_shape,
-                chunk_shape=chunk_shape,
-                chunks_per_shard=26000,
-                read_only=False,
-            )
-            start_time = time.perf_counter()
-            ds.to_zarr(store=store_write, mode="w")
-            end_time = time.perf_counter()
-            eprint(f"Time taken to write dataset: {end_time - start_time:.2f} seconds")
-            root_cid = await store_write.flush()
-            eprint("New ShardedZarrStore CID:")
-            print(root_cid)
+        async def _upload_to_ipfs():
+            async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
+                store_write = await ShardedZarrStore.open(
+                    cas=kubo_cas,
+                    array_shape=array_shape,
+                    chunk_shape=chunk_shape,
+                    chunks_per_shard=26000,
+                    read_only=False,
+                )
+                start_time = time.perf_counter()
+                ds.to_zarr(store=store_write, mode="w")
+                end_time = time.perf_counter()
+                eprint(f"Time taken to write dataset: {end_time - start_time:.2f} seconds")
+                root_cid = await store_write.flush()
+                eprint("New ShardedZarrStore CID:")
+                print(root_cid)
 
-    asyncio.run(_upload_to_ipfs())
+        await _upload_to_ipfs()
 
+    asyncio.run(main())
     eprint("Cleaning up GRIB files...")
     # for path in grib_paths:
     #     os.remove(path)
+
 
 async def chunked_write(ds: xr.Dataset, variable_name: str, kubo_cas: KuboCAS) -> str:
     # Note: I've modified it slightly to accept an existing KuboCAS instance
     #       and return the CID as a string for easier use.
     ordered_dims = list(ds.dims)
-    array_shape = tuple(ds.dims[dim] for dim in ordered_dims)
+    array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
     chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
     if ordered_dims[0] != 'time':
         ds = ds.transpose('time', 'latitude', 'longitude', ...)
         ordered_dims = list(ds.dims)
-        array_shape = tuple(ds.dims[dim] for dim in ordered_dims)
+        array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
         chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
 
     store_write = await ShardedZarrStore.open(
@@ -485,23 +619,10 @@ async def chunked_write(ds: xr.Dataset, variable_name: str, kubo_cas: KuboCAS) -
         chunks_per_shard=26000,
         read_only=False,
     )
-    print("Writing dataset to Zarr store...")
     ds.to_zarr(store=store_write, mode="w")
     root_cid = await store_write.flush()
     return str(root_cid)
 
-
-# @click.command()
-# @click.argument("dataset", type=datasets_choice)
-# @click.argument("cid", type=str)
-# @click.option(
-#     "--end-date",
-#     type=click.DateTime(),
-#     required=True,
-#     help="The target end date to extend the dataset to.",
-# )
-# @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
-# @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 async def extend(
     dataset: str,
     cid: str,
@@ -584,8 +705,11 @@ async def extend(
         time_array.attrs['calendar'] = 'proleptic_gregorian'
 
         # Recreate the zarr.json to align with the new coordinates
-        zarr.consolidate_metadata(main_store)
-        
+        # But we don't really rely on consolidated metadata. this just keeps it tidy
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, message="Consolidated metadata is currently not part")
+            zarr.consolidate_metadata(main_store)
+
         # --- 4. Flush and output the new CID ---
         extended_cid = await main_store.flush()
         eprint("\n--- Extend Operation Complete! ---")
@@ -593,7 +717,101 @@ async def extend(
         eprint(f"Extended Dataset CID: {extended_cid}")
         return extended_cid
 
+@click.command()
+@click.argument("dataset", type=datasets_choice)
+@click.option("--start-date",type=click.DateTime(), required=True, help="The first day of the batch to process.")
+@click.option("--end-date", type=click.DateTime(), required=True, help="The last day of the batch to process.")
+@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
+@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option("--api-key", help="The CDS API key to use.")
+def process_batch(
+    dataset: str,
+    start_date: datetime,
+    end_date: datetime,
+    gateway_uri_stem: str | None,
+    rpc_uri_stem: str | None,
+    api_key: str | None,
+):
+    """
+    Downloads, processes, and creates an IPFS Zarr store for a single batch of data.
+    On success, prints the final CID to standard output. All logging goes to stderr.
+    This command is intended to be called as a subprocess by the 'append' command.
+    """
+    eprint(f"--- Starting batch process for {dataset} from {start_date.date()} to {end_date.date()} ---")
+    async def main():
+        # 1. Generate list of days to download for this batch        
+        days_to_download = []
+        current_day = start_date
+        while current_day <= end_date:
+            days_to_download.append(current_day)
+            current_day += timedelta(days=1)
 
+        grib_paths: list[Path] = []
+        session = aioboto3.Session()
+
+        async with session.client(
+            "s3",
+            endpoint_url=era5_env["ENDPOINT_URL"],
+            aws_access_key_id=era5_env["AWS_ACCESS_KEY_ID"],
+            aws_secret_access_key=era5_env["AWS_SECRET_ACCESS_KEY"],
+        ) as s3_client:
+            eprint(f"Concurrently downloading {len(days_to_download)} GRIB files...")
+            download_tasks = [
+                download_grib_async(dataset, day, "day", s3_client, api_key=api_key)
+                for day in days_to_download
+            ]
+            try:
+                grib_paths = await asyncio.gather(*download_tasks)
+            except Exception as e:
+                eprint(f"ERROR: A download failed in the batch: {e}")
+                sys.exit(1)
+
+        if not grib_paths:
+            eprint("No GRIB files were downloaded, exiting.")
+            sys.exit(1)
+
+        # # 2. Download all GRIB files for the batch
+        # for day in days_to_download:
+        #     eprint(f"Downloading data for {day.date()}...")
+        #     try:
+        #         path = download_grib(dataset, day, "day", api_key=api_key)
+        #         grib_paths.append(path)
+        #     except Exception as e:
+        #         eprint(f"ERROR: Failed to download data for {day.date()}: {e}")
+        #         # Exit with a non-zero status code to indicate failure
+        #         sys.exit(1)
+
+        # if not grib_paths:
+        #     eprint("No GRIB files were downloaded, exiting.")
+        #     sys.exit(1)
+
+        # 3. Process and write to a new Zarr store on IPFS
+        async def _process_and_upload():
+            eprint("Standardizing dataset and writing to a new Zarr store on IPFS...")
+            ds = xr.open_mfdataset(grib_paths, engine='cfgrib', decode_timedelta=False)
+            ds = standardize(dataset, ds)
+            
+            async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
+                batch_cid = await chunked_write(ds, dataset, kubo_cas)
+                # CRITICAL: Print the resulting CID to standard output.
+                # This is how the orchestrator will receive the result.
+                print(batch_cid)
+        
+        try:
+            await _process_and_upload()
+            eprint(f"--- Batch process finished successfully for {start_date.date()} to {end_date.date()} ---")
+        except Exception as e:
+            eprint(f"ERROR: An error occurred during Zarr creation/upload: {e}")
+            sys.exit(1)
+        finally:
+            # 4. Clean up downloaded GRIB files
+            eprint("Cleaning up GRIB files...")
+            # for path in grib_paths:
+            #     try:
+            #         os.remove(path)
+            #     except OSError as e:
+            #         eprint(f"Warning: Could not remove GRIB file {path}: {e}")
+    asyncio.run(main())
     
 
 @click.command
@@ -605,6 +823,7 @@ async def extend(
     required=False,
     help="The target date to append data up to (inclusive). Format: YYYY-MM-DD",
 )
+@click.option("--max-parallel-procs", type=int, default=4, help="Maximum number of batch processes to run in parallel.")
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 @click.option(
@@ -614,6 +833,7 @@ def append(
     dataset,
     cid: str,
     end_date: datetime | None,
+    max_parallel_procs: int,
     gateway_uri_stem: str,
     rpc_uri_stem: str,
     api_key: str | None,
@@ -652,7 +872,7 @@ def append(
 
             # Crucially, get the original time values as a numpy array
             initial_time_values = initial_ds.time.values
-            time_dim_index = initial_ds.dims['time']
+            time_dim_index = initial_ds.sizes['time']
             time_chunk_size = initial_ds.chunks['time'][0]
 
             # THIS OFFSET IS CRUCIAL AS IT DETERMINES WHERE THE NEW DATA WILL BE GRAFTED BEFORE THE SKELETON IS CREATED
@@ -691,19 +911,70 @@ def append(
                 if not days: return None
 
                 
-            # For testing, do only the first 2 batches
+            # For testing, do only the first 3 batches
             start_time = time.perf_counter()
-            batches_of_days = batches_of_days[:2]
+            batches_of_days = batches_of_days[:3]
             batch_cids = []
+
+            processes = []
+            batch_info = [] # To store info for each process
+    
             for i, batch in enumerate(batches_of_days):
-                grib_paths = []
-                for ts in batch:
-                    grib_path = download_grib(dataset, ts, "day", api_key=api_key)
-                    grib_paths.append(grib_path)
-                ds = xr.open_mfdataset(grib_paths, engine='cfgrib')
-                ds = standardize(dataset, ds)
-                batch_cid = await chunked_write(ds, dataset, kubo_cas)
-                batch_cids.append(batch_cid)
+                batch_start_date = batch[0]
+                batch_end_date = batch[-1]
+
+                command = [
+                    sys.executable,  # Use the same python interpreter
+                    __file__,        # The current script file
+                    "process-batch",
+                    dataset,
+                    "--start-date", batch_start_date.strftime('%Y-%m-%d'),
+                    "--end-date", batch_end_date.strftime('%Y-%m-%d'),
+                ]
+                if gateway_uri_stem: command.extend(["--gateway-uri-stem", gateway_uri_stem])
+                if rpc_uri_stem: command.extend(["--rpc-uri-stem", rpc_uri_stem])
+                if api_key: command.extend(["--api-key", api_key])
+
+                proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=None, text=True)
+                processes.append(proc)
+                batch_info.append({'start': batch_start_date.date(), 'end': batch_end_date.date(), 'cid': None})
+
+                if len(processes) >= max_parallel_procs:
+                    # This simple implementation waits for the oldest process started
+                    p_to_wait_on = processes.pop(0)
+                    stdout, _ = p_to_wait_on.communicate()
+                    if p_to_wait_on.returncode != 0:
+                        eprint(f"ERROR: A subprocess failed with return code {p_to_wait_on.returncode}. Aborting append.")
+                        # Decide on error handling: abort all or just skip this batch?
+                        # For now, we'll abort.
+                        raise RuntimeError("A subprocess failed. Aborting append.")
+                    
+                    # The CID is the stripped stdout
+                    batch_cid = stdout.strip()
+                    batch_info[i - len(processes)]['cid'] = batch_cid
+                    eprint(f"Collected CID: {batch_cid}")
+
+                # grib_paths = []
+                # for ts in batch:
+                #     grib_path = download_grib(dataset, ts, "day", api_key=api_key)
+                #     grib_paths.append(grib_path)
+                # ds = xr.open_mfdataset(grib_paths, engine='cfgrib')
+                # ds = standardize(dataset, ds)
+                # batch_cid = await chunked_write(ds, dataset, kubo_cas)
+                # batch_cids.append(batch_cid)
+
+            for i, proc in enumerate(processes):
+                stdout, _ = proc.communicate()
+                if proc.returncode != 0:
+                    eprint(f"ERROR: A subprocess failed with return code {proc.returncode}. Aborting append.")
+                    raise RuntimeError("A subprocess failed. Aborting append.")
+                batch_cid = stdout.strip()
+                # Find the correct batch_info entry to update
+                info_index = len(batch_info) - len(processes) + i
+                batch_info[info_index]['cid'] = batch_cid
+                eprint(f"Collected CID: {batch_cid}")
+
+            batch_cids = [info['cid'] for info in batch_info if info['cid']]
 
             end_time = time.perf_counter()
             eprint(f"Time taken to create all batches: {end_time - start_time:.2f} seconds")
@@ -711,7 +982,7 @@ def append(
 
             # Skeleton Store to graft into
             skeleton_store = await ShardedZarrStore.open(cas=kubo_cas, read_only=False, root_cid=CID.decode(extended_cid))
-
+            start_time = time.perf_counter()
             for i, batch_cid in enumerate(batch_cids):
                 # Calculate the offset for this graft
                 running_chunk_offset += i * HOURS_PER_BATCH // 400
@@ -719,6 +990,8 @@ def append(
                 
                 # Perform the graft
                 await skeleton_store.graft_store(batch_cid, current_graft_location)
+            end_time = time.perf_counter()
+            eprint(f"Time taken to graft all batches: {end_time - start_time:.2f} seconds")
             
             # 4. Flush the main store ONCE at the end
             final_cid = await skeleton_store.flush()
@@ -744,8 +1017,11 @@ cli.add_command(download)
 cli.add_command(check_finalized)
 cli.add_command(instantiate)
 cli.add_command(append)
-# cli.add_command(backfill)
-# cli.add_command(extend)
+cli.add_command(process_batch)
 
 if __name__ == "__main__":
-    cli()
+    with warnings.catch_warnings():
+        # Suppress warnings about consolidated metadata not being part of the store
+        # Sharding store doesnt use it
+        warnings.filterwarnings("ignore", category=UserWarning, message="Consolidated metadata is currently not part")
+        cli()
