@@ -4,7 +4,7 @@ from py_hamt import ShardedZarrStore, KuboCAS
 import numpy as np
 
 # The NEW CID from the end of the 'extend' command
-final_cid = "bafyr4ifowqtdnzcdlgir5ryjzitwo4iq445i2uu2ssts7vdb62gxnjompe" # PASTE cid_B HERE
+final_cid = "bafyr4ibswblof25eekiq5t6rod5iueyp6uuaapwzeil4sboikdq3k67qs4" # PASTE cid_B HERE
 
 async def verify():
     async with KuboCAS() as cas:

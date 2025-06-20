@@ -80,7 +80,7 @@ def next_month(dt: datetime) -> datetime:
         m = 1
     else:
         m += 1
-    print(f"Next month for {dt} is {y}-{m}")
+    # print(f"Next month for {dt} is {y}-{m}")
     return dt.replace(year=y, month=m)
 
 
@@ -105,7 +105,37 @@ def make_grib_filepath(dataset: str, timestamp: datetime, period: str) -> Path:
 
     return path
 
+async def get_gribs_for_date_range_async(
+    dataset: str,
+    start_date: datetime,
+    end_date: datetime,
+    s3_client,
+    api_key: str | None = None
+) -> list[Path]:
+    """
+    Determines the months required for a date range and ensures the monthly GRIB files
+    are downloaded locally, fetching from R2 or Copernicus as needed.
+    """
+    required_months: Set[datetime] = set()
+    current_month_start = start_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Identify all unique months spanned by the date range
+    while current_month_start <= end_date:
+        required_months.add(current_month_start)
+        current_month_start = next_month(current_month_start)
 
+    eprint(f"Date range requires {len(required_months)} monthly GRIB files.")
+    
+    # Create concurrent download tasks for each required month
+    download_tasks = [
+        download_grib_async(dataset, month_ts, "month", s3_client, api_key=api_key)
+        for month_ts in required_months
+    ]
+    
+    # Await all downloads to complete
+    monthly_grib_paths = await asyncio.gather(*download_tasks)
+    
+    return monthly_grib_paths
 
 async def download_grib_async(
     dataset: str,
@@ -129,7 +159,6 @@ async def download_grib_async(
 
     filename = download_filepath.name
     file_on_r2 = await is_file_on_r2(filename, s3_client)
-
     upload_to_r2_at_end = False
 
     # Decide if a fresh download from Copernicus is needed
@@ -509,6 +538,7 @@ def instantiate(
         NUM_DAYS_NEEDED = INITIAL_HOURS_TO_DOWNLOAD // 24
 
         start_date = datetime(1940, 1, 1)
+        end_date = start_date + timedelta(days=NUM_DAYS_NEEDED - 1)
 
         eprint(f"Downloading initial {NUM_DAYS_NEEDED} days of data to create aligned store...")
 
@@ -520,13 +550,14 @@ def instantiate(
             aws_access_key_id=era5_env["AWS_ACCESS_KEY_ID"],
             aws_secret_access_key=era5_env["AWS_SECRET_ACCESS_KEY"],
         ) as s3_client:
-            download_tasks = []
-            for i in range(NUM_DAYS_NEEDED):
-                current_day = start_date + timedelta(days=i)
-                task = download_grib_async(dataset, current_day, "day", s3_client, api_key=api_key)
-                download_tasks.append(task)
-            
-            grib_paths = await asyncio.gather(*download_tasks)
+            try:
+                # This single call replaces the old loop of 50 daily downloads.
+                grib_paths = await get_gribs_for_date_range_async(
+                    dataset, start_date, end_date, s3_client, api_key=api_key
+                )
+            except Exception as e:
+                eprint(f"ERROR: A download failed while fetching monthly data for instantiation: {e}")
+                sys.exit(1)
 
         
         # current_day = start_date - timedelta(days=1) # Start before the first day to make loop simpler
@@ -546,9 +577,11 @@ def instantiate(
 
         eprint("====== Writing this dataset to a new Zarr on IPFS ======")
         ds = xr.open_mfdataset(grib_paths, decode_timedelta=False)
+        slice_end_date = end_date.replace(hour=23, minute=0, second=0)
+        time_slice = slice(np.datetime64(start_date), np.datetime64(slice_end_date))
+        ds = ds.sel(time=time_slice)
         ds = standardize(dataset, ds)
         eprint(ds)
-
 
         eprint(f"Forcing encoding with chunk settings: {chunking_settings}")
         
@@ -599,6 +632,32 @@ def instantiate(
     # for path in grib_paths:
     #     os.remove(path)
 
+def save_cid_to_file(
+    cid: str,
+    dataset: str,
+    start_date: datetime,
+    end_date: datetime,
+    label: str,
+):
+    """Saves a given CID to a text file in the scratchspace/era5/cids directory."""
+    try:
+        cid_dir = scratchspace / "cids"
+        os.makedirs(cid_dir, exist_ok=True)
+
+        start_str = start_date.strftime('%Y-%m-%d')
+        end_str = end_date.strftime('%Y-%m-%d')
+
+        # Filename format: dataset-label-start_date-end_date.cid
+        filename = f"{dataset}-{label}-{start_str}-to-{end_str}.cid"
+        filepath = cid_dir / filename
+
+        with open(filepath, "w") as f:
+            f.write(str(cid))
+        
+        eprint(f"✅ Saved CID for '{label}' to: {filepath}")
+
+    except Exception as e:
+        eprint(f"⚠️ Warning: Could not save CID to file. Error: {e}")
 
 async def chunked_write(ds: xr.Dataset, variable_name: str, kubo_cas: KuboCAS) -> str:
     # Note: I've modified it slightly to accept an existing KuboCAS instance
@@ -740,11 +799,11 @@ def process_batch(
     eprint(f"--- Starting batch process for {dataset} from {start_date.date()} to {end_date.date()} ---")
     async def main():
         # 1. Generate list of days to download for this batch        
-        days_to_download = []
-        current_day = start_date
-        while current_day <= end_date:
-            days_to_download.append(current_day)
-            current_day += timedelta(days=1)
+        # days_to_download = []
+        # current_day = start_date
+        # while current_day <= end_date:
+        #     days_to_download.append(current_day)
+        #     current_day += timedelta(days=1)
 
         grib_paths: list[Path] = []
         session = aioboto3.Session()
@@ -755,13 +814,10 @@ def process_batch(
             aws_access_key_id=era5_env["AWS_ACCESS_KEY_ID"],
             aws_secret_access_key=era5_env["AWS_SECRET_ACCESS_KEY"],
         ) as s3_client:
-            eprint(f"Concurrently downloading {len(days_to_download)} GRIB files...")
-            download_tasks = [
-                download_grib_async(dataset, day, "day", s3_client, api_key=api_key)
-                for day in days_to_download
-            ]
             try:
-                grib_paths = await asyncio.gather(*download_tasks)
+                grib_paths = await get_gribs_for_date_range_async(
+                    dataset, start_date, end_date, s3_client, api_key=api_key
+                )
             except Exception as e:
                 eprint(f"ERROR: A download failed in the batch: {e}")
                 sys.exit(1)
@@ -770,29 +826,19 @@ def process_batch(
             eprint("No GRIB files were downloaded, exiting.")
             sys.exit(1)
 
-        # # 2. Download all GRIB files for the batch
-        # for day in days_to_download:
-        #     eprint(f"Downloading data for {day.date()}...")
-        #     try:
-        #         path = download_grib(dataset, day, "day", api_key=api_key)
-        #         grib_paths.append(path)
-        #     except Exception as e:
-        #         eprint(f"ERROR: Failed to download data for {day.date()}: {e}")
-        #         # Exit with a non-zero status code to indicate failure
-        #         sys.exit(1)
-
-        # if not grib_paths:
-        #     eprint("No GRIB files were downloaded, exiting.")
-        #     sys.exit(1)
-
         # 3. Process and write to a new Zarr store on IPFS
         async def _process_and_upload():
-            eprint("Standardizing dataset and writing to a new Zarr store on IPFS...")
+            # Sort the paths by date to ensure correct time order
+            grib_paths.sort(key=lambda p: p.stem)
             ds = xr.open_mfdataset(grib_paths, engine='cfgrib', decode_timedelta=False)
+            slice_end_date = end_date.replace(hour=23, minute=0, second=0)
+            time_slice = slice(np.datetime64(start_date), np.datetime64(slice_end_date))
+            ds = ds.sel(time=time_slice)
             ds = standardize(dataset, ds)
             
             async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
                 batch_cid = await chunked_write(ds, dataset, kubo_cas)
+                save_cid_to_file(batch_cid, dataset, start_date, end_date, "batch")
                 # CRITICAL: Print the resulting CID to standard output.
                 # This is how the orchestrator will receive the result.
                 print(batch_cid)
@@ -823,7 +869,7 @@ def process_batch(
     required=False,
     help="The target date to append data up to (inclusive). Format: YYYY-MM-DD",
 )
-@click.option("--max-parallel-procs", type=int, default=4, help="Maximum number of batch processes to run in parallel.")
+@click.option("--max-parallel-procs", type=int, default=1, help="Maximum number of batch processes to run in parallel.")
 @click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 @click.option(
@@ -857,7 +903,6 @@ def append(
         main_cid = cid
 
         async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
- 
             # 1. Open the initial store
             initial_store_ro = await ShardedZarrStore.open(cas=kubo_cas, read_only=True, root_cid=cid)
             if initial_store_ro._root_obj is None:
@@ -913,7 +958,7 @@ def append(
                 
             # For testing, do only the first 3 batches
             start_time = time.perf_counter()
-            batches_of_days = batches_of_days[:3]
+            batches_of_days = batches_of_days[:1]
             batch_cids = []
 
             processes = []
@@ -953,15 +998,6 @@ def append(
                     batch_cid = stdout.strip()
                     batch_info[i - len(processes)]['cid'] = batch_cid
                     eprint(f"Collected CID: {batch_cid}")
-
-                # grib_paths = []
-                # for ts in batch:
-                #     grib_path = download_grib(dataset, ts, "day", api_key=api_key)
-                #     grib_paths.append(grib_path)
-                # ds = xr.open_mfdataset(grib_paths, engine='cfgrib')
-                # ds = standardize(dataset, ds)
-                # batch_cid = await chunked_write(ds, dataset, kubo_cas)
-                # batch_cids.append(batch_cid)
 
             for i, proc in enumerate(processes):
                 stdout, _ = proc.communicate()
