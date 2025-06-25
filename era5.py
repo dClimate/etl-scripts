@@ -206,7 +206,7 @@ async def download_grib_async(
     # Instantiate CDS API client
     client_args = {"quiet": True}
     if api_key:
-        client_args['url'] = "https://cds.climate.copernicus.eu/api/v2"
+        client_args['url'] = "https://cds.climate.copernicus.eu/api"
         client_args['key'] = api_key
     client = cdsapi.Client(**client_args)
 
