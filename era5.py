@@ -54,6 +54,42 @@ async def is_file_on_r2(key: str, r2_client) -> bool:
             raise
 
 
+async def _upload_with_r2_async(filepath: Path, bucket: str, key: str):
+    """
+    Reads a file and uploads it using the low-level put_object to avoid upload_file issues.
+    """
+    s3_config = {
+        "endpoint_url": era5_env["ENDPOINT_URL"],
+        "aws_access_key_id": era5_env["AWS_ACCESS_KEY_ID"],
+        "aws_secret_access_key": era5_env["AWS_SECRET_ACCESS_KEY"],
+    }
+    def _sync_upload():
+        eprint(f"☁️ Starting synchronous upload in thread: {key}...")
+        try:
+            # Create a brand new, standard boto3 client inside the thread.
+            # This client is truly synchronous and blocking.
+            boto3_s3_client = boto3.client("s3", **s3_config)
+            
+            # This call will now BLOCK until the upload is complete, fails, or times out.
+            boto3_s3_client.upload_file(str(filepath), bucket, key)
+            
+            eprint(f"✅ Finished synchronous upload in thread: {key}")
+        except Exception as e:
+            # We can catch specific botocore exceptions if needed
+            eprint(f"❌ Error during synchronous upload for {key}: {e}")
+            # Re-raise the exception so the main async task knows about the failure
+            raise
+
+    try:
+        # Run the genuinely blocking upload function in asyncio's thread pool.
+        # This await will now correctly wait for the entire file transfer.
+        await asyncio.to_thread(_sync_upload)
+    except Exception as e:
+        # The exception from the thread is caught here.
+        eprint(f"❌ Upload task for {key} failed.")
+        # Re-raise it to be caught by the main result processing loop
+        raise
+
 dataset_names = [
     "2m_temperature",
     "10m_u_component_of_wind",
@@ -80,7 +116,6 @@ def next_month(dt: datetime) -> datetime:
         m = 1
     else:
         m += 1
-    # print(f"Next month for {dt} is {y}-{m}")
     return dt.replace(year=y, month=m)
 
 
@@ -172,7 +207,7 @@ async def download_grib_async(
             await s3_client.download_file(era5_env["BUCKET_NAME"], filename, str(download_filepath))
         elif not file_on_r2 and file_on_disk:
             eprint(f"Uploading local file {download_filepath} to R2")
-            await s3_client.upload_file(str(download_filepath), era5_env["BUCKET_NAME"], filename)
+            await _upload_with_r2_async(str(download_filepath), era5_env["BUCKET_NAME"], filename)
         return download_filepath
 
     # --- Prepare and execute Copernicus API request ---
@@ -462,13 +497,13 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
 
 
     if "valid_time" in ds.coords and len(ds.valid_time.dims) == 2:
-        print("Processing multi-dimensional valid_time...")
+        eprint("Processing multi-dimensional valid_time...")
         ds_stack = ds.stack(throwaway=("time", "step"))
         ds_linear = ds_stack.rename({"throwaway": "valid_time"})  # Rename stacked dim to valid_time
         ds = ds_linear.drop_vars(["throwaway"], errors="ignore")
-        print("After handling multi-dimensional valid_time:")
-        print("Dimensions:", ds.dims)
-        print("Coordinates:", ds.coords)
+        eprint("After handling multi-dimensional valid_time:")
+        perint("Dimensions:", ds.dims)
+        eprint("Coordinates:", ds.coords)
 
     ds = ds.drop_vars(["number", "step", "surface", "time"])
     with warnings.catch_warnings():
@@ -559,22 +594,6 @@ def instantiate(
                 eprint(f"ERROR: A download failed while fetching monthly data for instantiation: {e}")
                 sys.exit(1)
 
-        
-        # current_day = start_date - timedelta(days=1) # Start before the first day to make loop simpler
-        # for _ in range(NUM_DAYS_NEEDED):
-        #     current_day += timedelta(days=1)
-        #     path = download_grib(dataset, current_day, "day", api_key=api_key)
-        #     grib_paths.append(path)
-
-        # Download the months that contain the start to end date
-        # current = start_date
-        # while current < end_date:
-        #     eprint(f"Downloading GRIB for month of date {current}")
-        #     path = download_grib(dataset, current, "month", api_key=api_key)
-        #     grib_paths.append(path)
-        #     current = next_month(current)
-
-
         eprint("====== Writing this dataset to a new Zarr on IPFS ======")
         ds = xr.open_mfdataset(grib_paths, decode_timedelta=False)
         slice_end_date = end_date.replace(hour=23, minute=0, second=0)
@@ -604,9 +623,6 @@ def instantiate(
             array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
             chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
         eprint("Ordered dimensions, array shape, chunk shape:")
-
-        print(ordered_dims, array_shape, chunk_shape)
-
 
         async def _upload_to_ipfs():
             async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
@@ -796,15 +812,24 @@ def process_batch(
     On success, prints the final CID to standard output. All logging goes to stderr.
     This command is intended to be called as a subprocess by the 'append' command.
     """
+    # Check if a CID for this exact batch has already been computed and saved.
+    cid_dir = scratchspace / "cids"
+    start_str = start_date.strftime('%Y-%m-%d')
+    end_str = end_date.strftime('%Y-%m-%d')
+    cid_filename = f"{dataset}-batch-{start_str}-to-{end_str}.cid"
+    cid_filepath = cid_dir / cid_filename
+
+    if cid_filepath.exists() and cid_filepath.stat().st_size > 0:
+        with open(cid_filepath, "r") as f:
+            existing_cid = f.read().strip()
+        # Ensure the file wasn't empty
+        if existing_cid:
+            eprint(f"✅ Found existing CID for this batch in {cid_filepath}.")
+            eprint(f"Skipping processing and returning existing CID: {existing_cid}")
+            print(existing_cid)  # Print to stdout for the calling process
+            return
     eprint(f"--- Starting batch process for {dataset} from {start_date.date()} to {end_date.date()} ---")
     async def main():
-        # 1. Generate list of days to download for this batch        
-        # days_to_download = []
-        # current_day = start_date
-        # while current_day <= end_date:
-        #     days_to_download.append(current_day)
-        #     current_day += timedelta(days=1)
-
         grib_paths: list[Path] = []
         session = aioboto3.Session()
 
@@ -1033,7 +1058,6 @@ def append(
             final_cid = await skeleton_store.flush()
             eprint(f"\nAll batches grafted successfully! Final Root CID: {final_cid}")
 
-            # print(new_cid)
             eprint("Removing GRIBs on disk")
             # for path in grib_paths:
             #     os.remove(path)
