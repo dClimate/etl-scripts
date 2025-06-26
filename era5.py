@@ -1043,9 +1043,10 @@ def append(
             # Skeleton Store to graft into
             skeleton_store = await ShardedZarrStore.open(cas=kubo_cas, read_only=False, root_cid=CID.decode(extended_cid))
             start_time = time.perf_counter()
-            for i, batch_cid in enumerate(batch_cids):
+            running_chunk_offset -= HOURS_PER_BATCH // 400
+            for batch_cid in batch_cids:
                 # Calculate the offset for this graft
-                running_chunk_offset += i * HOURS_PER_BATCH // 400
+                running_chunk_offset += HOURS_PER_BATCH // 400
                 current_graft_location = (running_chunk_offset, 0, 0)
                 
                 # Perform the graft
