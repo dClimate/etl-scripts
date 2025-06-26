@@ -105,6 +105,7 @@ period_options = ["hour", "day", "month"]
 period_choice = click.Choice(period_options)
 
 chunking_settings = {"time": 400, "latitude": 25, "longitude": 25}
+time_chunk_size = 500000
 
 
 def next_month(dt: datetime) -> datetime:
@@ -610,7 +611,11 @@ def instantiate(
 
         for coord_name, coord_array in ds.coords.items():
             if coord_name in chunking_settings:
-                ds[coord_name].encoding['chunks'] = (chunking_settings[coord_name],)
+                if coord_name == "time":
+                    # Time is special, we want to chunk it by the number of hours
+                    ds[coord_name].encoding['chunks'] = (time_chunk_size,)
+                else:
+                    ds[coord_name].encoding['chunks'] = (ds.sizes[coord_name],)
 
         ordered_dims = list(ds.dims)
         array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
@@ -756,7 +761,6 @@ async def extend(
         # We must write the new time values for the extended space to be valid.
         eprint(f"Writing {len(final_time_coords)} new time values...")
 
-        time_chunk_size = chunking_settings['time']
         time_group = zarr.open_group(main_store, mode='a')
 
         epoch = np.datetime64('1970-01-01T00:00:00')
@@ -939,11 +943,6 @@ def append(
 
             initial_shape = initial_store_ro._array_shape
             initial_chunks_per_dim = initial_store_ro._chunks_per_dim
-
-            # Crucially, get the original time values as a numpy array
-            initial_time_values = initial_ds.time.values
-            time_dim_index = initial_ds.sizes['time']
-            time_chunk_size = initial_ds.chunks['time'][0]
 
             # THIS OFFSET IS CRUCIAL AS IT DETERMINES WHERE THE NEW DATA WILL BE GRAFTED BEFORE THE SKELETON IS CREATED
             running_chunk_offset = initial_chunks_per_dim[0]
