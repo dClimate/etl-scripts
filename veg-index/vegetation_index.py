@@ -29,8 +29,9 @@ traceable and immutable.
 from __future__ import annotations
 
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Iterable, List
+from typing import Iterator
 
 import asyncclick as click
 import numpy as np
@@ -75,14 +76,17 @@ def _make_vci_slice(
     """
 
     # 1. Load the current FPAR observation (down‑sampled ≈1 km grid)
+    eprint(f"Downloading FPAR for {ts:%Y-%m-%d}…")
     fpar = tiff_to_dataarray(download_tiff(ts, force=force))
 
     # 2. Select historical min/max for the *same* dekad index
     dekad_idx = get_dekad_index(ts)
+    eprint(f"Loading min and max arrays for dekad index {dekad_idx}…")
     fmin = min_arr.isel(dekad=dekad_idx).load()
     fmax = max_arr.isel(dekad=dekad_idx).load()
 
     # 3. Compute VCI with protection against divide‑by‑zero
+    eprint("Computing VCI…")
     denom = np.where(fmax - fmin == 0, np.nan, fmax - fmin)
     vci = ((fpar - fmin) / denom).clip(0.0, 1.0)
 
@@ -90,34 +94,13 @@ def _make_vci_slice(
     return vci.expand_dims(time=[np.datetime64(ts, "ns")]).astype("float32")
 
 
-def _flush_batch(batch: List[xr.DataArray], dest: ZarrHAMTStore, first: bool) -> None:
-    """Write a **batch** of VCI slices to the destination Zarr in one call.
-
-    Parameters
-    ----------
-    batch
-        List of individual dekad slices created by :func:`_make_vci_slice`.
-        The list is mutated only inside this function (cleared after write).
-    dest
-        Target HAMT‑backed Zarr store opened for writing.
-    first
-        ``True`` for the **very first** write into an empty store – triggers
-        ``mode='w'`` so that Zarr metadata are created.  ``False`` for
-        subsequent writes, in which case the data are appended along the
-        *time* dimension with ``append_dim='time'``.
-    """
-
-    ds = standardise(xr.concat(batch, dim="time").to_dataset(name="VCI"))
-    mode_kwargs = {"mode": "w"} if first else {"append_dim": "time"}
-    ds.to_zarr(store=dest, zarr_format=3, **mode_kwargs)
-
 
 def _emit_vci_slices(
-    dates: Iterable[datetime],
+    dates: list[datetime],
     dest: ZarrHAMTStore,
     force: bool,
     batch_size: int,
-    already_have: datetime | None = None,
+    is_first_write: bool,
 ) -> None:
     """Generate VCI rasters for *dates* and stream them to *dest* in batches.
 
@@ -127,7 +110,7 @@ def _emit_vci_slices(
     * skipping dekads that are already present in *dest*,
     * grouping new dekads into ``batch_size`` slabs so that each Zarr chunk is
       written **exactly once** (crucial for IPFS performance), and
-    * flushing each slab via :func:`_flush_batch`.
+    * flushing each slab via to zarr.
 
     Parameters
     ----------
@@ -142,10 +125,10 @@ def _emit_vci_slices(
     batch_size
         Number of dekads to accumulate before each :py:meth:`xarray.Dataset.to_zarr`
         call.  Match this to the *time* chunk for optimal speed.
-    already_have
-        Timestamp of the **latest** dekad already in *dest* (used by
-        ``append``).  When *None*, the function assumes the store is empty and
-        the first write will create it.
+    is_first_write
+        If *True*, the store is empty and the first write will create the
+        Zarr metadata.  If *False*, the data are appended along the *time*
+        dimension.
     """
 
     if not (MIN_PATH.exists() and MAX_PATH.exists()):
@@ -155,24 +138,21 @@ def _emit_vci_slices(
     min_arr = xr.open_zarr(MIN_PATH)["FPARmin"]
     max_arr = xr.open_zarr(MAX_PATH)["FPARmax"]
 
-    first_write = already_have is None
-    batch: List[xr.DataArray] = []
+    # Define wrapper with a single argument so it can be mapped in the executor
+    def _process_ts(ts: datetime) -> xr.DataArray:
+        return _make_vci_slice(ts, min_arr, max_arr, force)
 
-    for ts in dates:
-        if already_have and ts <= already_have:
-            # Dekad already present – skip.
-            continue
+    for i in range(0, len(dates), batch_size):
+        slab = dates[i : i + batch_size]
 
-        batch.append(_make_vci_slice(ts, min_arr, max_arr, force))
+        # Download and process all TIFF in parallel
+        with ThreadPoolExecutor() as executor:
+            batch = executor.map(_process_ts, slab)
 
-        if len(batch) == batch_size:
-            _flush_batch(batch, dest, first_write)
-            first_write = False
-            batch.clear()
-
-    # Flush any remainder (last partial batch)
-    if batch:
-        _flush_batch(batch, dest, first_write)
+        ds = standardise(xr.concat(batch, dim="time").to_dataset(name="VCI"))
+        mode_kwargs = {"mode": "w"} if is_first_write else {"append_dim": "time"}
+        ds.to_zarr(store=dest, zarr_format=3, **mode_kwargs)
+        is_first_write = False  # After the first write, we append
 
 
 # ── CLI ————————————————————————————————————————————————————————————
@@ -219,11 +199,11 @@ async def instantiate(
 
     async with ipfs_hamt_store(gateway_uri_stem, rpc_uri_stem) as (store, hamt):
         _emit_vci_slices(
-            yield_dekad_dates(start_date, end_date),
+            list(yield_dekad_dates(start_date, end_date)),
             store,
             force,
             batch_size=batch_size,
-            already_have=None,
+            is_first_write=True,
         )
 
     eprint("✓ VCI build complete. HAMT CID:")
@@ -264,13 +244,10 @@ async def append(
         gateway_uri_stem, rpc_uri_stem, root_cid=CID.decode(vci_cid)
     ) as (store, hamt):
         latest_vci = npdt_to_pydt(xr.open_zarr(store).time[-1].values)
+        dates = [d for d in yield_dekad_dates(start_date, end_date) if d > latest_vci]
 
         _emit_vci_slices(
-            yield_dekad_dates(start_date, end_date),
-            store,
-            force,
-            batch_size=batch_size,
-            already_have=latest_vci,
+            dates, store, force, batch_size=batch_size, is_first_write=False
         )
 
     eprint("✓ Append done. New HAMT CID:")

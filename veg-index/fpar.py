@@ -26,7 +26,9 @@ from __future__ import annotations
 
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from typing import Iterator
 
 import asyncclick as click
 import dask
@@ -127,24 +129,25 @@ async def instantiate(
         eprint("Nothing to do — no dekads in requested range.")
         return
 
+    # Define wrapper with a single argument so it can be mapped in the executor
+    def _process_tiff_file(ts: datetime) -> xr.DataArray:
+        tiff = download_tiff(ts, force=force)
+        da = tiff_to_dataarray(tiff)
+        da = da.expand_dims(time=[np.datetime64(ts, "ns")])
+        return da
+
     async with ipfs_hamt_store(gateway_uri_stem, rpc_uri_stem) as (store, hamt):
         # ── process in contiguous batches ────────────────────────────────────────
         for i in range(0, len(dates), batch_size):
             slab = dates[i : i + batch_size]
 
-            arrays: list[xr.DataArray] = []
-            for ts in slab:
-                tiff = download_tiff(ts, force=force)
-                da = tiff_to_dataarray(tiff)
-                da = da.expand_dims(time=[np.datetime64(ts, "ns")])
-                arrays.append(da)
+            # Download and process all TIFF in parallel
+            with ThreadPoolExecutor() as executor:
+                arrays = executor.map(_process_tiff_file, slab)
 
             ds = xr.concat(arrays, dim="time").to_dataset(name="FPAR")
             ds = standardise(ds)
-
-            # first slab creates the Zarr hierarchy, later slabs extend along the time dimension
-            mode_kwargs = {"mode": "w"} if i == 0 else {"append_dim": "time"}
-            ds.to_zarr(store=store, zarr_format=3, **mode_kwargs) # type: ignore[arg-type]
+            ds.to_zarr(store=store, zarr_format=3, **mode_kwargs, mode="w")
             eprint(f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()}")
 
     eprint("✓ Done. Final HAMT CID:")
@@ -178,8 +181,17 @@ async def append(
     created only once, eliminating the costly read-modify-write pattern.
     """
 
+    # Define wrapper with a single argument so it can be mapped in the executor
+    def _process_tiff_file(ts: datetime) -> xr.DataArray:
+        tiff = download_tiff(ts, force=force)
+        da = tiff_to_dataarray(tiff)
+        da = da.expand_dims(time=[np.datetime64(ts, "ns")])
+        return da
+
     # ── open the existing store ──────────────────────────────────────────────
-    async with ipfs_hamt_store(gateway_uri_stem, rpc_uri_stem, root_cid=CID.decode(cid)) as (store, hamt):
+    async with ipfs_hamt_store(
+        gateway_uri_stem, rpc_uri_stem, root_cid=CID.decode(cid)
+    ) as (store, hamt):
 
         latest = npdt_to_pydt(xr.open_zarr(store=store).time[-1].values)
         start_date = latest + timedelta(days=10)  # first dekad NOT in store
@@ -194,17 +206,14 @@ async def append(
         for i in range(0, len(dates), batch_size):
             slab = dates[i : i + batch_size]
 
-            arrays: list[xr.DataArray] = []
-            for ts in slab:
-                tiff = download_tiff(ts, force=force)
-                da = tiff_to_dataarray(tiff)
-                da = da.expand_dims(time=[np.datetime64(ts, "ns")])
-                arrays.append(da)
+            # Download and process all TIFF in parallel
+            with ThreadPoolExecutor() as executor:
+                arrays = executor.map(_process_tiff_file, slab)
 
-            ds = standardise(xr.concat(arrays, dim="time").to_dataset(name="FPAR"))
-            ds.to_zarr(store=store, append_dim="time", zarr_format=3) # type: ignore[arg-type]
-
-            eprint(f"✓ Appended dekads {slab[0].date()} → {slab[-1].date()}")
+            ds = xr.concat(arrays, dim="time").to_dataset(name="FPAR")
+            ds = standardise(ds)
+            ds.to_zarr(store=store, zarr_format=3, **mode_kwargs, mode="w")
+            eprint(f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()}")
 
     eprint("✓ Done. New HAMT CID:")
     print(hamt.root_node_id)
