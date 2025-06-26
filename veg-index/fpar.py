@@ -147,7 +147,9 @@ async def instantiate(
 
             ds = xr.concat(arrays, dim="time").to_dataset(name="FPAR")
             ds = standardise(ds)
-            ds.to_zarr(store=store, zarr_format=3, **mode_kwargs, mode="w")
+
+            mode_kwargs = {"mode": "w"} if i == 0 else {"append_dim": "time"}
+            ds.to_zarr(store=store, zarr_format=3, **mode_kwargs)
             eprint(f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()}")
 
     eprint("✓ Done. Final HAMT CID:")
@@ -212,7 +214,8 @@ async def append(
 
             ds = xr.concat(arrays, dim="time").to_dataset(name="FPAR")
             ds = standardise(ds)
-            ds.to_zarr(store=store, zarr_format=3, **mode_kwargs, mode="w")
+
+            ds.to_zarr(store=store, zarr_format=3, append_dim="time")
             eprint(f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()}")
 
     eprint("✓ Done. New HAMT CID:")

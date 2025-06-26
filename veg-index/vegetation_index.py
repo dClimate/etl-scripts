@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Iterator
 
 import asyncclick as click
@@ -149,6 +149,7 @@ def _emit_vci_slices(
         with ThreadPoolExecutor() as executor:
             batch = executor.map(_process_ts, slab)
 
+        eprint(f"Flushing dekads to Zarr store…")
         ds = standardise(xr.concat(batch, dim="time").to_dataset(name="VCI"))
         mode_kwargs = {"mode": "w"} if is_first_write else {"append_dim": "time"}
         ds.to_zarr(store=dest, zarr_format=3, **mode_kwargs)
@@ -243,7 +244,7 @@ async def append(
     async with ipfs_hamt_store(
         gateway_uri_stem, rpc_uri_stem, root_cid=CID.decode(vci_cid)
     ) as (store, hamt):
-        latest_vci = npdt_to_pydt(xr.open_zarr(store).time[-1].values)
+        latest_vci = npdt_to_pydt(xr.open_zarr(store).time[-1].values).replace(tzinfo=timezone.utc)
         dates = [d for d in yield_dekad_dates(start_date, end_date) if d > latest_vci]
 
         _emit_vci_slices(

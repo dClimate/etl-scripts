@@ -14,18 +14,21 @@ calendar-year dekads:
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
 import click
-import dask
-import dask.array as da
 import numpy as np
-import xarray as xr
 import zarr
 import zarr.codecs
-from dask.diagnostics import ProgressBar
-from utils import download_tiff, scratchspace, tiff_to_dataarray, yield_dekad_dates
+import xarray as xr
+from utils import (
+    download_tiff,
+    scratchspace,
+    tiff_to_dataarray,
+    yield_dekad_dates,
+)
 
 from etl_scripts.grabbag import eprint
 
@@ -75,13 +78,18 @@ def cli() -> None:
 @click.argument("start_date", type=click.DateTime(formats=["%Y-%m-%d"]))
 @click.argument("end_date", type=click.DateTime(formats=["%Y-%m-%d"]))
 @click.option("--force", is_flag=True, help="Re-download existing TIFFs.")
-def generate_minmax(start_date: datetime, end_date: datetime, force: bool) -> None:
-    """
-    Compute / update per-dekad minima & maxima between *start_date* and *end_date*
-    using Dask for true parallel execution.
-    """
-
-    # ── 1. bootstrap empty Zarr stores if they don’t exist ───────────
+@click.option(
+    "--batch-size",
+    type=click.IntRange(min=1),
+    default=10,
+    show_default=True,
+    help="Number of dekads written per to_zarr() call",
+)
+def generate_minmax(
+    start_date: datetime, end_date: datetime, force: bool, batch_size: int
+) -> None:
+    """Compute/update minima and maxima for dekads in the given interval."""
+    # ── create stores on first run ───────────────────────────────────
     if not MIN_PATH.exists() or not MAX_PATH.exists():
         eprint("Creating fresh min.zarr / max.zarr stores…")
         grid_da = tiff_to_dataarray(download_tiff(start_date))
@@ -89,109 +97,103 @@ def generate_minmax(start_date: datetime, end_date: datetime, force: bool) -> No
         _ensure_store(MIN_PATH, lat, lon, "FPARmin")
         _ensure_store(MAX_PATH, lat, lon, "FPARmax")
 
-    # ── 2. open the existing stores *lazily* with one-dekad chunks ───
-    #     (shape: time=36 × lat × lon; `time` is “dekad index” 0‥35)
-    min_da = xr.open_zarr(MIN_PATH, consolidated=False, chunks={"time": 1})["FPARmin"]
-    max_da = xr.open_zarr(MAX_PATH, consolidated=False, chunks={"time": 1})["FPARmax"]
+    min_arr = zarr.open_array(MIN_PATH / "FPARmin", mode="r+")
+    max_arr = zarr.open_array(MAX_PATH / "FPARmax", mode="r+")
 
     min_meta = zarr.open_group(MIN_PATH).attrs
     max_meta = zarr.open_group(MAX_PATH).attrs
-    already_done = set(min_meta.get("processed_dekads", [])) & set(
+    processed = set(min_meta.get("processed_dekads", [])) & set(
         max_meta.get("processed_dekads", [])
     )
 
-    # ── 3. build a *lazy* DataArray for every dekad we still need ────
-    def _lazy_da(ts: datetime) -> xr.DataArray:
-        """
-        Tiny helper that *downloads & decodes inside the Dask task*,
-        then returns an xarray.DataArray with:
-          * dims  : (time, latitude, longitude)
-          * coords: time=<ts>, dekad=<0–35>
-        """
-        arr = tiff_to_dataarray(download_tiff(ts, force=force))  # eager ndarray
-        arr = arr.expand_dims(time=[np.datetime64(ts, "ns")])
-        arr = arr.assign_coords(dekad=("time", [get_dekad_index(ts)]))
-        # turn the (lat, lon) data *inside* into a Dask array so that
-        # the actual TIFF *decode* can run in parallel too
-        arr.data = da.from_array(arr.data, chunks=arr.shape)
-        return arr
+    # Define wrapper with a single argument so it can be mapped in the executor
+    def _process_tiff_file(ts: datetime) -> xr.DataArray:
+        eprint(f"⇢ Processing dekad {ts.strftime('%Y-%m-%d')} …")
+        tiff = download_tiff(ts, force=force)
+        da = tiff_to_dataarray(tiff)
+        return da
 
-    dates_needed = [
-        ts
-        for ts in yield_dekad_dates(start_date, end_date)
-        if ts.strftime("%Y-%m-%d") not in already_done
-    ]
+    # ── main loop ────────────────────────────────────────────────────
+    dates = list(yield_dekad_dates(start_date, end_date))
+    dates = [d for d in dates if d.strftime("%Y-%m-%d") not in processed]
+    eprint(f"Found {len(dates)} dekads to process between {start_date} and {end_date}.")
 
-    if not dates_needed:
-        eprint("✓ Nothing new to process – stores are up to date.")
-        return
+    # Compute and group the dates by dekad index
+    dekad_indices = [get_dekad_index(ts) for ts in dates]
+    dekad_groups = {i: [] for i in range(NUM_DEKADS)}
+    for ts, idx in zip(dates, dekad_indices):
+        dekad_groups[idx].append(ts)
 
-    eprint(f"⇢ Processing {len(dates_needed)} dekad(s)…")
+    for idx, slab in dekad_groups.items():
+        if not slab:
+            continue
 
-    # one delayed task per input TIFF
-    lazy_list = [
-        xr.apply_ufunc(
-            _lazy_da,
-            0,
-            dask="parallelized",
-            input_core_dims=[[]],
-            output_dtypes=[np.float32],
-            kwargs=dict(ts=ts),
-        )
-        for ts in dates_needed
-    ]
+        eprint(f"Processing dekads with index {idx} ({len(slab)} dekads)")
 
-    # concat along time → shape (n_dates, lat, lon), still *lazy*
-    stacked = xr.concat(lazy_list, dim="time")
+        # Download and process all TIFF in parallel
+        with ThreadPoolExecutor() as executor:
+            arrays = executor.map(_process_tiff_file, slab)
+        das = xr.concat(arrays, dim="batch")
 
-    # ── 4. reduction: min/max by dekad (groupby triggers a Dask graph)
-    min_by_dekad = stacked.groupby("dekad").min("time")
-    max_by_dekad = stacked.groupby("dekad").max("time")
+        # merge with the store slice and write back
+        eprint(f"⇢ Merging dekads with index {idx} into store arrays …")
 
-    # ── 5. merge with existing datasets *without materialising them* ‐
-    #       fmin / fmax are ufuncs so apply_ufunc builds another graph
-    def _combine(old, new, f):
-        # old, new share (time, lat, lon) but `new` usually misses most times
-        combined = xr.apply_ufunc(
-            f,
-            old,
-            new,
-            dask="parallelized",
-            output_dtypes=[old.dtype],
-            keep_attrs=True,
-        )
-        # wherever `new` has NaN (dekads not in range) keep *old* value
-        return combined.where(~np.isnan(combined), old)
+        new_min = das.min("batch", skipna=True)
+        cur_min = xr.DataArray(min_arr[idx], coords=new_min.coords, dims=new_min.dims)
+        min_arr[idx] = xr.ufuncs.fmin(cur_min, new_min).values
+        eprint(f"⇢ Merged dekads with index {idx} into min array")
 
-    updated_min = _combine(min_da, min_by_dekad, np.fmin)
-    updated_max = _combine(max_da, max_by_dekad, np.fmax)
+        new_max = das.max("batch", skipna=True)
+        cur_max = xr.DataArray(max_arr[idx], coords=new_max.coords, dims=new_max.dims)
+        max_arr[idx] = xr.ufuncs.fmax(cur_max, new_max).values
+        eprint(f"⇢ Merged dekads with index {idx} into max array")
 
-    # ── 6. write-back: stream the two dask arrays into their Zarr stores ‐
-    #       Xarray’s .to_zarr() can store a *view* with compute=False,
-    #       then we trigger everything in one `dask.compute`
-    writes = []
-    writes.append(
-        updated_min.to_zarr(
-            MIN_PATH, component="FPARmin", mode="r+", compute=False, consolidated=False
-        )
-    )
-    writes.append(
-        updated_max.to_zarr(
-            MAX_PATH, component="FPARmax", mode="r+", compute=False, consolidated=False
-        )
-    )
+        eprint(f"⇢ Updating metadata for min & max arrays index {idx}")
+        tags = set(ts.strftime("%Y-%m-%d") for ts in slab)
+        for meta in (min_meta, max_meta):
+            meta["processed_dekads"] = sorted(
+                set(meta.get("processed_dekads", [])) | tags
+            )
 
-    # nice progress bar for interactive runs
-    with ProgressBar():
-        dask.compute(*writes)
+    # for ts in yield_dekad_dates(start_date, end_date):
+    #     idx = get_dekad_index(ts)
+    #     tag = ts.strftime("%Y-%m-%d")
 
-    # ── 7. update metadata & consolidate ─────────────────────────────
-    new_tags = {ts.strftime("%Y-%m-%d") for ts in dates_needed}
-    for meta in (min_meta, max_meta):
-        meta["processed_dekads"] = sorted(
-            set(meta.get("processed_dekads", [])) | new_tags
-        )
+    #     if tag in processed:
+    #         eprint(f"✓ Skipping {tag}")
+    #         continue
 
+    #     eprint(f"⇢ Updating dekad {tag} (index {idx})")
+    #     da = tiff_to_dataarray(download_tiff(ts, force=force)).values
+    #     eprint(f"⇢ TIFF downloaded and ingested for dekad {tag} (index {idx})")
+
+    #     def _update_min() -> None:
+    #         eprint(f"⇢ Updating min array for dekad {tag} (index {idx})")
+    #         cur_min = min_arr[idx, :, :]
+    #         min_arr[idx, :, :] = da if np.isnan(cur_min).all() else np.fmin(cur_min, da)
+
+    #     def _update_max() -> None:
+    #         eprint(f"⇢ Updating max array for dekad {tag} (index {idx})")
+    #         cur_max = max_arr[idx, :, :]
+    #         max_arr[idx, :, :] = da if np.isnan(cur_max).all() else np.fmax(cur_max, da)
+
+    #     # Download and process all TIFF in parallel
+    #     with ThreadPoolExecutor() as executor:
+    #         futures = [executor.submit(fn) for fn in [_update_min, _update_max]]
+    #         for fut in as_completed(futures):
+    #             fut.result()
+
+    #     eprint(
+    #         f"⇢ Updating metadata for min & max arrays for dekad {tag} (index {idx})"
+    #     )
+    #     for meta in (min_meta, max_meta):
+    #         meta["processed_dekads"] = sorted(
+    #             set(meta.get("processed_dekads", [])) | {tag}
+    #         )
+
+    #     eprint(f"✓ Updated dekad {tag} (index {idx})")
+
+    # ── finalise stores ───────────────────────────────────────────────
     eprint("Consolidating metadata …")
     zarr.consolidate_metadata(MIN_PATH)
     zarr.consolidate_metadata(MAX_PATH)

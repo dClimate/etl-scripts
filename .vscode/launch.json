@@ -16,7 +16,7 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/veg-index/fpar_minmax.py",
-            "args": ["generate-minmax", "2000-05-21", "2000-08-21"]
+            "args": ["generate-minmax", "2000-05-21", "2005-12-21"]
         },
         {
             "name": "VI - Instantiate",
@@ -24,6 +24,13 @@
             "request": "launch",
             "program": "${workspaceFolder}/veg-index/vegetation_index.py",
             "args": ["instantiate", "2000-05-21", "2000-08-21"]
+        },
+        {
+            "name": "VI - Append",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/veg-index/vegetation_index.py",
+            "args": ["append", "bafyr4idu2uiwxvozhhwljuv5gkqsf5jvifslcfrrne422ffgyejx7zujv4", "2000-08-21", "2000-12-21"]
         },
         {
             "name": "CPC - Instantiate",
