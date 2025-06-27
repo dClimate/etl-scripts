@@ -5,6 +5,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 
 dependencies = [
+    "asyncclick>=8.1.8",
     # Used for talking to R2
     "boto3>=1.37.9",
     # For downloading ERA5 data from the CDS API
@@ -13,10 +14,11 @@ dependencies = [
     "cfgrib>=0.9.15.0",
     # Used for creating CLI scripts
     "click>=8.1.7",
-    "py-hamt",
+    "numcodecs==0.15.1", # temporary until new release after 0.16 which was yanked
     # Versions that work with zarr v3
+    "py-hamt>=3.2.0",
     "xarray[io,parallel,viz]>=2025.3.0",
-    "zarr>=3.0.6",
+    "zarr>=3.0.8",
     "aioboto3",
 ]
 
@@ -37,4 +39,6 @@ py-hamt = { git = "https://github.com/dClimate/py-hamt", rev = "888a139506126540
 [dependency-groups]
 dev = [
     "ruff>=0.11.2",
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
 ]

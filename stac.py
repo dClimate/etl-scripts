@@ -28,10 +28,10 @@ def epp(d: dict):
 
 # Returns a GeoJSON as a dict
 def gen_geometry(ds: xr.Dataset) -> dict:
-    top = str(ds.latitude.values[-1])
-    bottom = str(ds.latitude.values[0])
-    left = str(ds.longitude.values[0])
-    right = str(ds.longitude.values[-1])
+    top = float(ds.latitude.values[-1])
+    bottom = float(ds.latitude.values[0])
+    left = float(ds.longitude.values[0])
+    right = float(ds.longitude.values[-1])
     return {
         "type": "Polygon",
         "coordinates": [
@@ -127,7 +127,7 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
                 #   "bbox": [-179.06275, -89.27671, 179.99975, 89.27671],
                 # "geometry": "{\"type\": \"Polygon\", \"coordinates\": [[[179.99975, -89.27671], [179.99975, 89.27671], [-179.06275, 89.27671], [-179.06275, -89.27671], [179.99975, -89.27671]]]}",
                 #
-                "geometry": str(gen_geometry(ds)),
+                "geometry": gen_geometry(ds),
                 "bbox": [
                     str(ds.longitude.values[0]),
                     str(ds.latitude.values[0]),
