@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from typing import Iterator
@@ -142,6 +143,7 @@ async def instantiate(
             slab = dates[i : i + batch_size]
 
             # Download and process all TIFF in parallel
+            start = time.time()
             with ThreadPoolExecutor() as executor:
                 arrays = executor.map(_process_tiff_file, slab)
 
@@ -150,7 +152,7 @@ async def instantiate(
 
             mode_kwargs = {"mode": "w"} if i == 0 else {"append_dim": "time"}
             ds.to_zarr(store=store, zarr_format=3, **mode_kwargs)
-            eprint(f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()}")
+            eprint(f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s")
 
     eprint("✓ Done. Final HAMT CID:")
     print(hamt.root_node_id)
@@ -209,6 +211,7 @@ async def append(
             slab = dates[i : i + batch_size]
 
             # Download and process all TIFF in parallel
+            start = time.time()
             with ThreadPoolExecutor() as executor:
                 arrays = executor.map(_process_tiff_file, slab)
 
@@ -216,7 +219,7 @@ async def append(
             ds = standardise(ds)
 
             ds.to_zarr(store=store, zarr_format=3, append_dim="time")
-            eprint(f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()}")
+            eprint(f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s")
 
     eprint("✓ Done. New HAMT CID:")
     print(hamt.root_node_id)
