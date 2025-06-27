@@ -30,8 +30,7 @@ from __future__ import annotations
 
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
-from typing import Iterator
+from datetime import UTC, datetime, timedelta
 
 import asyncclick as click
 import numpy as np
@@ -92,7 +91,6 @@ def _make_vci_slice(
 
     # 4. Expand to 3‑D and cast for compact storage
     return vci.expand_dims(time=[np.datetime64(ts, "ns")]).astype("float32")
-
 
 
 def _emit_vci_slices(
@@ -213,7 +211,6 @@ async def instantiate(
 
 @cli.command("append")
 @click.argument("vci_cid")
-@click.argument("start_date", type=click.DateTime(formats=["%Y-%m-%d"]))
 @click.argument("end_date", type=click.DateTime(formats=["%Y-%m-%d"]))
 @click.option("--gateway-uri-stem")
 @click.option("--rpc-uri-stem")
@@ -227,8 +224,7 @@ async def instantiate(
 )
 async def append(
     vci_cid: str,
-    start_date: datetime,
-    end_date: datetime,
+    end_date: datetime | None,
     gateway_uri_stem: str | None,
     rpc_uri_stem: str | None,
     force: bool,
@@ -244,8 +240,10 @@ async def append(
     async with ipfs_hamt_store(
         gateway_uri_stem, rpc_uri_stem, root_cid=CID.decode(vci_cid)
     ) as (store, hamt):
-        latest_vci = npdt_to_pydt(xr.open_zarr(store).time[-1].values).replace(tzinfo=timezone.utc)
-        dates = [d for d in yield_dekad_dates(start_date, end_date) if d > latest_vci]
+        latest = npdt_to_pydt(xr.open_zarr(store=store).time[-1].values)
+        start_date = latest + timedelta(days=10)  # first dekad NOT in store
+        end_date = end_date or datetime.now(UTC)
+        dates = list(yield_dekad_dates(start_date, end_date))
 
         _emit_vci_slices(
             dates, store, force, batch_size=batch_size, is_first_write=False
