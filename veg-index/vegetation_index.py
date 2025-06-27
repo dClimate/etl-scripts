@@ -90,6 +90,8 @@ def _make_vci_slice(
     denom = np.where(fmax - fmin == 0, np.nan, fmax - fmin)
     vci = ((fpar - fmin) / denom).clip(0.0, 1.0)
 
+    del fmin, fmax, fpar  # free memory
+
     # 4. Expand to 3‑D and cast for compact storage
     return vci.expand_dims(time=[np.datetime64(ts, "ns")]).astype("float32")
 
@@ -154,6 +156,8 @@ def _emit_vci_slices(
         start = time.time()
 
         ds = standardise(xr.concat(batch, dim="time").to_dataset(name="VCI"))
+        del batch
+
         mode_kwargs = {"mode": "w"} if is_first_write else {"append_dim": "time"}
         ds.to_zarr(store=dest, zarr_format=3, **mode_kwargs)
         is_first_write = False  # After the first write, we append
