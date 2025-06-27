@@ -982,7 +982,7 @@ def append(
                 
             # For testing, do only the first 3 batches
             start_time = time.perf_counter()
-            batches_of_days = batches_of_days[:1]
+            # batches_of_days = batches_of_days[:1]
             batch_cids = []
 
             processes = []
