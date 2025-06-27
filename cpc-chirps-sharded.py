@@ -4,14 +4,15 @@ from datetime import UTC, datetime, timedelta
 from math import ceil
 from pathlib import Path
 
-import asyncclick as click
+import click
 import numpy as np
 import xarray as xr
 import zarr.codecs
 from multiformats import CID
+from py_hamt import HAMT, ShardedZarrStore, KuboCAS
+import asyncio
 
 from etl_scripts.grabbag import eprint, npdt_to_pydt
-from etl_scripts.hamt_store_contextmanager import ipfs_hamt_store
 
 scratchspace: Path = (Path(__file__).parent / "scratchspace" / "cpc-chirps").absolute()
 os.makedirs(scratchspace, exist_ok=True)
@@ -183,8 +184,8 @@ def download(dataset, timestamp: datetime):
 
 @click.command
 @click.argument("dataset", type=datasets_choice)
-@click.option("-g", "--gateway-base-url", help="Pass through to KuboCAS")
-@click.option("-r", "--rpc-base-url", help="Pass through to KuboCAS")
+@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
+@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 @click.option(
     "--skip-download",
     is_flag=True,
@@ -192,10 +193,10 @@ def download(dataset, timestamp: datetime):
     default=False,
     help="Skip downloading data. Useful when remote data provider servers are inaccessible.",
 )
-async def instantiate(
+def instantiate(
     dataset: str,
-    gateway_base_url: str | None,
-    rpc_base_url: str | None,
+    gateway_uri_stem: str,
+    rpc_uri_stem: str,
     skip_download: bool,
 ):
     """
@@ -230,18 +231,35 @@ async def instantiate(
     ds = standardize(dataset, ds)
     eprint(ds)
 
-    async with ipfs_hamt_store(gateway_base_url, rpc_base_url) as (store, hamt):
-        ds.to_zarr(store=store, zarr_format=3)  # type: ignore
+    ordered_dims = list(ds.dims)
+    array_shape_tuple = tuple(ds.dims[dim] for dim in ordered_dims)
+    chunk_shape_tuple = tuple(ds.chunks[dim][0] for dim in ordered_dims)
 
-    eprint("HAMT CID")
-    print(hamt.root_node_id)
+    async def _upload_to_ipfs():
+        """Define and run an async function to handle the async IPFS operations."""
+        async with KuboCAS(
+            rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem
+        ) as kubo_cas:
+            store_write = await ShardedZarrStore.open(
+                cas=kubo_cas,
+                read_only=False,
+                array_shape=array_shape_tuple,
+                chunk_shape=chunk_shape_tuple,
+                chunks_per_shard=26000,
+            )
+            ds.to_zarr(store=store_write, mode="w")
+            root_cid = await store_write.flush()
+            eprint("ShardedZarrStore CID")
+            print(root_cid)
+
+    asyncio.run(_upload_to_ipfs())
 
 
 @click.command
 @click.argument("dataset", type=datasets_choice)
 @click.argument("cid")
-@click.option("-g", "--gateway-base-url", help="Pass through to KuboCAS")
-@click.option("-r", "--rpc-base-url", help="Pass through to KuboCAS")
+@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
+@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 @click.option(
     "--year",
     is_flag=True,
@@ -262,66 +280,89 @@ async def instantiate(
     show_default=True,
     help="The number of days/years to append. Usually 1, but if increased append will repeatedly print to stdout the CID of each successive append. This will essentially repeat the normal 1 count append command.",
 )
-async def append(
+def append(
     dataset,
     cid: str,
-    gateway_base_url: str | None,
-    rpc_base_url: str | None,
+    gateway_uri_stem: str,
+    rpc_uri_stem: str,
     year: bool,
     skip_download: bool,
     count: int,
 ):
-    """Append the data at timestamp onto the Dataset that CID points to, print new HAMT root CID to stdout.
+    """
+    Append the data at timestamp onto the Dataset that CID points to, print new HAMT root CID to stdout.
+
     This command requires the kubo daemon to be running.
     """
+    async def _do_append():
+        async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
+            # First, open the store in read-only mode to get the latest timestamp
+            eprint("====== Reading latest timestamp from existing Zarr ======")
+            store_read = await ShardedZarrStore.open(cas=kubo_cas, read_only=True, root_cid=CID.decode(cid))
+            ipfs_ds = xr.open_zarr(store_read)
+            ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
+            eprint(f"Latest timestamp found: {ipfs_latest_timestamp.isoformat()}")
 
-    async with ipfs_hamt_store(
-        gateway_base_url, rpc_base_url, root_cid=CID.decode(cid)
-    ) as (store, hamt):
-        ipfs_ds = xr.open_zarr(store=store)
-        ipfs_latest_timestamp = npdt_to_pydt(ipfs_ds.time[-1].values)
+            current_cid = CID.decode(cid)
+            timestamp: datetime = ipfs_latest_timestamp
 
-        timestamp: datetime = ipfs_latest_timestamp
-        for _ in range(0, count):
-            if year:
-                timestamp = timestamp.replace(year=timestamp.year + 1)
-            else:
-                timestamp = timestamp + timedelta(days=1)
+            # Loop for each append operation
+            for i in range(count):
+                if year:
+                    timestamp = timestamp.replace(year=timestamp.year + 1)
+                else:
+                    timestamp = timestamp + timedelta(days=1)
 
-            nc_path: Path
-            if not skip_download:
-                eprint(f"Downloading netCDF for year {timestamp.year}...")
-                nc_path = download_year(dataset, timestamp.year)
-            else:
-                eprint(
-                    f"Skipping downloading netCDF for year {timestamp.year}, going to try use what's on disk"
-                )
-                nc_path = make_nc_path(dataset, timestamp.year)
-            ds = xr.open_dataset(nc_path)
-            ds = standardize(dataset, ds)
+                eprint(f"\n====== Preparing to append data for {timestamp.date()} (Append {i+1}/{count}) ======")
+                
+                # Download and standardize the new data slice
+                nc_path: Path
+                if not skip_download:
+                    eprint(f"Downloading netCDF for year {timestamp.year}...")
+                    nc_path = download_year(dataset, timestamp.year)
+                else:
+                    eprint(f"Skipping download for year {timestamp.year}, using local file.")
+                    nc_path = make_nc_path(dataset, timestamp.year)
+                
+                ds = xr.open_dataset(nc_path)
+                ds = standardize(dataset, ds)
 
-            if year:
-                ds = ds.sel(
-                    time=str(timestamp.year)
-                )  # conversion to string aggregates all timestamps within the year
-            else:
-                ds = ds.sel(
-                    time=slice(timestamp, timestamp)
-                )  # without slice, time becomes a scalar and an append will not succeed
+                if year:
+                    ds_to_append = ds.sel(time=str(timestamp.year))
+                else:
+                    # Slicing ensures the time dimension is preserved
+                    ds_to_append = ds.sel(time=slice(timestamp, timestamp))
+                
+                eprint("Dataset to append:")
+                eprint(ds_to_append)
 
-            eprint("====== Appending this xarray.Dataset to IPFS ======")
-            ds.to_zarr(store=store, append_dim="time", mode="a", zarr_format=3)  # type: ignore
+                if ds_to_append.time.size == 0:
+                    eprint(f"Warning: No data found for {timestamp.date()}. Skipping append.")
+                    continue
 
-    eprint("=== HAMT CID")
-    print(hamt.root_node_id)
+                # Open the store for writing using the current CID
+                eprint("====== Appending to IPFS ======")
+                store_write = await ShardedZarrStore.open(cas=kubo_cas, read_only=False, root_cid=current_cid)
+                ds_to_append.to_zarr(store=store_write, append_dim="time", mode="a")
+                
+                # Flush to get the new root CID
+                new_cid = await store_write.flush()
+                eprint("New ShardedZarrStore CID:")
+                print(new_cid)
+
+                # Update the CID for the next iteration
+                current_cid = new_cid
+
+    # Run the async append logic
+    asyncio.run(_do_append())
 
 
 @click.group
 def cli():
-    """Commands for ETLing CPC and CHRIPS datasets.
-    On invocation, a scratch space directory relative to this file
-    will be created for data files at ./scratchspace/cpc-chirps.
     """
+    Commands for ETLing CPC and CHRIPS datasets. On invocation, a scratch space directory relative to this file will be created for data files at ./scratchspace/cpc-chirps.
+    """
+    pass
 
 
 cli.add_command(get_available_timespan)
