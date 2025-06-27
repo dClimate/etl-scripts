@@ -29,6 +29,7 @@ traceable and immutable.
 from __future__ import annotations
 
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
@@ -144,14 +145,19 @@ def _emit_vci_slices(
         slab = dates[i : i + batch_size]
 
         # Download and process all TIFF in parallel
+        start = time.time()
         with ThreadPoolExecutor() as executor:
             batch = executor.map(_process_ts, slab)
 
+        eprint(f"✓ Processed {len(slab)} dekads in {time.time() - start:.2f}s")
         eprint(f"Flushing dekads to Zarr store…")
+        start = time.time()
+
         ds = standardise(xr.concat(batch, dim="time").to_dataset(name="VCI"))
         mode_kwargs = {"mode": "w"} if is_first_write else {"append_dim": "time"}
         ds.to_zarr(store=dest, zarr_format=3, **mode_kwargs)
         is_first_write = False  # After the first write, we append
+        eprint(f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s")
 
 
 # ── CLI ————————————————————————————————————————————————————————————

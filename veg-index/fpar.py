@@ -147,6 +147,10 @@ async def instantiate(
             with ThreadPoolExecutor() as executor:
                 arrays = executor.map(_process_tiff_file, slab)
 
+            eprint(f"✓ Processed {len(slab)} dekads in {time.time() - start:.2f}s")
+            eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
+            start = time.time()
+
             ds = xr.concat(arrays, dim="time").to_dataset(name="FPAR")
             ds = standardise(ds)
 
@@ -214,6 +218,10 @@ async def append(
             start = time.time()
             with ThreadPoolExecutor() as executor:
                 arrays = executor.map(_process_tiff_file, slab)
+
+            eprint(f"✓ Processed {len(slab)} dekads in {time.time() - start:.2f}s")
+            eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
+            start = time.time()
 
             ds = xr.concat(arrays, dim="time").to_dataset(name="FPAR")
             ds = standardise(ds)

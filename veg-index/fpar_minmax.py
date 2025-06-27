@@ -20,6 +20,7 @@ from pathlib import Path
 
 import click
 import numpy as np
+import time
 import zarr
 import zarr.codecs
 import xarray as xr
@@ -128,70 +129,38 @@ def generate_minmax(
         if not slab:
             continue
 
+        start = time.time()
         eprint(f"Processing dekads with index {idx} ({len(slab)} dekads)")
 
         # Download and process all TIFF in parallel
         with ThreadPoolExecutor() as executor:
             arrays = executor.map(_process_tiff_file, slab)
         das = xr.concat(arrays, dim="batch")
+        eprint(f"✓ Processed {len(slab)} dekads in {time.time() - start:.2f}s")
 
         # merge with the store slice and write back
         eprint(f"⇢ Merging dekads with index {idx} into store arrays …")
 
+        start = time.time()
         new_min = das.min("batch", skipna=True)
         cur_min = xr.DataArray(min_arr[idx], coords=new_min.coords, dims=new_min.dims)
         min_arr[idx] = xr.ufuncs.fmin(cur_min, new_min).values
-        eprint(f"⇢ Merged dekads with index {idx} into min array")
+        eprint(f"⇢ Merged dekads with index {idx} into min array in {time.time() - start:.2f}s")
 
+        start = time.time()
         new_max = das.max("batch", skipna=True)
         cur_max = xr.DataArray(max_arr[idx], coords=new_max.coords, dims=new_max.dims)
         max_arr[idx] = xr.ufuncs.fmax(cur_max, new_max).values
-        eprint(f"⇢ Merged dekads with index {idx} into max array")
+        eprint(f"⇢ Merged dekads with index {idx} into max array in {time.time() - start:.2f}s")
 
+        start = time.time()
         eprint(f"⇢ Updating metadata for min & max arrays index {idx}")
         tags = set(ts.strftime("%Y-%m-%d") for ts in slab)
         for meta in (min_meta, max_meta):
             meta["processed_dekads"] = sorted(
                 set(meta.get("processed_dekads", [])) | tags
             )
-
-    # for ts in yield_dekad_dates(start_date, end_date):
-    #     idx = get_dekad_index(ts)
-    #     tag = ts.strftime("%Y-%m-%d")
-
-    #     if tag in processed:
-    #         eprint(f"✓ Skipping {tag}")
-    #         continue
-
-    #     eprint(f"⇢ Updating dekad {tag} (index {idx})")
-    #     da = tiff_to_dataarray(download_tiff(ts, force=force)).values
-    #     eprint(f"⇢ TIFF downloaded and ingested for dekad {tag} (index {idx})")
-
-    #     def _update_min() -> None:
-    #         eprint(f"⇢ Updating min array for dekad {tag} (index {idx})")
-    #         cur_min = min_arr[idx, :, :]
-    #         min_arr[idx, :, :] = da if np.isnan(cur_min).all() else np.fmin(cur_min, da)
-
-    #     def _update_max() -> None:
-    #         eprint(f"⇢ Updating max array for dekad {tag} (index {idx})")
-    #         cur_max = max_arr[idx, :, :]
-    #         max_arr[idx, :, :] = da if np.isnan(cur_max).all() else np.fmax(cur_max, da)
-
-    #     # Download and process all TIFF in parallel
-    #     with ThreadPoolExecutor() as executor:
-    #         futures = [executor.submit(fn) for fn in [_update_min, _update_max]]
-    #         for fut in as_completed(futures):
-    #             fut.result()
-
-    #     eprint(
-    #         f"⇢ Updating metadata for min & max arrays for dekad {tag} (index {idx})"
-    #     )
-    #     for meta in (min_meta, max_meta):
-    #         meta["processed_dekads"] = sorted(
-    #             set(meta.get("processed_dekads", [])) | {tag}
-    #         )
-
-    #     eprint(f"✓ Updated dekad {tag} (index {idx})")
+        eprint(f"⇢ Updated metadata for dekads with index {idx} in {time.time() - start:.2f}s")
 
     # ── finalise stores ───────────────────────────────────────────────
     eprint("Consolidating metadata …")
