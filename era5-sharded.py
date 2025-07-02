@@ -33,6 +33,8 @@ era5_env: dict[str, str]
 with open(Path(__file__).parent / "era5-env.json") as f:
     era5_env = json.load(f)
 
+CHUNKER = "size-1048576"
+
 r2 = boto3.client(
     service_name="s3",
     endpoint_url=era5_env["ENDPOINT_URL"],
@@ -630,12 +632,12 @@ def instantiate(
         eprint("Ordered dimensions, array shape, chunk shape:")
 
         async def _upload_to_ipfs():
-            async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
+            async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem, chunker=CHUNKER) as kubo_cas:
                 store_write = await ShardedZarrStore.open(
                     cas=kubo_cas,
                     array_shape=array_shape,
                     chunk_shape=chunk_shape,
-                    chunks_per_shard=26000,
+                    chunks_per_shard=6250,
                     read_only=False,
                 )
                 start_time = time.perf_counter()
@@ -696,7 +698,7 @@ async def chunked_write(ds: xr.Dataset, variable_name: str, kubo_cas: KuboCAS) -
         cas=kubo_cas,
         array_shape=array_shape,
         chunk_shape=chunk_shape,
-        chunks_per_shard=26000,
+        chunks_per_shard=6250,
         read_only=False,
     )
     ds.to_zarr(store=store_write, mode="w")
@@ -714,7 +716,7 @@ async def extend(
     Extends an existing dataset to a new end date in a metadata-only operation.
     Outputs a new CID for the larger, extended (but mostly empty) dataset.
     """
-    async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
+    async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem, chunker=CHUNKER) as kubo_cas:
         # --- 1. Open the initial store and read its state ---
         initial_store = await ShardedZarrStore.open(cas=kubo_cas, read_only=True, root_cid=cid)
         initial_ds = xr.open_zarr(initial_store)
@@ -865,7 +867,7 @@ def process_batch(
             ds = ds.sel(time=time_slice)
             ds = standardize(dataset, ds)
             
-            async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
+            async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem, chunker=CHUNKER) as kubo_cas:
                 batch_cid = await chunked_write(ds, dataset, kubo_cas)
                 save_cid_to_file(batch_cid, dataset, start_date, end_date, "batch")
                 # CRITICAL: Print the resulting CID to standard output.
@@ -931,7 +933,7 @@ def append(
         DAYS_PER_BATCH = HOURS_PER_BATCH // 24
         main_cid = cid
 
-        async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
+        async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem, chunker=CHUNKER) as kubo_cas:
             # 1. Open the initial store
             initial_store_ro = await ShardedZarrStore.open(cas=kubo_cas, read_only=True, root_cid=cid)
             if initial_store_ro._root_obj is None:
