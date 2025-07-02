@@ -657,7 +657,7 @@ requires-dist = [
     { name = "cfgrib", specifier = ">=0.9.15.0" },
     { name = "click", specifier = ">=8.1.7" },
     { name = "numcodecs", specifier = "==0.15.1" },
-    { name = "py-hamt", specifier = ">=3.2.0" },
+    { name = "py-hamt", git = "https://github.com/dclimate/py-hamt?rev=32808fb6bd7779753fd3ae26deed6dbd8b26fc1b" },
     { name = "rasterio", specifier = ">=1.4.3" },
     { name = "xarray", extras = ["io", "parallel", "viz"], specifier = ">=2025.3.0" },
     { name = "zarr", specifier = ">=3.0.8" },
@@ -1439,7 +1439,7 @@ wheels = [
 [[package]]
 name = "py-hamt"
 version = "3.2.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/dclimate/py-hamt?rev=32808fb6bd7779753fd3ae26deed6dbd8b26fc1b#32808fb6bd7779753fd3ae26deed6dbd8b26fc1b" }
 dependencies = [
     { name = "dag-cbor" },
     { name = "httpx", extra = ["http2"] },
@@ -1447,10 +1447,6 @@ dependencies = [
     { name = "multiformats", extra = ["full"] },
     { name = "pycryptodome" },
     { name = "zarr" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/0d/58/d1557320380d532a178180f707cf8cf01f9369a05e7e7d2512d291b2dae5/py_hamt-3.2.0.tar.gz", hash = "sha256:bd0e1140cb94231ad4492fbfde7c8edd6747b42a39a554cc94ebe73f540fa4e2", size = 151395, upload-time = "2025-06-16T19:13:23.339Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c9/8a/5d12360ff3de71d353de20cba0a30d3fd0105a5b2b27b429a2356bf726b7/py_hamt-3.2.0-py3-none-any.whl", hash = "sha256:0acb7651311526666ac34730ba468882fce59eb69fa11485deec1d0c80c183ff", size = 27667, upload-time = "2025-06-16T19:13:22.148Z" },
 ]
 
 [[package]]
