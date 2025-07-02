@@ -38,6 +38,7 @@ import requests
 import xarray as xr
 from multiformats import CID
 from utils import (
+    CHUNKING,
     download_tiff,
     standardise,
     tiff_to_dataarray,
@@ -106,7 +107,7 @@ def download(timestamp: datetime, force: bool) -> None:
 @click.option(
     "--batch-size",
     type=click.IntRange(min=1),
-    default=10,
+    default=CHUNKING["time"],
     show_default=True,
     help="Number of dekads written per to_zarr() call",
 )
@@ -171,7 +172,7 @@ async def instantiate(
 @click.option(
     "--batch-size",
     type=click.IntRange(min=1),
-    default=10,
+    default=CHUNKING["time"],
     show_default=True,
     help="Dekads written per to_zarr() call",
 )
