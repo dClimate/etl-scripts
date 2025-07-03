@@ -35,6 +35,7 @@ SCALE_FACTOR: int = 2  # ↓ downsample original 500 m pixels to ≈1 km for
 #: access performance against object sharding overhead on IPFS.
 CHUNKING: dict[str, int] = {"time": 10, "latitude": 512, "longitude": 256}
 COMPRESSOR = BloscCodec(cname="zstd", clevel=7, shuffle=BloscShuffle.bitshuffle)
+TIME_COORD_CHUNK = 500_000          # -- covers ~13 000 yrs of dekads; “effectively one chunk”
 
 #: Day-of-month markers that define the 3 dekads inside every calendar month.
 DEKADAL_DAYS: tuple[int, int, int] = (1, 11, 21)
@@ -227,7 +228,26 @@ def standardise(ds: xr.Dataset) -> xr.Dataset:
       that consumers do not need to guess nodata markers.
     """
 
+    # 1) Dask chunking for computation
     ds = ds.chunk(CHUNKING)
-    for da in ds.data_vars.values():
-        da.encoding.update({"compressors": [COMPRESSOR], "_FillValue": np.nan})
+
+    # 2) Data-variable encodings  (FPAR)
+    for var in ds.data_vars:
+        ds[var].encoding.update(
+            {
+                "chunks": tuple(CHUNKING[dim] for dim in ds[var].dims), # type: ignore
+                "compressors": [COMPRESSOR],
+                "_FillValue": np.nan,
+            }
+        )
+
+    # 3) Coordinate-variable encodings  (lat/lon/time)
+    for coord in ds.coords:
+        if coord == "time":
+            # one big slab so xarray needs a single GET to read the axis
+            ds[coord].encoding["chunks"] = (TIME_COORD_CHUNK,)
+        elif coord in CHUNKING:
+            # write the whole axis as one chunk
+            ds[coord].encoding["chunks"] = (ds.sizes[coord],)
+
     return ds
