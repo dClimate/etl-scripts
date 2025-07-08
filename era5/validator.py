@@ -1,0 +1,122 @@
+import json
+import os
+import sys
+from datetime import datetime, timedelta
+from math import ceil
+from pathlib import Path
+from typing import Literal, List, Optional
+import time
+from zarr.storage import MemoryStore
+import itertools
+import dask.array as da
+import subprocess
+import warnings
+
+import aioboto3
+import boto3
+import cdsapi
+import click
+import numcodecs
+import numpy as np
+import xarray as xr
+import zarr.codecs
+from botocore.exceptions import ClientError as S3ClientError
+from multiformats import CID
+from py_hamt import ShardedZarrStore, KuboCAS
+import asyncio
+from etl_scripts.grabbag import eprint, npdt_to_pydt
+
+async def validate_data(
+    grib_paths: List[Path],
+    start_date: datetime,
+    end_date: datetime,
+    dataset: str,
+    api_key: Optional[str] = None,
+    force_download: bool = False,
+) -> xr.Dataset:
+    """
+    Validates and processes GRIB files for a given date range, ensuring the dataset has the expected number of hourly timestamps.
+
+    Args:
+        grib_paths (List[Path]): List of paths to GRIB files to process.
+        start_date (datetime): Start date of the data range (inclusive, expected at 00:00:00).
+        end_date (datetime): End date of the data range (inclusive up to 23:00:00).
+        dataset (str): Name of the dataset (e.g., '2m_temperature').
+        api_key (Optional[str]): CDS API key for Copernicus downloads, if needed.
+        force_download (bool): If True, forces re-download of GRIB files on validation failure.
+
+    Returns:
+        xr.Dataset: Validated xarray Dataset with the correct number of hourly timestamps.
+
+    Raises:
+        ValueError: If input parameters are invalid (e.g., empty grib_paths, invalid dates).
+        RuntimeError: If data validation fails after forced re-download.
+    """
+    # Input validation
+    if not grib_paths:
+        raise ValueError("grib_paths cannot be empty")
+    if not dataset:
+        raise ValueError("dataset name cannot be empty")
+    if start_date > end_date:
+        raise ValueError(f"start_date ({start_date}) must be before end_date ({end_date})")
+
+    # Ensure datetimes are normalized to midnight
+    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Sort GRIB files by filename stem
+    grib_paths.sort(key=lambda p: p.stem)
+
+    # Open dataset
+    ds = xr.open_mfdataset(grib_paths, engine='cfgrib', decode_timedelta=False)
+
+    # Create time slice (inclusive up to end_date 23:00:00)
+    slice_end_date = end_date.replace(hour=23, minute=0, second=0)
+    time_slice = slice(np.datetime64(start_date), np.datetime64(slice_end_date))
+    ds = ds.sel(time=time_slice)
+
+
+    # Calculate expected hours
+    days_in_batch = (end_date - start_date).days + 1
+    expected_hours = days_in_batch * 24
+    actual_hours = ds.sizes.get('time', 0)
+
+    # Validate data integrity
+    if actual_hours != expected_hours:
+        eprint(f"⚠️ Data integrity check failed. Expected {expected_hours} hours, found {actual_hours}.")
+        if not force_download:
+            raise RuntimeError(
+                f"Data integrity check failed: expected {expected_hours} hours, found {actual_hours}. "
+                "Set force_download=True to attempt re-download."
+            )
+
+        eprint("Attempting forced re-download from source...")
+        try:
+            grib_paths = await get_gribs_for_date_range_async(
+                dataset=dataset,
+                start_date=start_date,
+                end_date=end_date,
+                s3_client=s3_client,
+                api_key=api_key,
+                force=True,
+            )
+        except Exception as e:
+            raise RuntimeError(f"Forced re-download failed: {e}")
+
+        # Re-open and re-slice dataset
+        grib_paths.sort(key=lambda p: p.stem)
+        ds = xr.open_mfdataset(grib_paths, engine='cfgrib', decode_timedelta=False)
+        ds = ds.sel(time=time_slice)
+        actual_hours = ds.sizes.get('time', 0)
+
+        if actual_hours != expected_hours:
+            raise RuntimeError(
+                f"FATAL: Forced re-download did not resolve data corruption. "
+                f"Expected {expected_hours} hours, found {actual_hours}. "
+                "Source data may be incomplete for this period."
+            )
+        eprint("✅ Forced re-download successful. Data integrity confirmed.")
+    else:
+        eprint("✅ Data integrity confirmed on first attempt.")
+
+    return ds

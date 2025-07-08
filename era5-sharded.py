@@ -1066,6 +1066,190 @@ def append(
     asyncio.run(_do_append())
 
 
+@click.command()
+@click.argument("dataset", type=datasets_choice)
+@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
+@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option("--api-key", help="The CDS API key to use, as opposed to reading from ~/.cdsapirc.")
+@click.option("--max-parallel-procs", type=int, default=1, help="Maximum number of batch processes to run in parallel.")
+def build_full_dataset(
+    dataset: str,
+    gateway_uri_stem: str | None,
+    rpc_uri_stem: str | None,
+    api_key: str | None,
+    max_parallel_procs: int,
+):
+    """
+    Creates a new, chunk-aligned Zarr store on IPFS containing the entire ERA5 dataset
+    from 1940-01-01 to the latest available timestamp. Processes data in 1200-hour (50-day)
+    batches, similar to the append command, and prints the final CID to stdout.
+    All logging goes to stderr.
+    """
+    async def main():
+        HOURS_PER_BATCH = 1200  # LCM of 24h (data unit) and 400h (Zarr chunk size)
+        DAYS_PER_BATCH = HOURS_PER_BATCH // 24
+        start_date = datetime(1940, 1, 1)
+        end_date = get_latest_timestamp(dataset, api_key=api_key)
+
+        eprint(f"Building full dataset for {dataset} from {start_date.date()} to {end_date.date()}")
+
+        async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem, chunker=CHUNKER) as kubo_cas:
+            # --- 1. Calculate Batches ---
+            all_days_to_download = []
+            current_ts = start_date
+            while current_ts <= end_date:
+                all_days_to_download.append(current_ts)
+                current_ts += timedelta(days=1)
+
+            batches_of_days = [
+                all_days_to_download[i:i + DAYS_PER_BATCH]
+                for i in range(0, len(all_days_to_download), DAYS_PER_BATCH)
+            ]
+            eprint(f"Planned {len(batches_of_days)} batches of up to {DAYS_PER_BATCH} days each.")
+
+            # --- 2. Create Skeleton Store ---
+            # Calculate final shape and time coordinates
+            final_time_coords = np.arange(
+                np.datetime64(start_date),
+                np.datetime64(end_date) + np.timedelta64(1, 'h'),
+                np.timedelta64(1, 'h'),
+                dtype="datetime64[ns]",
+            )
+            final_time_len = len(final_time_coords)
+
+            # Use a sample dataset to get spatial dimensions
+            session = aioboto3.Session()
+            async with session.client(
+                "s3",
+                endpoint_url=era5_env["ENDPOINT_URL"],
+                aws_access_key_id=era5_env["AWS_ACCESS_KEY_ID"],
+                aws_secret_access_key=era5_env["AWS_SECRET_ACCESS_KEY"],
+            ) as s3_client:
+                sample_grib = await get_gribs_for_date_range_async(
+                    dataset, start_date, start_date, s3_client, api_key=api_key
+                )
+                if not sample_grib:
+                    eprint("Failed to download sample GRIB file for dimension calculation.")
+                    sys.exit(1)
+                sample_ds = xr.open_mfdataset(sample_grib, engine='cfgrib', decode_timedelta=False)
+                sample_ds = standardize(dataset, sample_ds)
+                array_shape = (final_time_len, sample_ds.sizes['latitude'], sample_ds.sizes['longitude'])
+                chunk_shape = (chunking_settings['time'], chunking_settings['latitude'], chunking_settings['longitude'])
+                sample_ds.close()
+
+            # Create skeleton store
+            skeleton_store = await ShardedZarrStore.open(
+                cas=kubo_cas,
+                array_shape=array_shape,
+                chunk_shape=chunk_shape,
+                chunks_per_shard=6250,
+                read_only=False,
+            )
+            # Write time coordinates
+            time_group = zarr.open_group(skeleton_store, mode='a')
+            epoch = np.datetime64('1970-01-01T00:00:00')
+            time_as_float_seconds = (final_time_coords - epoch) / np.timedelta64(1, 's')
+            time_array = time_group.create_dataset(
+                'time',
+                data=time_as_float_seconds,
+                shape=time_as_float_seconds.shape,
+                chunks=(time_chunk_size,),
+                dtype='float64',
+                dimension_names=['time'],
+                overwrite=True,
+                fill_value=0.0
+            )
+            time_array.attrs['standard_name'] = 'time'
+            time_array.attrs['long_name'] = 'time'
+            time_array.attrs['units'] = 'seconds since 1970-01-01'
+            time_array.attrs['calendar'] = 'proleptic_gregorian'
+
+            # Initialize metadata for the main variable
+            await skeleton_store.resize_variable(dataset, array_shape)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning, message="Consolidated metadata is currently not part")
+                zarr.consolidate_metadata(skeleton_store)
+
+            # --- 3. Process Batches in Parallel ---
+            processes = []
+            batch_info = []
+            running_chunk_offset = 0
+
+            for i, batch in enumerate(batches_of_days):
+                batch_start_date = batch[0]
+                batch_end_date = batch[-1]
+
+                # Check for existing CID
+                cid_dir = scratchspace / "cids"
+                start_str = batch_start_date.strftime('%Y-%m-%d')
+                end_str = batch_end_date.strftime('%Y-%m-%d')
+                cid_filename = f"{dataset}-batch-{start_str}-to-{end_str}.cid"
+                cid_filepath = cid_dir / cid_filename
+                if cid_filepath.exists() and cid_filepath.stat().st_size > 0:
+                    with open(cid_filepath, "r") as f:
+                        batch_cid = f.read().strip()
+                    if batch_cid:
+                        eprint(f"Found existing CID for batch {start_str} to {end_str}: {batch_cid}")
+                        batch_info.append({'start': batch_start_date.date(), 'end': batch_end_date.date(), 'cid': batch_cid, 'offset': running_chunk_offset})
+                        running_chunk_offset += HOURS_PER_BATCH // chunking_settings['time']
+                        continue
+
+                command = [
+                    sys.executable,
+                    __file__,
+                    "process-batch",
+                    dataset,
+                    "--start-date", batch_start_date.strftime('%Y-%m-%d'),
+                    "--end-date", batch_end_date.strftime('%Y-%m-%d'),
+                ]
+                if gateway_uri_stem: command.extend(["--gateway-uri-stem", gateway_uri_stem])
+                if rpc_uri_stem: command Cognitivedefaults to current session
+                    command.extend(["--rpc-uri-stem", rpc_uri_stem])
+                if api_key: command.extend(["--api-key", api_key])
+
+                proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=None, text=True)
+                processes.append(proc)
+                batch_info.append({'start': batch_start_date.date(), 'end': batch_end_date.date(), 'cid': None, 'offset': running_chunk_offset})
+
+                if len(processes) >= max_parallel_procs:
+                    p_to_wait_on = processes.pop(0)
+                    stdout, _ = p_to_wait_on.communicate()
+                    if p_to_wait_on.returncode != 0:
+                        eprint(f"ERROR: Subprocess failed with return code {p_to_wait_on.returncode}. Aborting.")
+                        raise RuntimeError("A subprocess failed. Aborting.")
+                    batch_cid = stdout.strip()
+                    batch_info[i - len(processes)]['cid'] = batch_cid
+                    eprint(f"Collected CID: {batch_cid}")
+                    running_chunk_offset += HOURS_PER_BATCH // chunking_settings['time']
+
+            for i, proc in enumerate(processes):
+                stdout, _ = proc.communicate()
+                if proc.returncode != 0:
+                    eprint(f"ERROR: Subprocess failed with return code {proc.returncode}. Aborting.")
+                    raise RuntimeError("A subprocess failed. Aborting.")
+                batch_cid = stdout.strip()
+                info_index = len(batch_info) - len(processes) + i
+                batch_info[info_index]['cid'] = batch_cid
+                eprint(f"Collected CID: {batch_cid}")
+
+            batch_cids = [(info['cid'], info['offset']) for info in batch_info if info['cid']]
+
+            # --- 4. Graft Batches into Skeleton Store ---
+            start_time = time.perf_counter()
+            for batch_cid, offset in batch_cids:
+                # open the batch store to check some values
+                
+                await skeleton_store.graft_store(batch_cid, (offset, 0, 0))
+            end_time = time.perf_counter()
+            eprint(f"Time taken to graft all batches: {end_time - start_time:.2f} seconds")
+
+            # --- 5. Flush and Output Final CID ---
+            final_cid = await skeleton_store.flush()
+            save_cid_to_file(final_cid, dataset, start_date, end_date, "full")
+            eprint(f"Full dataset created with CID: {final_cid}")
+            print(final_cid)
+
+
 @click.group
 def cli():
     """
@@ -1080,6 +1264,7 @@ cli.add_command(check_finalized)
 cli.add_command(instantiate)
 cli.add_command(append)
 cli.add_command(process_batch)
+cli.add_command(build_full_dataset)
 
 if __name__ == "__main__":
     with warnings.catch_warnings():
