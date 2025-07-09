@@ -14,16 +14,16 @@ calendar-year dekads:
 
 from __future__ import annotations
 
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
 import click
 import numpy as np
-import time
+import xarray as xr
 import zarr
 import zarr.codecs
-import xarray as xr
 from utils import (
     download_tiff,
     scratchspace,
