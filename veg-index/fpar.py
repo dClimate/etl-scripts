@@ -157,7 +157,9 @@ async def instantiate(
 
             mode_kwargs = {"mode": "w"} if i == 0 else {"append_dim": "time"}
             ds.to_zarr(store=store, zarr_format=3, **mode_kwargs)
-            eprint(f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s")
+            eprint(
+                f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s"
+            )
 
     eprint("✓ Done. Final HAMT CID:")
     print(hamt.root_node_id)
@@ -201,7 +203,6 @@ async def append(
     async with ipfs_hamt_store(
         gateway_uri_stem, rpc_uri_stem, root_cid=CID.decode(cid)
     ) as (store, hamt):
-
         latest = npdt_to_pydt(xr.open_zarr(store=store).time[-1].values)
         start_date = latest + timedelta(days=10)  # first dekad NOT in store
         end_date = end_date or datetime.now(UTC)
@@ -228,7 +229,9 @@ async def append(
             ds = standardise(ds)
 
             ds.to_zarr(store=store, zarr_format=3, append_dim="time")
-            eprint(f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s")
+            eprint(
+                f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s"
+            )
 
     eprint("✓ Done. New HAMT CID:")
     print(hamt.root_node_id)

@@ -145,13 +145,17 @@ def generate_minmax(
         new_min = das.min("batch", skipna=True)
         cur_min = xr.DataArray(min_arr[idx], coords=new_min.coords, dims=new_min.dims)
         min_arr[idx] = xr.ufuncs.fmin(cur_min, new_min).values
-        eprint(f"⇢ Merged dekads with index {idx} into min array in {time.time() - start:.2f}s")
+        eprint(
+            f"⇢ Merged dekads with index {idx} into min array in {time.time() - start:.2f}s"
+        )
 
         start = time.time()
         new_max = das.max("batch", skipna=True)
         cur_max = xr.DataArray(max_arr[idx], coords=new_max.coords, dims=new_max.dims)
         max_arr[idx] = xr.ufuncs.fmax(cur_max, new_max).values
-        eprint(f"⇢ Merged dekads with index {idx} into max array in {time.time() - start:.2f}s")
+        eprint(
+            f"⇢ Merged dekads with index {idx} into max array in {time.time() - start:.2f}s"
+        )
 
         start = time.time()
         eprint(f"⇢ Updating metadata for min & max arrays index {idx}")
@@ -160,7 +164,9 @@ def generate_minmax(
             meta["processed_dekads"] = sorted(
                 set(meta.get("processed_dekads", [])) | tags
             )
-        eprint(f"⇢ Updated metadata for dekads with index {idx} in {time.time() - start:.2f}s")
+        eprint(
+            f"⇢ Updated metadata for dekads with index {idx} in {time.time() - start:.2f}s"
+        )
 
     # ── finalise stores ───────────────────────────────────────────────
     eprint("Consolidating metadata …")

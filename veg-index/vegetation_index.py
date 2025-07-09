@@ -161,7 +161,9 @@ def _emit_vci_slices(
         mode_kwargs = {"mode": "w"} if is_first_write else {"append_dim": "time"}
         ds.to_zarr(store=dest, zarr_format=3, **mode_kwargs)
         is_first_write = False  # After the first write, we append
-        eprint(f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s")
+        eprint(
+            f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s"
+        )
 
 
 # ── CLI ————————————————————————————————————————————————————————————

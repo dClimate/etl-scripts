@@ -35,7 +35,7 @@ SCALE_FACTOR: int = 2  # ↓ downsample original 500 m pixels to ≈1 km for
 #: access performance against object sharding overhead on IPFS.
 CHUNKING: dict[str, int] = {"time": 10, "latitude": 512, "longitude": 256}
 COMPRESSOR = BloscCodec(cname="zstd", clevel=7, shuffle=BloscShuffle.bitshuffle)
-TIME_COORD_CHUNK = 500_000          # -- covers ~13 000 yrs of dekads; “effectively one chunk”
+TIME_COORD_CHUNK = 500_000  # -- covers ~13 000 yrs of dekads; “effectively one chunk”
 
 #: Day-of-month markers that define the 3 dekads inside every calendar month.
 DEKADAL_DAYS: tuple[int, int, int] = (1, 11, 21)
@@ -235,7 +235,7 @@ def standardise(ds: xr.Dataset) -> xr.Dataset:
     for var in ds.data_vars:
         ds[var].encoding.update(
             {
-                "chunks": tuple(CHUNKING[dim] for dim in ds[var].dims), # type: ignore
+                "chunks": tuple(CHUNKING[dim] for dim in ds[var].dims),  # type: ignore
                 "compressors": [COMPRESSOR],
                 "_FillValue": np.nan,
             }
