@@ -18,7 +18,7 @@ dependencies = [
     # Versions that work with zarr v3
     "py-hamt",
     "xarray[io,parallel,viz]>=2025.3.0",
-    "zarr>=3.0.8",
+    "zarr==3.0.8",
     "rasterio>=1.4.3",
 ]
 

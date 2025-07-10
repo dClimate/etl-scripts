@@ -690,7 +690,7 @@ requires-dist = [
     { name = "py-hamt", git = "https://github.com/dclimate/py-hamt?rev=964496bb1e5b45869823419c8b5aa6a89cd2f8f6" },
     { name = "rasterio", specifier = ">=1.4.3" },
     { name = "xarray", extras = ["io", "parallel", "viz"], specifier = ">=2025.3.0" },
-    { name = "zarr", specifier = ">=3.0.8" },
+    { name = "zarr", specifier = "==3.0.8" },
 ]
 
 [package.metadata.requires-dev]
@@ -2240,7 +2240,7 @@ wheels = [
 
 [[package]]
 name = "zarr"
-version = "3.0.10"
+version = "3.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "donfig" },
@@ -2249,9 +2249,9 @@ dependencies = [
     { name = "packaging" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/07/10/a1b6eabeb5a8681916568a7c6a7a1849c952131be127ccbd57e05d47d43e/zarr-3.0.10.tar.gz", hash = "sha256:1fd1318ade646f692d8f604be0e0ad125675a061196e612e3f7a2cfa9e957d1c", size = 263594, upload-time = "2025-07-03T17:29:27.733Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/52/60/9652fd0536fbaca8d08cbc1a5572c52e0ce01773297df75da8bb47e45907/zarr-3.0.8.tar.gz", hash = "sha256:88505d095af899a88ae8ac4db02f4650ef0801d2ff6f65b6d1f0a45dcf760a6d", size = 256825, upload-time = "2025-05-19T14:19:00.123Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/45/57/3329346940f78de49047ddcb03fdbca9e16450c3a942688bf24201a322e5/zarr-3.0.10-py3-none-any.whl", hash = "sha256:110724c045fbe4ff5509a8a2a6b6098cb244a6af43da85eaeecef9821473163f", size = 209508, upload-time = "2025-07-03T17:29:25.6Z" },
+    { url = "https://files.pythonhosted.org/packages/00/3b/e20bdf84088c11f2c396d034506cbffadd53e024111c1aa4585c2aba1523/zarr-3.0.8-py3-none-any.whl", hash = "sha256:7f81e7aec086437d98882aa432209107114bd7f3a9f4958b2af9c6b5928a70a7", size = 205364, upload-time = "2025-05-19T14:18:58.789Z" },
 ]
 
 [[package]]
