@@ -11,3 +11,5 @@ requirements.txt
 
 scratchspace
 stac-gen-input.json
+
+.vscode
