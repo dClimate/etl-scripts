@@ -16,9 +16,10 @@ dependencies = [
     "click>=8.1.7",
     "numcodecs==0.15.1", # temporary until new release after 0.16 which was yanked
     # Versions that work with zarr v3
-    "py-hamt>=3.2.0",
+    "py-hamt",
     "xarray[io,parallel,viz]>=2025.3.0",
-    "zarr>=3.0.8",
+    "zarr==3.0.8",
+    "rasterio>=1.4.3",
 ]
 
 # numcodecs, dask, pandas, numpy, and multiformats are imports in various files, but not in pyproject.toml dependencies, since they are required by xarray, so we just use the existing compatible versions that are installed when xarray is installed
@@ -32,6 +33,9 @@ select = ["I"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.uv.sources]
+py-hamt = { git = "https://github.com/dclimate/py-hamt", rev = "964496bb1e5b45869823419c8b5aa6a89cd2f8f6" }
 
 [dependency-groups]
 dev = [
