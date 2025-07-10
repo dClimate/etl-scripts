@@ -12,6 +12,7 @@ async def ipfs_hamt_store(
     gateway_base_url: Optional[str] = None,
     rpc_base_url: Optional[str] = None,
     root_cid: CID | None = None,
+    read_only: bool = False,
 ) -> AsyncIterator[Tuple[ZarrHAMTStore, HAMT]]:
     """
     Yield a writable Zarr store backed by a HAMT persisted on IPFS/Kubo.
@@ -24,6 +25,12 @@ async def ipfs_hamt_store(
     rpc_base_url
         Optional Kubo RPC (API) root used for *writes*
         (e.g. ``"http://127.0.0.1:5001/api/v0"``).
+    root_cid
+        Optional CID of an existing HAMT root node to use as the starting point.
+        If not given, a new HAMT is created.
+    read_only
+        If ``True``, the store is opened in read-only mode, meaning no new data
+        can be written to it. This is useful for inspecting existing datasets.
 
     Yields
     ------
@@ -41,8 +48,12 @@ async def ipfs_hamt_store(
         if root_cid:
             hamt.root_node_id = root_cid
 
-        try:
-            yield ZarrHAMTStore(hamt), hamt
-        finally:
-            # Seal the DAG so it becomes immutable / gateway-friendly.
+        if read_only:
             await hamt.make_read_only()
+
+        try:
+            yield ZarrHAMTStore(hamt, read_only=read_only), hamt
+        finally:
+            if not read_only:
+                # Seal the DAG so it becomes immutable / gateway-friendly.
+                await hamt.make_read_only()

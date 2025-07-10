@@ -201,17 +201,24 @@ async def append(
 
     # ── open the existing store ──────────────────────────────────────────────
     async with ipfs_hamt_store(
-        gateway_uri_stem, rpc_uri_stem, root_cid=CID.decode(cid)
+        gateway_uri_stem, rpc_uri_stem, root_cid=CID.decode(cid), read_only=True
     ) as (store, hamt):
         latest = npdt_to_pydt(xr.open_zarr(store=store).time[-1].values)
-        start_date = latest + timedelta(days=10)  # first dekad NOT in store
-        end_date = end_date or datetime.now(UTC)
 
-        dates = list(yield_dekad_dates(start_date, end_date))
-        if not dates:
-            eprint("✓ No new dekads to append.")
-            return
+    eprint(f"✓ Latest dekad in store: {latest.date()}")
+    start_date = latest + timedelta(days=10)  # first dekad NOT in store
+    end_date = end_date or datetime.now(UTC)
 
+    dates = list(yield_dekad_dates(start_date, end_date))
+    if not dates:
+        eprint("✓ No new dekads to append.")
+        return
+
+    # ── open the existing store ──────────────────────────────────────────────
+    async with ipfs_hamt_store(
+        gateway_uri_stem, rpc_uri_stem, root_cid=CID.decode(cid), read_only=False
+    ) as (store, hamt):
+        eprint(f"✓ Appending dekads {dates[0].date()} → {dates[-1].date()}…")
         # ── process in contiguous batches ───────────────────────────────────────
         for i in range(0, len(dates), batch_size):
             slab = dates[i : i + batch_size]
