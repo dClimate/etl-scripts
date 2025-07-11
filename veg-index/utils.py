@@ -288,7 +288,7 @@ def quality_check_dataset(
             )
 
     # 3) Perform a random quality‐check on the data without ND fancy indexing
-    fpar_da = ds[dataset_name]
+    data_array = ds[dataset_name]
     times = list(raw_arrays)
 
     for _ in range(num_checks):
@@ -306,7 +306,7 @@ def quality_check_dataset(
 
         # stepwise select from the Zarr-backed DataArray
         v_ds = (
-            fpar_da.sel(time=t64)
+            data_array.sel(time=t64)
             .isel(latitude=lat_idx)
             .isel(longitude=lon_idx)
             .compute()
