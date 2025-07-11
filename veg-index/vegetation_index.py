@@ -28,6 +28,7 @@ traceable and immutable.
 
 from __future__ import annotations
 
+import gc
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -86,13 +87,17 @@ def _make_vci_slice(
     fmax = max_arr.isel(dekad=dekad_idx).load()
 
     # 3. Compute VCI with protection against divide‑by‑zero
-    eprint("Computing VCI…")
+    eprint(f"Computing VCI {ts:%Y-%m-%d}…")
     denom = np.where(fmax - fmin == 0, np.nan, fmax - fmin)
     vci = ((fpar - fmin) / denom).clip(0.0, 1.0)
 
-    del fmin, fmax, fpar  # free memory
+    eprint(f"✓ VCI computed {ts:%Y-%m-%d}. Freeing memory…")
+    # free memory
+    del fmin, fmax, fpar
+    gc.collect()
 
     # 4. Expand to 3‑D and cast for compact storage
+    eprint(f"Wrapping VCI in xarray.DataArray for {ts:%Y-%m-%d}…")
     return vci.expand_dims(time=[np.datetime64(ts, "ns")]).astype("float32")
 
 
@@ -159,6 +164,7 @@ def _emit_vci_slices(
             ds, raw_arrays=dict(zip(slab, arrays)), dataset_name="VCI"
         )
         del arrays
+        gc.collect()
 
         start = time.time()
         eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
