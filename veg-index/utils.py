@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import os
-from contextlib import asynccontextmanager, suppress
+import random
+import time
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import AsyncIterator, Generator, Optional, Tuple
+from typing import Generator, Iterator
 
 import numpy as np
 import rasterio
 import requests
 import xarray as xr
-from multiformats import CID
-from py_hamt import HAMT, KuboCAS, ZarrHAMTStore
 from zarr.codecs import BloscCodec, BloscShuffle
 
 from etl_scripts.grabbag import eprint
@@ -208,7 +208,7 @@ def tiff_to_dataarray(path: Path) -> xr.DataArray:
     )
 
 
-def standardise(ds: xr.Dataset) -> xr.Dataset:
+def standardise(arrays: list[xr.DataArray], dataset_name: str) -> xr.Dataset:
     """Apply *common* chunking & compression conventions before writing.
 
     The helper ensures every dataset written by this script is chunked and
@@ -227,11 +227,16 @@ def standardise(ds: xr.Dataset) -> xr.Dataset:
     * **Missing data** – ``NaN`` is written as the canonical fill value so
       that consumers do not need to guess nodata markers.
     """
+    eprint(f"Standardising {dataset_name} dataset…")
+    start = time.time()
 
-    # 1) Dask chunking for computation
+    # 1) Concatenate the arrays into a single dataset
+    ds = xr.concat(arrays, dim="time").to_dataset(name=dataset_name)
+
+    # 2) Dask chunking for computation
     ds = ds.chunk(CHUNKING)
 
-    # 2) Data-variable encodings  (FPAR)
+    # 3) Data-variable encodings
     for var in ds.data_vars:
         ds[var].encoding.update(
             {
@@ -241,7 +246,7 @@ def standardise(ds: xr.Dataset) -> xr.Dataset:
             }
         )
 
-    # 3) Coordinate-variable encodings  (lat/lon/time)
+    # 4) Coordinate-variable encodings  (lat/lon/time)
     for coord in ds.coords:
         if coord == "time":
             # one big slab so xarray needs a single GET to read the axis
@@ -250,4 +255,56 @@ def standardise(ds: xr.Dataset) -> xr.Dataset:
             # write the whole axis as one chunk
             ds[coord].encoding["chunks"] = (ds.sizes[coord],)
 
+    eprint(f"✓ Standardised {dataset_name} dataset in {time.time() - start:.2f}s")
     return ds
+
+
+def quality_check_dataset(
+    ds: xr.Dataset,
+    raw_arrays: dict[datetime, xr.DataArray],
+    dataset_name: str,
+    num_checks: int = 5,
+) -> None:
+    """Perform some quality checks on the dataset before writing."""
+
+    eprint("Performing dataset quality checks…")
+
+    # 1) Check dimension names
+    expected_dims = {"time", "latitude", "longitude"}
+    actual_dims = set(ds.dims)
+    if actual_dims != expected_dims:
+        raise RuntimeError(
+            f"Dimension names mismatch: expected {expected_dims}, got {actual_dims}"
+        )
+
+    # 2) check dimension lengths
+    for dim in expected_dims:
+        expected_length = len(raw_arrays) if dim == "time" else CHUNKING[dim]
+        actual_length = ds.chunks.get(dim, [0])[0]
+        if actual_length != expected_length:
+            raise RuntimeError(
+                f"Dimension '{dim}' length mismatch: "
+                f"expected {expected_length}, got {actual_length}"
+            )
+
+    # 3) Perform a random quality check on the data
+    times = list(raw_arrays)
+    time_index = {t: idx for idx, t in enumerate(ds.indexes["time"].values)}
+    ts_choices = random.choices(times, k=num_checks)
+    t64s = np.array([np.datetime64(t, "ns") for t in ts_choices])
+    time_idxs = [time_index[t] for t in t64s]
+    lats = np.random.randint(0, raw_arrays[times[0]].shape[0], size=num_checks)
+    lons = np.random.randint(0, raw_arrays[times[0]].shape[1], size=num_checks)
+    v_raws = [raw_arrays[ts][lats[i], lons[i]] for i, ts in enumerate(ts_choices)]
+
+    fpar_da = ds[dataset_name].data
+    v_dss = fpar_da[time_idxs, lats, lons].compute()
+
+    for i, (ts, v_raw, v_ds) in enumerate(zip(ts_choices, v_raws, v_dss)):
+        if not np.isclose(v_raw, v_ds, equal_nan=True):
+            raise ValueError(
+                f"Random QC failure at {ts.date()} idx ({lats[i]},{lons[i]}): "
+                f"raw={v_raw!r} vs zarr={v_ds!r}"
+            )
+
+    eprint("✓ Dataset quality check passed: all dimensions and lengths are correct.")

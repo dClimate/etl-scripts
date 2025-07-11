@@ -29,7 +29,6 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
-from typing import Iterator
 
 import asyncclick as click
 import dask
@@ -40,6 +39,7 @@ from multiformats import CID
 from utils import (
     CHUNKING,
     download_tiff,
+    quality_check_dataset,
     standardise,
     tiff_to_dataarray,
     tiff_url,
@@ -146,15 +146,14 @@ async def instantiate(
             # Download and process all TIFF in parallel
             start = time.time()
             with ThreadPoolExecutor() as executor:
-                arrays = executor.map(_process_tiff_file, slab)
+                arrays = list(executor.map(_process_tiff_file, slab))
+            eprint(f"✓ Downloaded {len(slab)} dekads in {time.time() - start:.2f}s")
 
-            eprint(f"✓ Processed {len(slab)} dekads in {time.time() - start:.2f}s")
-            eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
+            ds = standardise(arrays, dataset_name="FPAR")
+            quality_check_dataset(ds, raw_arrays=dict(zip(slab, arrays)), dataset_name="FPAR")
+
             start = time.time()
-
-            ds = xr.concat(arrays, dim="time").to_dataset(name="FPAR")
-            ds = standardise(ds)
-
+            eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
             mode_kwargs = {"mode": "w"} if i == 0 else {"append_dim": "time"}
             ds.to_zarr(store=store, zarr_format=3, **mode_kwargs)
             eprint(
@@ -219,15 +218,14 @@ async def append(
             # Download and process all TIFF in parallel
             start = time.time()
             with ThreadPoolExecutor() as executor:
-                arrays = executor.map(_process_tiff_file, slab)
+                arrays = list(executor.map(_process_tiff_file, slab))
+            eprint(f"✓ Downloaded {len(slab)} dekads in {time.time() - start:.2f}s")
 
-            eprint(f"✓ Processed {len(slab)} dekads in {time.time() - start:.2f}s")
-            eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
+            ds = standardise(arrays, dataset_name="FPAR")
+            quality_check_dataset(ds, raw_arrays=dict(zip(slab, arrays)), dataset_name="FPAR")
+
             start = time.time()
-
-            ds = xr.concat(arrays, dim="time").to_dataset(name="FPAR")
-            ds = standardise(ds)
-
+            eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
             ds.to_zarr(store=store, zarr_format=3, append_dim="time")
             eprint(
                 f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s"
