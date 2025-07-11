@@ -263,7 +263,7 @@ def quality_check_dataset(
     ds: xr.Dataset,
     raw_arrays: dict[datetime, xr.DataArray],
     dataset_name: str,
-    num_checks: int = 5,
+    num_checks: int = 400,
 ) -> None:
     """Perform some quality checks on the dataset before writing."""
 
@@ -277,33 +277,46 @@ def quality_check_dataset(
             f"Dimension names mismatch: expected {expected_dims}, got {actual_dims}"
         )
 
-    # 2) check dimension lengths
+    # 2) Check dimension lengths
     for dim in expected_dims:
-        expected_length = len(raw_arrays) if dim == "time" else CHUNKING[dim]
-        actual_length = ds.chunks.get(dim, [0])[0]
+        expected_length = len(raw_arrays) if dim == "time" else ds.sizes[dim]
+        actual_length = ds.sizes.get(dim, 0)
         if actual_length != expected_length:
             raise RuntimeError(
                 f"Dimension '{dim}' length mismatch: "
                 f"expected {expected_length}, got {actual_length}"
             )
 
-    # 3) Perform a random quality check on the data
+    # 3) Perform a random quality‐check on the data without ND fancy indexing
+    fpar_da = ds[dataset_name]
     times = list(raw_arrays)
-    time_index = {t: idx for idx, t in enumerate(ds.indexes["time"].values)}
-    ts_choices = random.choices(times, k=num_checks)
-    t64s = np.array([np.datetime64(t, "ns") for t in ts_choices])
-    time_idxs = [time_index[t] for t in t64s]
-    lats = np.random.randint(0, raw_arrays[times[0]].shape[0], size=num_checks)
-    lons = np.random.randint(0, raw_arrays[times[0]].shape[1], size=num_checks)
-    v_raws = [raw_arrays[ts][lats[i], lons[i]] for i, ts in enumerate(ts_choices)]
 
-    fpar_da = ds[dataset_name].data
-    v_dss = fpar_da[time_idxs, lats, lons].compute()
+    for _ in range(num_checks):
+        # pick a random dekad & its raw array
+        ts = random.choice(times)
+        raw = raw_arrays[ts].squeeze("time")  # dims now ("latitude","longitude")
+        t64 = np.datetime64(ts, "ns")
 
-    for i, (ts, v_raw, v_ds) in enumerate(zip(ts_choices, v_raws, v_dss)):
+        # pick random spatial indices
+        lat_idx = random.randrange(raw.shape[0])
+        lon_idx = random.randrange(raw.shape[1])
+
+        # get raw value
+        v_raw = raw.values[lat_idx, lon_idx]
+
+        # stepwise select from the Zarr-backed DataArray
+        v_ds = (
+            fpar_da.sel(time=t64).isel(latitude=lat_idx).isel(longitude=lon_idx).compute().data.tolist()
+        )
+
         if not np.isclose(v_raw, v_ds, equal_nan=True):
             raise ValueError(
-                f"Random QC failure at {ts.date()} idx ({lats[i]},{lons[i]}): "
+                f"Random QC failure at {ts.date()} idx ({lat_idx},{lon_idx}): "
+                f"raw={v_raw!r} vs zarr={v_ds!r}"
+            )
+        else:
+            eprint(
+                f"✓ Random QC check passed for {ts.date()} at idx ({lat_idx},{lon_idx}): "
                 f"raw={v_raw!r} vs zarr={v_ds!r}"
             )
 
