@@ -155,9 +155,9 @@ def _emit_vci_slices(
 
         # Download and process all TIFF in parallel
         start = time.time()
-        with ThreadPoolExecutor() as executor:
+        with ThreadPoolExecutor(max_workers=5) as executor:
             arrays = list(executor.map(_process_ts, slab))
-        eprint(f"✓ Downloaded {len(slab)} dekads in {time.time() - start:.2f}s")
+        eprint(f"✓ Processed {len(slab)} dekads in {time.time() - start:.2f}s")
 
         ds = standardise(arrays, dataset_name="VCI")
         quality_check_dataset(
