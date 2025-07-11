@@ -155,7 +155,9 @@ def _emit_vci_slices(
         eprint(f"✓ Downloaded {len(slab)} dekads in {time.time() - start:.2f}s")
 
         ds = standardise(arrays, dataset_name="VCI")
-        quality_check_dataset(ds, raw_arrays=dict(zip(slab, arrays)), dataset_name="VCI")
+        quality_check_dataset(
+            ds, raw_arrays=dict(zip(slab, arrays)), dataset_name="VCI"
+        )
         del arrays
 
         start = time.time()
