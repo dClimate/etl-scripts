@@ -150,7 +150,9 @@ async def instantiate(
             eprint(f"✓ Downloaded {len(slab)} dekads in {time.time() - start:.2f}s")
 
             ds = standardise(arrays, dataset_name="FPAR")
-            quality_check_dataset(ds, raw_arrays=dict(zip(slab, arrays)), dataset_name="FPAR")
+            quality_check_dataset(
+                ds, raw_arrays=dict(zip(slab, arrays)), dataset_name="FPAR"
+            )
 
             start = time.time()
             eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
@@ -222,7 +224,9 @@ async def append(
             eprint(f"✓ Downloaded {len(slab)} dekads in {time.time() - start:.2f}s")
 
             ds = standardise(arrays, dataset_name="FPAR")
-            quality_check_dataset(ds, raw_arrays=dict(zip(slab, arrays)), dataset_name="FPAR")
+            quality_check_dataset(
+                ds, raw_arrays=dict(zip(slab, arrays)), dataset_name="FPAR"
+            )
 
             start = time.time()
             eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")

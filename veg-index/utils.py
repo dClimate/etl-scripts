@@ -306,7 +306,11 @@ def quality_check_dataset(
 
         # stepwise select from the Zarr-backed DataArray
         v_ds = (
-            fpar_da.sel(time=t64).isel(latitude=lat_idx).isel(longitude=lon_idx).compute().data.tolist()
+            fpar_da.sel(time=t64)
+            .isel(latitude=lat_idx)
+            .isel(longitude=lon_idx)
+            .compute()
+            .data.tolist()
         )
 
         if not np.isclose(v_raw, v_ds, equal_nan=True):
