@@ -40,7 +40,7 @@ from fpar import download_tiff, tiff_to_dataarray, yield_dekad_dates
 from fpar_minmax import MAX_PATH, MIN_PATH, get_dekad_index
 from multiformats import CID
 from py_hamt import ZarrHAMTStore
-from utils import standardise
+from utils import standardise, quality_check_dataset
 
 from etl_scripts.grabbag import eprint, npdt_to_pydt
 from etl_scripts.hamt_store_contextmanager import ipfs_hamt_store
@@ -149,15 +149,15 @@ def _emit_vci_slices(
         # Download and process all TIFF in parallel
         start = time.time()
         with ThreadPoolExecutor() as executor:
-            batch = executor.map(_process_ts, slab)
+            arrays = list(executor.map(_process_ts, slab))
+        eprint(f"✓ Downloaded {len(slab)} dekads in {time.time() - start:.2f}s")
 
-        eprint(f"✓ Processed {len(slab)} dekads in {time.time() - start:.2f}s")
-        eprint(f"Flushing dekads to Zarr store…")
+        ds = standardise(arrays, dataset_name="VCI")
+        quality_check_dataset(ds, raw_arrays=dict(zip(slab, arrays)), dataset_name="VCI")
+        del arrays
+
         start = time.time()
-
-        ds = standardise(xr.concat(batch, dim="time").to_dataset(name="VCI"))
-        del batch
-
+        eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
         mode_kwargs = {"mode": "w"} if is_first_write else {"append_dim": "time"}
         ds.to_zarr(store=dest, zarr_format=3, **mode_kwargs)
         is_first_write = False  # After the first write, we append
