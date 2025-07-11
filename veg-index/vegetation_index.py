@@ -37,6 +37,7 @@ from datetime import UTC, datetime, timedelta
 import asyncclick as click
 import numpy as np
 import xarray as xr
+from dask.diagnostics.progress import ProgressBar
 from fpar import download_tiff, tiff_to_dataarray, yield_dekad_dates
 from fpar_minmax import MAX_PATH, MIN_PATH, get_dekad_index
 from multiformats import CID
@@ -78,21 +79,23 @@ def _make_vci_slice(
 
     # 1. Load the current FPAR observation (down‑sampled ≈1 km grid)
     eprint(f"Downloading FPAR for {ts:%Y-%m-%d}…")
-    fpar = tiff_to_dataarray(download_tiff(ts, force=force))
+    fpar = tiff_to_dataarray(download_tiff(ts, force=force)).chunk(
+        {"latitude": 512, "longitude": 512}
+    )
 
     # 2. Select historical min/max for the *same* dekad index
     dekad_idx = get_dekad_index(ts)
     eprint(f"Loading min and max arrays for dekad index {dekad_idx}…")
-    fmin = min_arr.isel(dekad=dekad_idx).load()
-    fmax = max_arr.isel(dekad=dekad_idx).load()
+    fmin = min_arr.isel(dekad=dekad_idx)
+    fmax = max_arr.isel(dekad=dekad_idx)
 
     # 3. Compute VCI with protection against divide‑by‑zero
     eprint(f"Computing VCI {ts:%Y-%m-%d}…")
-    denom = np.where(fmax - fmin == 0, np.nan, fmax - fmin)
-    vci = ((fpar - fmin) / denom).clip(0.0, 1.0)
+    denom = xr.where((fmax - fmin) == 0, np.nan, fmax - fmin)
+    vci_lazy = ((fpar - fmin) / denom).clip(0.0, 1.0)
+    vci = vci_lazy.compute()
 
     eprint(f"✓ VCI computed {ts:%Y-%m-%d}. Freeing memory…")
-    # free memory
     del fmin, fmax, fpar
     gc.collect()
 
@@ -169,7 +172,10 @@ def _emit_vci_slices(
         start = time.time()
         eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
         mode_kwargs = {"mode": "w"} if is_first_write else {"append_dim": "time"}
-        ds.to_zarr(store=dest, zarr_format=3, **mode_kwargs)
+
+        with ProgressBar():
+            ds.to_zarr(store=dest, zarr_format=3, **mode_kwargs)
+
         is_first_write = False  # After the first write, we append
         eprint(
             f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s"
