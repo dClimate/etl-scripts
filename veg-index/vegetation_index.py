@@ -145,6 +145,8 @@ def _emit_vci_slices(
 
     for i in range(0, len(dates), batch_size):
         slab = dates[i : i + batch_size]
+        eprint(f"Processing dekads {slab[0].date()} → {slab[-1].date()}…")
+        eprint(f"Timestamp now: {datetime.now(UTC)}")
 
         # Download and process all TIFF in parallel
         start = time.time()
