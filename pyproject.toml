@@ -35,7 +35,7 @@ select = ["I"]
 quote-style = "double"
 
 [tool.uv.sources]
-py-hamt = { git = "https://github.com/dClimate/py-hamt", rev = "999a85ac54bb6b2fa6f8e3ed2edd142d066c1710" }
+py-hamt = { git = "https://github.com/dClimate/py-hamt", rev = "5c2580a7078daff7af051ecd4e25a445969348f4" }
 # local path for py-hamt
 # py-hamt = { path = "../py-hamt", editable = true }
 
