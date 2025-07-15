@@ -106,6 +106,38 @@ async def _upload_with_put_object(s3_client, filepath: Path, bucket: str, key: s
         raise
 
 
+async def _download_from_r2_sync(bucket: str, key: str, filepath: Path):
+    """
+    Downloads a file from R2 using the standard Boto3 client in a separate thread.
+    """
+    s3_config = {
+        "endpoint_url": era5_env["ENDPOINT_URL"],
+        "aws_access_key_id": era5_env["AWS_ACCESS_KEY_ID"],
+        "aws_secret_access_key": era5_env["AWS_SECRET_ACCESS_KEY"],
+    }
+
+    def _blocking_download():
+        eprint(f"☁️  [Thread] Starting synchronous download: {key}...")
+        try:
+            # Create a standard, blocking boto3 client inside the thread
+            boto3_s3_client = boto3.client("s3", **s3_config)
+            
+            # download_file is a high-level, managed transfer that is
+            # the most reliable way to download an object to a local file.
+            boto3_s3_client.download_file(bucket, key, str(filepath))
+            
+            eprint(f"✅  [Thread] Finished synchronous download: {key}")
+        except Exception as e:
+            eprint(f"❌  [Thread] Error during synchronous download for {key}: {e}")
+            raise
+
+    try:
+        # Run the blocking download function in asyncio's thread pool
+        await asyncio.to_thread(_blocking_download)
+    except Exception as e:
+        eprint(f"❌ Download task for {key} failed in the main coroutine.")
+        raise
+
 async def download_grib_month_async(
     dataset: str,
     timestamp: datetime,
@@ -135,7 +167,7 @@ async def download_grib_month_async(
         file_on_r2 = await is_file_on_r2(filename, s3_client)
         if file_on_r2:
             eprint(f"☁️ Downloading from R2: {filename}...")
-            await s3_client.download_file(era5_env["BUCKET_NAME"], filename, str(download_filepath))
+            await _download_from_r2_sync(era5_env["BUCKET_NAME"], filename, str(download_filepath))
             eprint(f"✅ Downloaded from R2: {filename}")
             return download_filepath
 
@@ -175,7 +207,7 @@ async def download_grib_month_async(
 @click.argument("dataset", type=datasets_choice)
 @click.option("--start-date", type=click.DateTime(), required=True, help="Start date (e.g., '2020-01-01').")
 @click.option("--end-date", type=click.DateTime(), required=True, help="End date (inclusive, e.g., '2021-12-31').")
-@click.option("--max-concurrent-downloads", type=int, default=3, show_default=True, help="Max parallel operations.")
+@click.option("--max-concurrent-downloads", type=int, default=6, show_default=True, help="Max parallel operations.")
 @click.option("--force", is_flag=True, default=False, help="Force redownload from Copernicus even if file exists.")
 @click.option("--api-key", help="CDS API key (overrides ~/.cdsapirc).")
 def main(dataset: str, start_date: datetime, end_date: datetime, max_concurrent_downloads: int, force: bool, api_key: str | None):
@@ -209,6 +241,7 @@ def main(dataset: str, start_date: datetime, end_date: datetime, max_concurrent_
                     try:
                         return await download_grib_month_async(dataset, month_ts, s3_client, api_key, force)
                     except Exception as e:
+                        print(e)
                         return e
 
             tasks = [asyncio.create_task(download_with_semaphore(month)) for month in sorted(list(required_months))]

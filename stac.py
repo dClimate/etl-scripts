@@ -1,296 +1,195 @@
-"""
-Dev note
-
-This github repository has lots of useful and clear information about what should go in
-https://github.com/radiantearth/stac-spec
-"""
-
+# stac.py
 import json
 import pprint
 import sys
 from pathlib import Path
 from typing import Literal
-
 import click
-import pandas as pd
-import requests
-import xarray as xr
 from multiformats import CID
-from py_hamt import HAMT, IPFSStore, IPFSZarr3
-
+from py_hamt import KuboCAS
+from era5.stac import generate_era5_stac
 from etl_scripts.grabbag import eprint
+import asyncio
 
-
-# Pretty print a dict to stderr
 def epp(d: dict):
     pprint.pp(d, stream=sys.stderr)
 
+async def gen_async(rpc_uri_stem: str | None, gateway_uri_stem: str | None):
+    """
+    Creates a STAC catalog with ERA5 and placeholder collections for other datasets.
 
-# Returns a GeoJSON as a dict
-def gen_geometry(ds: xr.Dataset) -> dict:
-    top = float(ds.latitude.values[-1])
-    bottom = float(ds.latitude.values[0])
-    left = float(ds.longitude.values[0])
-    right = float(ds.longitude.values[-1])
-    return {
-        "type": "Polygon",
-        "coordinates": [
-            [
-                [right, bottom],
-                [right, top],
-                [left, top],
-                [left, bottom],
-                [right, bottom],
-            ]
-        ],
-    }
+    Args:
+        rpc_uri_stem: URI stem for Kubo RPC API.
+        gateway_uri_stem: Optional URI stem for IPFS gateway.
 
+    Returns:
+        CID of the root catalog.
+    """
+    async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
+        async def save_to_ipfs(d: dict) -> CID:
+            """Save a dictionary to IPFS using KuboCAS.save."""
+            data = json.dumps(d).encode()
+            return await kubo_cas.save(data, codec="dag-json")
 
+        # Generate ERA5 collection
+        era5_cid = await generate_era5_stac(
+            Path("era5/cids.json"),
+            rpc_uri_stem,
+            gateway_uri_stem
+        )
+
+        # Placeholder collections (to be implemented)
+        # cpc_cid = await generate_cpc_stac(
+        #     Path("cpc/cids.json"),
+        #     rpc_uri_stem,
+        #     gateway_uri_stem
+        # )
+        # chirps_cid = await generate_chirps_stac(
+        #     Path("chirps/cids.json"),
+        #     rpc_uri_stem,
+        #     gateway_uri_stem
+        # )
+        # prism_cid = await generate_prism_stac(
+        #     Path("prism/cids.json"),
+        #     rpc_uri_stem,
+        #     gateway_uri_stem
+        # )
+
+        # Generate root catalog
+        catalog = {
+            "type": "Catalog",
+            "stac_version": "1.0.0",
+            "id": "dClimate-data-catalog",
+            "description": "This catalog contains dClimate's data.",
+            "links": [
+                {
+                    "rel": "child",
+                    "href": {"/": str(era5_cid)},
+                    "type": "application/json",
+                    "title": "ERA5",
+                },
+                # {
+                #     "rel": "child",
+                #     "href": {"/": str(cpc_cid)},
+                #     "type": "application/json",
+                #     "title": "CPC",
+                # },
+                # {
+                #     "rel": "child",
+                #     "href": {"/": str(chirps_cid)},
+                #     "type": "application/json",
+                #     "title": "CHIRPS",
+                # },
+                # {
+                #     "rel": "child",
+                #     "href": {"/": str(prism_cid)},
+                #     "type": "application/json",
+                #     "title": "PRISM",
+                # },
+            ],
+        }
+
+        catalog_cid = await save_to_ipfs(catalog)
+
+        eprint("=== Catalog")
+        epp(catalog)
+        eprint("=== Catalog CID")
+        print(catalog_cid)
+        return catalog_cid
+
+async def collect_async(
+    type: str,
+    catalog_cid: str,
+    plain: bool,
+    search: str | None,
+    gateway_uri_stem: str | None,
+    rpc_uri_stem: str | None,
+):
+    """
+    Print a JSON with the CIDs for all STAC collections, sub-collections, item JSONs, or dataset sharded-zarr roots to stdout.
+    """
+    async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem) as kubo_cas:
+        async def read_from_ipfs(cid: str) -> dict:
+            data = await kubo_cas.load(CID.decode(cid))
+            return json.loads(data)
+
+        def format_and_print(d: dict):
+            if search is not None:
+                if search in d:
+                    print(d[search])
+                return
+            if plain:
+                for id, cid in d.items():
+                    print(f"{id} {cid}")
+            else:
+                print(json.dumps(d, indent=4, sort_keys=True))
+
+        catalog = await read_from_ipfs(catalog_cid)
+        catalog_json_out = {catalog["id"]: catalog_cid}
+
+        collections = []
+        collections_json_out = {}
+        for link in catalog["links"]:
+            cid = link["href"]["/"]
+            collection = await read_from_ipfs(cid)
+            collections_json_out[collection["id"]] = cid
+            collections.append(collection)
+
+        if type == "collection":
+            format_and_print(collections_json_out)
+            return
+
+        sub_collections = []
+        sub_collections_json_out = {}
+        for collection in collections:
+            if collection["id"] == "ERA5":
+                for link in collection["links"]:
+                    if link["rel"] == "child":
+                        cid = link["href"]["/"]
+                        sub_collection = await read_from_ipfs(cid)
+                        sub_collections_json_out[sub_collection["id"]] = cid
+                        sub_collections.append(sub_collection)
+
+        if type == "sub-collection":
+            format_and_print(sub_collections_json_out)
+            return
+
+        items_json_out = {}
+        for collection in collections + sub_collections:
+            for link in collection["links"]:
+                if link["rel"] == "item":
+                    cid = link["href"]["/"]
+                    item = await read_from_ipfs(cid)
+                    items_json_out[item["id"]] = cid
+
+        if type == "item":
+            format_and_print(items_json_out)
+            return
+
+        sharded_zarr_roots = {}
+        for id, item_json_cid in items_json_out.items():
+            item_json = await read_from_ipfs(item_json_cid)
+            sharded_zarr_root = item_json["assets"]["sharded-zarr"]["href"][6:]
+            sharded_zarr_roots[id] = sharded_zarr_root
+
+        if type == "sharded-zarr-root":
+            format_and_print(sharded_zarr_roots)
+            return
+
+# Synchronous wrappers for Click commands
 @click.command
-@click.argument(
-    "stac-input-path",
-    type=click.Path(
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        path_type=Path,
-    ),
-)
-@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
+@click.option("--gateway-uri-stem", help="Pass through to KuboCAS")
 @click.option(
     "--rpc-uri-stem",
-    help="Stem of url for Kubo RPC API http endpoint. Also used for IPFSStore.",
+    help="Stem of url for Kubo RPC API http endpoint. Also used for KuboCAS.",
     default="http://127.0.0.1:5001",
 )
-def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
-    """
-    Creates a STAC catalog of the datasets from etl-scripts, using the CID of each dataset.
-
-    These CIDs should be written to a JSON file, see the `stac-gen-input-template.json` file for what this should look like. For manual use, it is advised to create a copy named stac-gen-input.json and fill cids out in there since that is in the gitignore.
-
-    If a CID is 'null', then stac.py will ignore it entirely, and not generate the STAC item entry.
-
-    Warning: This adds JSONs directly as IPFS blocks, so long all STAC JSON need to stay under the 1 MB bitswap limit, which they are currently well in the clear of.
-    """
-    stac_input: dict[str, str]
-    with open(stac_input_path, "r") as f:
-        stac_input = json.load(f)
-
-    ipfs_store = IPFSStore()
-    if gateway_uri_stem is not None:
-        ipfs_store.gateway_uri_stem = gateway_uri_stem
-    if rpc_uri_stem is not None:
-        ipfs_store.rpc_uri_stem = rpc_uri_stem
-
-    def open_ds(cid: str) -> xr.Dataset:
-        return xr.open_zarr(
-            store=IPFSZarr3(
-                HAMT(store=ipfs_store, root_node_id=CID.decode(cid)), read_only=True
-            )
-        )
-
-    def save_to_ipfs(d: dict) -> CID:
-        # Save with dag-json, we are not at danger of saving the final dataset since the dataset HAMT root CIDs are not actually linked with the {"/":"cid"} format
-        url = f"{rpc_uri_stem}/api/v0/block/put?cid-codec=dag-json&mhtype=sha2-256"
-        data = json.dumps(d).encode()
-        response = requests.post(
-            url,
-            files={"files": data},
-        )
-        response.raise_for_status()
-
-        cid_str: str = json.loads(response.content)["Key"]
-        cid = CID.decode(cid_str)
-        # https://ipld.io/docs/codecs/known/dag-json/ says that CIDs need to be in base58 or base32 for it to be a proper link
-        cid = cid.set(base="base58btc")
-
-        return cid
-
-    # Generate the items, then collections, and finally the catalog
-
-    item_cids: dict[str, CID] = {}
-    for id in stac_input:
-        ds_cid = stac_input[id]
-        if ds_cid == "null":
-            continue
-        ds = open_ds(ds_cid)
-        # e.g. "2023-09-25T17:47:10Z"
-        time_format = "%Y-%m-%dT%H:%M:%SZ"
-        item_cids[id] = save_to_ipfs(
-            {
-                "stac_version": "1.0.0",
-                "type": "Feature",
-                "id": id,
-                # An example correspondence between what a bbox and geometry should look like
-                #   "bbox": [-179.06275, -89.27671, 179.99975, 89.27671],
-                # "geometry": "{\"type\": \"Polygon\", \"coordinates\": [[[179.99975, -89.27671], [179.99975, 89.27671], [-179.06275, 89.27671], [-179.06275, -89.27671], [179.99975, -89.27671]]]}",
-                #
-                "geometry": gen_geometry(ds),
-                "bbox": [
-                    str(ds.longitude.values[0]),
-                    str(ds.latitude.values[0]),
-                    str(ds.longitude.values[-1]),
-                    str(ds.latitude.values[-1]),
-                ],
-                "properties": {
-                    "datetime": "null",  # the spec states that "null is allowed, but requires start_datetime and end_datetime from common metadata to be set."
-                    "start_datetime": pd.Timestamp(ds.time.values[0]).strftime(  # type: ignore strftime is definitely a pandas.Timestamp method
-                        time_format
-                    ),
-                    "end_datetime": pd.Timestamp(ds.time.values[-1]).strftime(  # type: ignore strftime is definitely a pandas.Timestamp method
-                        time_format
-                    ),
-                },
-                "links": [],
-                # Don't use a proper {"/":cid} since that would mean pinning the entire dataset on trying to pin the stac
-                "assets": {"hamt-zarr": {"href": f"/ipfs/{ds_cid}"}},
-            },
-        )
-
-    # Collections
-    def add_links_collection(collection: dict, item_ids: list[str]):
-        for item_id in item_ids:
-            # Check since if the script is called with a null CID, that dataset isn't even in the item_cids dict
-            if item_id in item_cids:
-                cid = item_cids[item_id]
-                collection["links"].append(
-                    {
-                        "rel": "item",
-                        "href": {"/": str(cid)},
-                        "type": "application/json",
-                        "title": item_id,
-                    }
-                )
-
-    collection_cids: dict[str, CID] = {}
-
-    cpc_collection = {
-        "type": "Collection",
-        "stac_version": "1.0.0",
-        "id": "CPC",
-        "description": "",
-        "license": "noassertion",
-        "extent": {
-            "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
-            "temporal": {"interval": [["1979-01-01T00:00:00Z", "null"]]},
-        },
-        "links": [],
-    }
-    add_links_collection(
-        cpc_collection,
-        ["cpc-precip-conus", "cpc-precip-global", "cpc-tmax", "cpc-tmin"],
-    )
-    if len(cpc_collection["links"]) > 0:
-        collection_cids["CPC"] = save_to_ipfs(cpc_collection)
-
-    chirps_collection = {
-        "type": "Collection",
-        "stac_version": "1.0.0",
-        "id": "CHIRPS",
-        "description": "",
-        "license": "noassertion",
-        "extent": {
-            "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
-            "temporal": {"interval": [["1981-01-01T00:00:00Z", "null"]]},
-        },
-        "links": [],
-    }
-    add_links_collection(
-        chirps_collection, ["chirps-final-p05", "chirps-final-p25", "chirps-prelim-p05"]
-    )
-    if len(chirps_collection["links"]) > 0:
-        collection_cids["CHIRPS"] = save_to_ipfs(chirps_collection)
-
-    era5_collection = {
-        "type": "Collection",
-        "stac_version": "1.0.0",
-        "id": "ERA5",
-        "description": "",
-        "license": "noassertion",
-        "extent": {
-            "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
-            "temporal": {"interval": [["1940-01-01T00:00:00Z", "null"]]},
-        },
-        "links": [],
-    }
-    add_links_collection(
-        era5_collection,
-        [
-            "era5-2m_temperature",
-            "era5-10m_u_component_of_wind",
-            "era5-10m_v_component_of_wind",
-            "era5-100m_u_component_of_wind",
-            "era5-100m_v_component_of_wind",
-            "era5-surface_pressure",
-            "era5-surface_solar_radiation_downwards",
-            "era5-total_precipitation",
-        ],
-    )
-    if len(era5_collection["links"]) > 0:
-        collection_cids["ERA5"] = save_to_ipfs(era5_collection)
-
-    prism_collection = {
-        "type": "Collection",
-        "stac_version": "1.0.0",
-        "id": "PRISM",
-        "description": "",
-        "license": "noassertion",
-        "extent": {
-            "spatial": {"bbox": [[-125.0, 24.08, -66.5, 49.91]]},
-            "temporal": {"interval": [["1981-01-01T00:00:00Z", "null"]]},  # TODO
-        },
-        "links": [],
-    }
-    add_links_collection(
-        prism_collection,
-        [
-            "prism-precip-4km",
-            "prism-tmax-4km",
-            "prism-tmin-4km",
-        ],
-    )
-    if len(prism_collection["links"]) > 0:
-        collection_cids["PRISM"] = save_to_ipfs(prism_collection)
-
-    catalog = {
-        "type": "Catalog",
-        "stac_version": "1.0.0",
-        "id": "dClimate-data-catalog",
-        "description": "This catalog contains dClimate's data.",
-        "links": [],
-    }
-
-    def add_links_catalog(catalog: dict, collections: list[dict]):
-        for collection in collections:
-            id = collection["id"]
-            if id in collection_cids:
-                cid = collection_cids[id]
-                catalog["links"].append(
-                    {
-                        "rel": "child",
-                        "href": {"/": str(cid)},
-                        "type": "application/json",
-                        "title": id,
-                    }
-                )
-
-    add_links_catalog(
-        catalog, [cpc_collection, chirps_collection, era5_collection, prism_collection]
-    )
-
-    catalog_cid = save_to_ipfs(catalog)
-
-    eprint("=== Catalog")
-    epp(catalog)
-
-    eprint("=== Catalog CID")
-    print(catalog_cid)
-
+def gen(gateway_uri_stem: str | None, rpc_uri_stem: str | None):
+    """Creates a STAC catalog with ERA5 and placeholder collections for other datasets."""
+    asyncio.run(gen_async(rpc_uri_stem, gateway_uri_stem))
 
 @click.command
-@click.argument("type", type=click.Choice(["collection", "item", "hamt-root"]))
+@click.argument("type", type=click.Choice(["collection", "sub-collection", "item", "sharded-zarr-root"]))
 @click.argument("catalog-cid")
 @click.option(
     "--plain",
@@ -301,10 +200,10 @@ def gen(stac_input_path: Path, gateway_uri_stem: str | None, rpc_uri_stem: str):
 )
 @click.option(
     "--search",
-    help="Find a specific id and print its value within the normal output. If nothing is found, this will print nothing. This search term case-sensitive.",
+    help="Find a specific id and print its value within the normal output. If nothing is found, this will print nothing. This search term is case-sensitive.",
 )
-@click.option("--gateway-uri-stem", help="Pass through to IPFSStore")
-@click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
+@click.option("--gateway-uri-stem", help="Pass through to KuboCAS")
+@click.option("--rpc-uri-stem", help="Pass through to KuboCAS", default="http://127.0.0.1:5001")
 def collect(
     type: str,
     catalog_cid: str,
@@ -313,74 +212,13 @@ def collect(
     gateway_uri_stem: str | None,
     rpc_uri_stem: str | None,
 ):
-    """
-    Print a JSON with the CIDs for all STAC collections, item JSONs, or dataset hamt roots to stdout.
-    """
-    ipfs_store = IPFSStore()
-    if gateway_uri_stem is not None:
-        ipfs_store.gateway_uri_stem = gateway_uri_stem
-    if rpc_uri_stem is not None:
-        ipfs_store.rpc_uri_stem = rpc_uri_stem
-
-    def read_from_ipfs(cid: str) -> dict:
-        return json.loads(ipfs_store.load(CID.decode(cid)))
-
-    def format_and_print(d: dict):
-        if search is not None:
-            if search in d:
-                print(d[search])
-            return
-
-        if plain:
-            for id, cid in d.items():
-                print(f"{id} {cid}")
-        else:
-            print(json.dumps(d, indent=4, sort_keys=True))
-
-    catalog = read_from_ipfs(catalog_cid)
-    catalog_json_out = {catalog["id"]: catalog_cid}
-
-    collections = []
-    collections_json_out = {}
-    for link in catalog["links"]:
-        cid = link["href"]["/"]
-        collection = read_from_ipfs(cid)
-        collections_json_out[collection["id"]] = cid
-        collections.append(collection)
-
-    if type == "collection":
-        format_and_print(collections_json_out)
-        return
-
-    items_json_out = {}
-    for collection in collections:
-        for link in collection["links"]:
-            cid = link["href"]["/"]
-            item = read_from_ipfs(cid)
-
-            # type must be item to reach here so don't do a check
-            items_json_out[item["id"]] = cid
-
-    if type == "item":
-        format_and_print(items_json_out)
-        return
-
-    hamt_roots = {}
-    for id, item_json_cid in items_json_out.items():
-        item_json = read_from_ipfs(item_json_cid)
-        hamt_root = item_json["assets"]["hamt-zarr"]["href"][6:]
-        hamt_roots[id] = hamt_root
-
-    if type == "hamt-root":
-        format_and_print(hamt_roots)
-        return
-
+    """Print a JSON with the CIDs for all STAC collections, sub-collections, item JSONs, or dataset sharded-zarr roots to stdout."""
+    asyncio.run(collect_async(type, catalog_cid, plain, search, gateway_uri_stem, rpc_uri_stem))
 
 @click.group
 def cli():
     """Tools for creating and navigating the dClimate data catalog STAC."""
     pass
-
 
 cli.add_command(gen)
 cli.add_command(collect)
