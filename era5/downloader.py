@@ -1,3 +1,4 @@
+# downloader.py
 import json
 import os
 import sys
@@ -5,12 +6,15 @@ from datetime import datetime, timedelta
 from math import ceil
 from pathlib import Path
 from typing import Literal
+import dateutil
 import time
 from zarr.storage import MemoryStore
 import itertools
 import dask.array as da
 import subprocess
 import warnings
+import tempfile
+import pathlib
 
 import aioboto3
 import boto3
@@ -42,6 +46,19 @@ r2 = boto3.client(
     aws_secret_access_key=era5_env["AWS_SECRET_ACCESS_KEY"],
 )
 
+def check_finalized(path: Path):
+    """Checks if an ERA5 GRIB data file has finalized data. Assumes there is only one data variable inside the GRIB file, which is the case usually for ERA5. Writes true if finalized, false if preliminary."""
+    # assume path exist due to click argument verification
+
+    ds = xr.open_dataset(path, backend_kwargs={"read_keys": ["expver"]})
+
+
+    is_finalized: bool = False
+    for v in ds.data_vars:
+        is_finalized = int(ds[v].GRIB_expver) == 1
+
+    return is_finalized
+
 async def is_file_on_r2(key: str, r2_client) -> bool:
     """Asynchronously checks if a file exists in the R2 bucket."""
     try:
@@ -54,41 +71,16 @@ async def is_file_on_r2(key: str, r2_client) -> bool:
             # Something else has gone wrong
             raise
 
-async def _upload_with_r2_async(filepath: Path, bucket: str, key: str):
+async def _upload_with_r2_async(s3_client, filepath: Path, bucket: str, key: str):
     """
     Reads a file and uploads it using the low-level put_object to avoid upload_file issues.
     """
-    s3_config = {
-        "endpoint_url": era5_env["ENDPOINT_URL"],
-        "aws_access_key_id": era5_env["AWS_ACCESS_KEY_ID"],
-        "aws_secret_access_key": era5_env["AWS_SECRET_ACCESS_KEY"],
-    }
-    def _sync_upload():
-        eprint(f"☁️ Starting synchronous upload in thread: {key}...")
-        try:
-            # Create a brand new, standard boto3 client inside the thread.
-            # This client is truly synchronous and blocking.
-            boto3_s3_client = boto3.client("s3", **s3_config)
-            
-            # This call will now BLOCK until the upload is complete, fails, or times out.
-            boto3_s3_client.upload_file(str(filepath), bucket, key)
-            
-            eprint(f"✅ Finished synchronous upload in thread: {key}")
-        except Exception as e:
-            # We can catch specific botocore exceptions if needed
-            eprint(f"❌ Error during synchronous upload for {key}: {e}")
-            # Re-raise the exception so the main async task knows about the failure
-            raise
-
-    try:
-        # Run the genuinely blocking upload function in asyncio's thread pool.
-        # This await will now correctly wait for the entire file transfer.
-        await asyncio.to_thread(_sync_upload)
-    except Exception as e:
-        # The exception from the thread is caught here.
-        eprint(f"❌ Upload task for {key} failed.")
-        # Re-raise it to be caught by the main result processing loop
-        raise
+    if not check_finalized(filepath):
+        eprint(f"Not finalized. Not caching {filepath}")
+        return
+ 
+    eprint(f"Uploading local file {filepath} to R2")
+    await s3_client.upload_file(str(filepath), era5_env["BUCKET_NAME"], key)
 
 dataset_names = [
     "2m_temperature",
@@ -185,6 +177,38 @@ async def get_gribs_for_date_range_async(
             eprint(f"ERROR: A download failed while fetching initial data: {e}")
             sys.exit(1)
 
+async def _download_from_r2_sync(bucket: str, key: str, filepath: Path):
+    """
+    Downloads a file from R2 using the standard Boto3 client in a separate thread.
+    """
+    s3_config = {
+        "endpoint_url": era5_env["ENDPOINT_URL"],
+        "aws_access_key_id": era5_env["AWS_ACCESS_KEY_ID"],
+        "aws_secret_access_key": era5_env["AWS_SECRET_ACCESS_KEY"],
+    }
+
+    def _blocking_download():
+        eprint(f"☁️  [Thread] Starting synchronous download: {key}...")
+        try:
+            # Create a standard, blocking boto3 client inside the thread
+            boto3_s3_client = boto3.client("s3", **s3_config)
+            
+            # download_file is a high-level, managed transfer that is
+            # the most reliable way to download an object to a local file.
+            boto3_s3_client.download_file(bucket, key, str(filepath))
+            
+            eprint(f"✅  [Thread] Finished synchronous download: {key}")
+        except Exception as e:
+            eprint(f"❌  [Thread] Error during synchronous download for {key}: {e}")
+            raise
+
+    try:
+        # Run the blocking download function in asyncio's thread pool
+        await asyncio.to_thread(_blocking_download)
+    except Exception as e:
+        eprint(f"❌ Download task for {key} failed in the main coroutine.")
+        raise
+
 async def download_grib_async(
     dataset: str,
     timestamp: datetime,
@@ -205,8 +229,21 @@ async def download_grib_async(
     # Run synchronous file check in a thread to avoid blocking the event loop
     file_on_disk = await asyncio.to_thread(download_filepath.exists)
 
+    # If it exist on the disk, check for finalization 
+    # If not finalized, force download to make sure we have latest info
+    # The reason being if we process the first two weeks of a month, it will never be finalized
+    # Then if we run the etl again, we can't rely anyways on the stored cache as it may only have 2 weeks but we need 
+    # 2 weeks now. Then we run it again, and we need the next week, we repeat the process.
+    # Eventually the finalized etl will catchup to to this date, and will redownload again to make sure it has the latest cache
+    # Only when the full month is finalized do we upload it
+    if (file_on_disk):
+        if not check_finalized(download_filepath):
+            eprint("FORCING FOR NOW")
+            # force = True
+
     filename = download_filepath.name
     file_on_r2 = await is_file_on_r2(filename, s3_client)
+
     upload_to_r2_at_end = False
 
     # Decide if a fresh download from Copernicus is needed
@@ -217,10 +254,10 @@ async def download_grib_async(
             eprint(f"File {filename} on both R2 and disk, skipping download.")
         elif file_on_r2 and not file_on_disk:
             eprint(f"Downloading {filename} from R2 to {download_filepath}")
-            await s3_client.download_file(era5_env["BUCKET_NAME"], filename, str(download_filepath))
+            await _download_from_r2_sync(era5_env["BUCKET_NAME"], filename, str(download_filepath))
         elif not file_on_r2 and file_on_disk:
-            eprint(f"Uploading local file {download_filepath} to R2")
-            await _upload_with_r2_async(str(download_filepath), era5_env["BUCKET_NAME"], filename)
+            await _upload_with_r2_async(s3_client, str(download_filepath), era5_env["BUCKET_NAME"], filename)
+
         return download_filepath
 
     # --- Prepare and execute Copernicus API request ---
@@ -269,8 +306,7 @@ async def download_grib_async(
     )
 
     if upload_to_r2_at_end:
-        eprint(f"Uploading {filename} to R2...")
-        await s3_client.upload_file(str(download_filepath), era5_env["BUCKET_NAME"], filename)
+        await _upload_with_r2_async(s3_client, str(download_filepath), era5_env["BUCKET_NAME"], filename)
 
     return download_filepath
 
@@ -302,4 +338,85 @@ def save_cid_to_file(
     except Exception as e:
         eprint(f"⚠️ Warning: Could not save CID to file. Error: {e}")
 
+def get_list_of_times(time_range=range(0, 24)) -> str:
+        return [f"{time_index:02}:00" for time_index in time_range]
 
+
+
+
+async def load_finalization_date(dataset, cdsapi_key):
+    """
+    Download the six most recent months of data for a small region (NYC)
+        in netCDF format from ECMWF and iterate through the time dimension,
+    checking for the date when expver changes from 1 to 5.
+    This will indicate when ERA5 (finalized) changes to ERA5T (preliminary).
+    If `ERA5Family.finalization_date` is already set, this will be skipped unless `force` is set.
+
+    Parameters
+    ----------
+    end
+        A datetime representing the final value of the date range requested
+    force
+        A bool representing whether an existing `ERA5Family.finalization_date` value should be overwritten
+    """
+    eprint("requesting history of NYC lat/lon to check for ERA5 finalization date")
+
+    # Get the most recent six months of data as a single netcdf
+    temp_path = tempfile.TemporaryDirectory()
+    path = pathlib.Path(temp_path.name) / "era5_cutoff_date_test.nc"
+
+    now = datetime.now()
+    current_date = datetime(now.year, now.month, 1) - dateutil.relativedelta.relativedelta(months=6)
+    request = {
+        "product_type": "reanalysis",
+        "variable": dataset,
+        "date": f"{current_date.date()}/{now.date()}",
+        "time": get_list_of_times(),
+        # Random US location
+        "area": [
+            40.75,
+            -74.25,
+            40.75 - 0.25,
+            -74.25 + 0.25,
+        ],
+        "format": "netcdf",
+    }
+    client_args = {"quiet": True}
+    client_args['url'] = "https://cds.climate.copernicus.eu/api"
+    client_args['key'] = cdsapi_key
+    client = cdsapi.Client(**client_args)
+
+    # Run the blocking 'retrieve' call in a separate thread
+    await asyncio.to_thread(
+        client.retrieve,
+        "reanalysis-era5-single-levels",
+        request,
+        str(path)
+    )
+
+    try:
+        test_set = xr.load_dataset(path)
+    except FileNotFoundError:
+        raise ValueError(
+            f"Unable to open a dataset at {path}. This likely indicates that ERA5's CDS API "
+            "failed to deliver the requested finalization data. Please try again later when "
+            "the CDS API is less stressed."
+        )
+    # if expver dimension is not present,something unexpected is wrong
+    # since there should be a mix of finalized and unfinalized data in the set
+    if "expver" not in test_set:
+        raise MissingDimensionsError(f"No expver dimension found in {path}")
+    
+    # find the position of the first nan in the first
+    # (final, expver = 1) column of the component key values.
+    # Move back one for the previous time index.
+    # argmax finds the max value -- the first nan
+    previous_time_idx = test_set.expver.values.argmax() - 1
+    previous_time = test_set.valid_time[previous_time_idx].values
+    if previous_time is None:
+        raise ValueError(
+            f"No finalized data detected in {path}, even though *expver* dimension is present"
+        )
+    inclusive_date = npdt_to_pydt(previous_time)
+    exclusive_date = (inclusive_date + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return exclusive_date

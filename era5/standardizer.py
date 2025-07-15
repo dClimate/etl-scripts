@@ -1,12 +1,12 @@
+# standardizer.py
 import warnings
-
 import numpy as np
 import xarray as xr
 import zarr.codecs
 
 from etl_scripts.grabbag import eprint
 
-from era5.utils import chunking_settings
+from era5.utils import chunking_settings, time_chunk_size
 
 def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
     # ERA5 normally spits things out with the short form name, use the long form name to make it more readable
@@ -32,13 +32,23 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
 
 
     if "valid_time" in ds.coords and len(ds.valid_time.dims) == 2:
-        eprint("Processing multi-dimensional valid_time...")
+
         ds_stack = ds.stack(throwaway=("time", "step"))
-        ds_linear = ds_stack.rename({"throwaway": "valid_time"})  # Rename stacked dim to valid_time
-        ds = ds_linear.drop_vars(["throwaway"], errors="ignore")
+        ds_linear = ds_stack.swap_dims({"throwaway": "valid_time"})
+        ds = ds_linear.drop_vars(["throwaway"])
+
+        # eprint("Processing multi-dimensional valid_time...")
+        # ds_stack = ds.stack(throwaway=("time", "step"))
+        # ds_linear = ds_stack.rename({"throwaway": "valid_time"})  # Rename stacked dim to valid_time
+        # ds = ds_linear.drop_vars(["throwaway"], errors="ignore")
+        ds = ds.sortby('valid_time')
+        
+        _, index = np.unique(ds['valid_time'], return_index=True)
+        ds = ds.isel(valid_time=index)
+
         eprint("After handling multi-dimensional valid_time:")
-        perint("Dimensions:", ds.dims)
-        eprint("Coordinates:", ds.coords)
+        eprint(ds.dims)
+        eprint(ds.coords)
 
     ds = ds.drop_vars(["number", "step", "surface", "time"])
     with warnings.catch_warnings():
@@ -63,6 +73,9 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
     # Results in about 1 MB sized chunks
     # We chunk small in spatial, wide in time
     ds = ds.chunk(chunking_settings)
+    ds.coords['time'].encoding['chunks'] = (time_chunk_size,)
+    print("After chunking:")
+    print(ds)
 
     for param in list(ds.attrs.keys()):
         del ds.attrs[param]
@@ -79,5 +92,8 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
 
         # fill value should be float NaN
         da.encoding["_FillValue"] = np.nan
+
+    if list(ds.dims) != ["time", "latitude", "longitude"]:
+        ds = ds.transpose('time', 'latitude', 'longitude')
 
     return ds

@@ -1,3 +1,4 @@
+# utils.py
 import json
 import os
 import sys
@@ -35,10 +36,17 @@ dataset_names = [
     "surface_pressure",
     "surface_solar_radiation_downwards",
     "total_precipitation",
+    "land-precip-total" # DOUBLE CHECK THIS
+    "era5_volumetric_soil_water_layer_3" # DOUBLE CHECK THIS
 ]
 
+start_dates = {
+    "2m_temperature": datetime(1940, 1, 1),
+    "total_precipitation": datetime(1940, 1, 1, 7, 0, 0),  # First data is from 1940-01-02
+}
+
 CHUNKER = "size-1048576"
-chunking_settings = {"time": 400, "latitude": 25, "longitude": 25}
+chunking_settings = {"time": 5000, "latitude": 6, "longitude": 8}
 time_chunk_size = 500000
 
 def get_latest_timestamp(dataset: str, api_key: str | None = None) -> datetime:

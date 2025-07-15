@@ -1,3 +1,4 @@
+# processor.py
 import json
 import os
 import sys
@@ -27,11 +28,11 @@ import asyncio
 from etl_scripts.grabbag import eprint, npdt_to_pydt
 
 from era5.utils import get_latest_timestamp
-from era5.downloader import get_gribs_for_date_range_async
+from era5.downloader import get_gribs_for_date_range_async, load_finalization_date, check_finalized
 from era5.validator import validate_data
 from era5.standardizer import standardize
 from era5.verifier import compare_datasets, run_checks
-from era5.utils import CHUNKER, dataset_names, chunking_settings, time_chunk_size
+from era5.utils import CHUNKER, dataset_names, chunking_settings, time_chunk_size, start_dates
 
 
 scratchspace: Path = (Path(__file__).parent.parent / "scratchspace" / "era5").absolute()
@@ -44,6 +45,8 @@ with open(Path(__file__).parent / "era5-env.json") as f:
 datasets_choice = click.Choice(dataset_names)
 period_options = ["hour", "day", "month"]
 period_choice = click.Choice(period_options)
+
+
 
 def save_cid_to_file(
     cid: str,
@@ -76,12 +79,12 @@ async def chunked_write(ds: xr.Dataset, variable_name: str, rpc_uri_stem, gatewa
     async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem, chunker=CHUNKER) as kubo_cas:
         # Note: I've modified it slightly to accept an existing KuboCAS instance
         #       and return the CID as a string for easier use.
-        ordered_dims = list(ds.dims)
+        ordered_dims = list(ds[variable_name].dims)
         array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
         chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
         if ordered_dims[0] != 'time':
             ds = ds.transpose('time', 'latitude', 'longitude', ...)
-            ordered_dims = list(ds.dims)
+            ordered_dims = list(ds[variable_name].dims)
             array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
             chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
 
@@ -271,20 +274,20 @@ async def batch_processor(
         ds = await validate_data(grib_paths, start_date, end_date, dataset, api_key)
 
         # 3. Standardize the data
-        ds = standardize(dataset, ds)
+        # ds = standardize(dataset, ds)
 
         if (initial): 
-            eprint(f"Forcing encoding with chunk settings: {chunking_settings}")
-            encoding_chunks = tuple(chunking_settings.get(dim) for dim in ds[dataset].dims)
-            ds[dataset].encoding['chunks'] = encoding_chunks
-            for coord_name, coord_array in ds.coords.items():
-                if coord_name in chunking_settings:
-                    if coord_name == "time":
-                        ds[coord_name].encoding['chunks'] = (time_chunk_size,)
-                    else:
-                        ds[coord_name].encoding['chunks'] = (ds.sizes[coord_name],)
+            # eprint(f"Forcing encoding with chunk settings: {chunking_settings}")
+            # encoding_chunks = tuple(chunking_settings.get(dim) for dim in ds[dataset].dims)
+            # ds[dataset].encoding['chunks'] = encoding_chunks
+            # for coord_name, coord_array in ds.coords.items():
+            #     if coord_name in chunking_settings:
+            #         if coord_name == "time":
+            #             ds[coord_name].encoding['chunks'] = (time_chunk_size,)
+            #         else:
+            #             ds[coord_name].encoding['chunks'] = (ds.sizes[coord_name],)
 
-            ordered_dims = list(ds.dims)
+            ordered_dims = list(ds[dataset].dims)
             array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
             chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
             if ordered_dims != ["time", "latitude", "longitude"]:
@@ -339,16 +342,25 @@ async def append_latest(
     gateway_uri_stem: str,
     rpc_uri_stem: str,
     api_key: str | None,
+    finalization_only: bool
 ):
     """
     Appends all available new data from the dataset's last timestamp to the latest 
     available date in a single operation.
     """
+    
     # 1. Determine the full date range for the append operation.
     if end_date is None:
         latest_available_date = get_latest_timestamp(dataset, api_key=api_key)
     else:
         latest_available_date = end_date
+
+    if finalization_only:
+        # latest_finalization_date = await load_finalization_date(dataset, api_key)
+        latest_finalization_date = datetime(2025, 5, 1, 0, 0, 0)
+        print(latest_finalization_date.strftime("%Y-%m-%d"))
+        if latest_available_date > latest_finalization_date:
+            latest_available_date = latest_finalization_date
 
     target_end_date = (latest_available_date - timedelta(days=1)).replace(hour=23, minute=0, second=0, microsecond=0)
     print(target_end_date)
@@ -386,7 +398,7 @@ async def append_latest(
             ds = await validate_data(grib_paths, start_date, target_end_date, dataset, api_key)
 
             eprint("Standardizing dataset...")
-            ds = standardize(dataset, ds)
+            # ds = standardize(dataset, ds)
 
             # 4. Open the main Zarr store for writing.
             main_store = await ShardedZarrStore.open(cas=kubo_cas, read_only=False, root_cid=cid)
@@ -426,7 +438,7 @@ async def append_latest(
     print(final_cid)
     
     save_cid_to_file(final_cid, dataset, start_date, target_end_date, "append-direct")
-    
+
     return final_cid
 
 
@@ -437,26 +449,48 @@ async def build_full_dataset(
     rpc_uri_stem: str | None,
     api_key: str | None,
     max_parallel_procs: int,
+    finalization_only: bool
 ):
     """
     Creates a new, chunk-aligned Zarr store on IPFS with the first 1200 hours (50 days) of ERA5 data,
     then extends it to the latest available timestamp using batch processing. Prints the final CID to stdout.
     All logging goes to stderr.
     """
-    HOURS_PER_BATCH = 1200  # LCM of 24h (data unit) and 400h (Zarr chunk size)
+    HOURS_PER_BATCH = 5000  # LCM of 24h (data unit) and 5000h (Zarr chunk size)
     DAYS_PER_BATCH = HOURS_PER_BATCH // 24
-    start_date = datetime(1940, 1, 1)
+    
+    start_date = start_dates[dataset] if dataset in start_dates else datetime(1940, 1, 1, 0, 0, 0)
     end_date = get_latest_timestamp(dataset, api_key=api_key)
+  
+    if finalization_only:
+        #latest_finalization_date = await load_finalization_date(dataset, api_key)
+        latest_finalization_date = datetime(2025, 5, 2, 0, 0, 0)
+        print(latest_finalization_date.strftime("%Y-%m-%d"))
+        if end_date > latest_finalization_date:
+            end_date = latest_finalization_date
+    else:
+        # Start date is now the latest finalization date plus one day
+        # latest_finalization_date = await load_finalization_date(dataset, api_key)
+        # start_date = (latest_finalization_date + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = datetime(2025, 5, 2, 0, 0, 0)
+        print("NON-FINALIZED")
 
 
-    delta_days = (end_date - start_date).days
-    batches = delta_days // DAYS_PER_BATCH  # Round down
-    adjusted_days = batches * DAYS_PER_BATCH - 1
-    end_date = start_date + timedelta(days=adjusted_days)
-    eprint(f"Building full dataset for {dataset} from {start_date.date()} to {end_date.date()}")
+    total_duration_hours = (end_date - start_date).total_seconds() / 3600
+    num_full_batches = int(total_duration_hours // HOURS_PER_BATCH)
+
+    adjusted_duration_hours = (num_full_batches * HOURS_PER_BATCH) - 1
+    end_date = start_date + timedelta(hours=adjusted_duration_hours)
+
+    # delta_days = (end_date - start_date).days
+    # batches = delta_days // DAYS_PER_BATCH  # Round down
+    # adjusted_days = batches * DAYS_PER_BATCH - 1
+    # end_date = start_date + timedelta(days=adjusted_days)
+    eprint(f"Building full dataset for {dataset} from {start_date.strftime('%Y-%m-%d:%H')} to {end_date.strftime('%Y-%m-%d:%H')}")
 
     # --- 1. Initialize Store with First 1200 Hours ---
-    initial_end_date = start_date + timedelta(days=DAYS_PER_BATCH - 1)
+    # initial_end_date = start_date + timedelta(days=DAYS_PER_BATCH - 1)
+    initial_end_date = start_date + timedelta(hours=HOURS_PER_BATCH - 1)
 
     initial_cid = await batch_processor(
         dataset=dataset, 

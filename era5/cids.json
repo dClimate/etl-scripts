@@ -1,0 +1,19 @@
+{
+  "era5": {
+    "2m_temperature": {
+      "finalized": "bafyr4icrox4pxashkfmbyztn7jhp6zjlpj3bufg5ggsjux74zr7ocnqdpu",
+      "non-finalized": "bafyr4ibj3bfl5oo7bf6gagzr2g33jlnf23mq2xo632mbl6ytfry7jbuepy",
+      "finalization_date": "2025-04-30T23:00:00Z"
+    },
+    "surface_pressure": {
+      "finalized": "null",
+      "non-finalized": "null",
+      "finalization_date": "null"
+    },
+    "total_precipitation": {
+      "finalized": "null",
+      "non-finalized": "null",
+      "finalization_date": "null"
+    }
+  }
+}

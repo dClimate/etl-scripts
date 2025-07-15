@@ -1,3 +1,4 @@
+# cli.py
 import json
 import os
 import sys
@@ -47,6 +48,7 @@ period_choice = click.Choice(period_options)
 @click.option(
     "--api-key", help="The CDS API key to use, as opposed to reading from ~/.cdsapirc."
 )
+@click.option("--finalization-only", type=bool, default=True, help="Only take finalization data")
 def append(
     dataset,
     cid: str,
@@ -54,6 +56,7 @@ def append(
     gateway_uri_stem: str,
     rpc_uri_stem: str,
     api_key: str | None,
+    finalization_only: bool,
 ):
     async def main():
         await append_latest( 
@@ -63,6 +66,7 @@ def append(
             gateway_uri_stem=gateway_uri_stem,
             rpc_uri_stem=rpc_uri_stem,
             api_key=api_key,
+            finalization_only=finalization_only,
         )
     
     asyncio.run(main())
@@ -106,12 +110,14 @@ def process_batch(
 @click.option("--rpc-uri-stem", help="Pass through to IPFSStore")
 @click.option("--api-key", help="The CDS API key to use, as opposed to reading from ~/.cdsapirc.")
 @click.option("--max-parallel-procs", type=int, default=1, help="Maximum number of batch processes to run in parallel.")
+@click.option("--finalization-only", type=bool, default=True, help="Only take finalization data")
 def build_dataset(
     dataset: str,
     gateway_uri_stem: str | None,
     rpc_uri_stem: str | None,
     api_key: str | None,
     max_parallel_procs: int,
+    finalization_only: bool,
 ):
     """
     Creates a new, chunk-aligned Zarr store on IPFS with the first 1200 hours (50 days) of ERA5 data,
@@ -124,6 +130,7 @@ def build_dataset(
         rpc_uri_stem=rpc_uri_stem,
         api_key=api_key,
         max_parallel_procs=max_parallel_procs,
+        finalization_only=finalization_only
     ))
 
 @click.group

@@ -1,3 +1,4 @@
+# verifier.py
 import asyncio
 import random
 from pathlib import Path
@@ -173,9 +174,8 @@ def load_grib_range(start_date: str, end_date: str, dataset_name: str, grib_dir:
     standardized xarray.Dataset.
     """
     eprint(f"⚙️ Finding GRIB files for range {start_date} to {end_date}...")
-    normalized_start_date = start_date.replace(day=1)
+    normalized_start_date = start_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     months_needed = pd.date_range(start=normalized_start_date, end=end_date, freq='MS')
-
 
     grib_files = []
     for dt in months_needed:
@@ -312,12 +312,11 @@ async def compare_datasets(cid: str, dataset_name: str, start_date, end_date, la
     by comparing all data points within the specified bounds.
     """
     # Adjust end_date to ensure it includes the last hour of the day
-    end_date_adj = pd.to_datetime(end_date).replace(hour=23, minute=0, second=0, microsecond=0)
 
     eprint("--- ERA5 Zarr Full Verification ---")
     eprint(f"CID: {cid}")
     eprint(f"Dataset: {dataset_name}")
-    eprint(f"Time range: {start_date} to {end_date_adj.strftime('%Y-%m-%d %H:%M:%S')}")
+    eprint(f"Time range: {start_date} to {end_date.strftime('%Y-%m-%d %H:%M:%S')}")
     eprint(f"Spatial bounds: Lat [{lat_min}, {lat_max}], Lon [{lon_min}, {lon_max}]\n")
 
     grib_dir: Path = scratchspace
@@ -330,7 +329,7 @@ async def compare_datasets(cid: str, dataset_name: str, start_date, end_date, la
             zarr_ds = xr.open_zarr(zarr_store)
 
             zarr_slice = zarr_ds.sel(
-                time=slice(start_date, end_date_adj),
+                time=slice(start_date, end_date),
                 latitude=slice(lat_min, lat_max),
                 longitude=slice(lon_min, lon_max)
             ).load()
@@ -342,11 +341,11 @@ async def compare_datasets(cid: str, dataset_name: str, start_date, end_date, la
 
             # 2. Load corresponding GRIB data for the entire range
             eprint("⏳ Loading source GRIB data for the entire range...")
-            grib_ds = load_grib_range(start_date, end_date_adj, dataset_name, grib_dir)
+            grib_ds = load_grib_range(start_date, end_date, dataset_name, grib_dir)
 
             # Select the exact same slice from the loaded GRIB data
             grib_slice = grib_ds.sel(
-                time=slice(start_date, end_date_adj),
+                time=slice(start_date, end_date),
                 latitude=slice(lat_min, lat_max),
                 longitude=slice(lon_min, lon_max)
             ).load()

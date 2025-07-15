@@ -1,3 +1,4 @@
+# validator.py
 import json
 import os
 import sys
@@ -23,8 +24,10 @@ import zarr.codecs
 from botocore.exceptions import ClientError as S3ClientError
 from multiformats import CID
 from py_hamt import ShardedZarrStore, KuboCAS
+from era5.downloader import get_gribs_for_date_range_async
 import asyncio
 from etl_scripts.grabbag import eprint, npdt_to_pydt
+from era5.standardizer import standardize
 
 async def validate_data(
     grib_paths: List[Path],
@@ -61,26 +64,22 @@ async def validate_data(
         raise ValueError(f"start_date ({start_date}) must be before end_date ({end_date})")
 
     # Ensure datetimes are normalized to midnight
-    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
-
     # Sort GRIB files by filename stem
     grib_paths.sort(key=lambda p: p.stem)
 
     # Open dataset
     ds = xr.open_mfdataset(grib_paths, engine='cfgrib', decode_timedelta=False)
 
+    ds = standardize(dataset, ds)
+
     # Create time slice (inclusive up to end_date 23:00:00)
-    slice_end_date = end_date.replace(hour=23, minute=0, second=0)
-    time_slice = slice(np.datetime64(start_date), np.datetime64(slice_end_date))
+    # slice_end_date = end_date.replace(hour=23, minute=0, second=0)
+    time_slice = slice(np.datetime64(start_date), np.datetime64(end_date))
     ds = ds.sel(time=time_slice)
 
-
-    # Calculate expected hours
-    days_in_batch = (end_date - start_date).days + 1
-    expected_hours = days_in_batch * 24
+    time_delta = np.datetime64(end_date) - np.datetime64(start_date)
+    expected_hours = round(time_delta / np.timedelta64(1, 'h')) + 1
     actual_hours = ds.sizes.get('time', 0)
-
     # Validate data integrity
     if actual_hours != expected_hours:
         eprint(f"⚠️ Data integrity check failed. Expected {expected_hours} hours, found {actual_hours}.")
@@ -96,7 +95,6 @@ async def validate_data(
                 dataset=dataset,
                 start_date=start_date,
                 end_date=end_date,
-                s3_client=s3_client,
                 api_key=api_key,
                 force=True,
             )
