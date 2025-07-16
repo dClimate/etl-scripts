@@ -70,13 +70,6 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
     del ds.latitude.attrs["stored_direction"]  # normally says descending
     ds = ds.sortby("longitude", ascending=True)
 
-    # Results in about 1 MB sized chunks
-    # We chunk small in spatial, wide in time
-    ds = ds.chunk(chunking_settings)
-    ds.coords['time'].encoding['chunks'] = (time_chunk_size,)
-    print("After chunking:")
-    print(ds)
-
     for param in list(ds.attrs.keys()):
         del ds.attrs[param]
 

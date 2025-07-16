@@ -28,6 +28,7 @@ from era5.downloader import get_gribs_for_date_range_async
 import asyncio
 from etl_scripts.grabbag import eprint, npdt_to_pydt
 from era5.standardizer import standardize
+from era5.utils import chunking_settings, time_chunk_size
 
 async def validate_data(
     grib_paths: List[Path],
@@ -71,15 +72,39 @@ async def validate_data(
     ds = xr.open_mfdataset(grib_paths, engine='cfgrib', decode_timedelta=False)
 
     ds = standardize(dataset, ds)
+    eprint(ds)
 
     # Create time slice (inclusive up to end_date 23:00:00)
     # slice_end_date = end_date.replace(hour=23, minute=0, second=0)
     time_slice = slice(np.datetime64(start_date), np.datetime64(end_date))
     ds = ds.sel(time=time_slice)
 
+    ds = ds.chunk(chunking_settings)
+    ds.coords['time'].encoding['chunks'] = (time_chunk_size,)
+
+    eprint(ds)
+
     time_delta = np.datetime64(end_date) - np.datetime64(start_date)
     expected_hours = round(time_delta / np.timedelta64(1, 'h')) + 1
     actual_hours = ds.sizes.get('time', 0)
+    eprint(actual_hours)
+    eprint(expected_hours)
+    eprint(start_date)
+    eprint(end_date)
+
+    expected_time_chunk = chunking_settings['time']
+    time_dim_index = ds[dataset].dims.index('time')
+    actual_time_chunks = ds[dataset].chunks[time_dim_index]
+
+    if len(actual_time_chunks) != 1 or actual_time_chunks[0] != expected_time_chunk:
+        error_msg = (
+            f"Chunking validation failed for 'time' dimension. "
+            f"Expected one chunk of size {expected_time_chunk}, but found chunks: {actual_time_chunks}."
+        )
+        eprint(f"⚠️ {error_msg}")
+        raise RuntimeError(error_msg)
+
+
     # Validate data integrity
     if actual_hours != expected_hours:
         eprint(f"⚠️ Data integrity check failed. Expected {expected_hours} hours, found {actual_hours}.")

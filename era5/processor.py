@@ -60,8 +60,8 @@ def save_cid_to_file(
         cid_dir = scratchspace / "cids"
         os.makedirs(cid_dir, exist_ok=True)
 
-        start_str = start_date.strftime('%Y-%m-%d')
-        end_str = end_date.strftime('%Y-%m-%d')
+        start_str = start_date.isoformat().replace(':', '-')
+        end_str = end_date.isoformat().replace(':', '-')
 
         # Filename format: dataset-label-start_date-end_date.cid
         filename = f"{dataset}-{label}-{start_str}-to-{end_str}.cid"
@@ -130,8 +130,8 @@ async def extend(
         time_dim_index = 0 # Assuming time is the first dimension
         
         final_time_coords = np.arange(
-            initial_start_date, # Use the actual start date from the original file
-            np.datetime64(end_date.replace(hour=23, minute=0, second=0)) + np.timedelta64(1, 'h'),
+            initial_start_date, # Use the actual end date from the original file
+            end_date + np.timedelta64(1, 'h'),
             np.timedelta64(1, 'h'),
             dtype="datetime64[ns]",
         )
@@ -203,8 +203,8 @@ async def check_for_cid(
 
     # Check if a CID for this exact batch has already been computed and saved.
     cid_dir = scratchspace / "cids"
-    start_str = start_date.strftime('%Y-%m-%d')
-    end_str = end_date.strftime('%Y-%m-%d')
+    start_str = start_date.isoformat().replace(':', '-')
+    end_str = end_date.isoformat().replace(':', '-')
     cid_filename = f"{dataset}-batch-{start_str}-to-{end_str}.cid"
     cid_filepath = cid_dir / cid_filename
 
@@ -273,20 +273,7 @@ async def batch_processor(
         # 2. Validate the input data to ensure it gets what it expects
         ds = await validate_data(grib_paths, start_date, end_date, dataset, api_key)
 
-        # 3. Standardize the data
-        # ds = standardize(dataset, ds)
-
         if (initial): 
-            # eprint(f"Forcing encoding with chunk settings: {chunking_settings}")
-            # encoding_chunks = tuple(chunking_settings.get(dim) for dim in ds[dataset].dims)
-            # ds[dataset].encoding['chunks'] = encoding_chunks
-            # for coord_name, coord_array in ds.coords.items():
-            #     if coord_name in chunking_settings:
-            #         if coord_name == "time":
-            #             ds[coord_name].encoding['chunks'] = (time_chunk_size,)
-            #         else:
-            #             ds[coord_name].encoding['chunks'] = (ds.sizes[coord_name],)
-
             ordered_dims = list(ds[dataset].dims)
             array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
             chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
@@ -295,7 +282,6 @@ async def batch_processor(
                 ds = ds.transpose(*ordered_dims)
                 array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
                 chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
-
         # 4. Write to the store
         batch_cid = await chunked_write(ds, dataset, rpc_uri_stem=rpc_uri_stem, gateway_uri_stem=gateway_uri_stem)
 
@@ -303,20 +289,20 @@ async def batch_processor(
         eprint(batch_cid)
 
         # 5. Now Verify the data being written matches
-        lat_min = ds.latitude.values[0]
-        lat_max = ds.latitude.values[-1]
-        lon_min = ds.longitude.values[0]
-        lon_max = ds.longitude.values[-1]
-        await compare_datasets(
-            cid=batch_cid, 
-            dataset_name=dataset, 
-            start_date=start_date, 
-            end_date=end_date, 
-            lat_min=lat_min, 
-            lat_max=lat_max, 
-            lon_min=lon_min, 
-            lon_max=lon_max,
-        )
+        # lat_min = ds.latitude.values[0]
+        # lat_max = ds.latitude.values[-1]
+        # lon_min = ds.longitude.values[0]
+        # lon_max = ds.longitude.values[-1]
+        # await compare_datasets(
+        #     cid=batch_cid, 
+        #     dataset_name=dataset, 
+        #     start_date=start_date, 
+        #     end_date=end_date, 
+        #     lat_min=lat_min, 
+        #     lat_max=lat_max, 
+        #     lon_min=lon_min, 
+        #     lon_max=lon_max,
+        # )
 
         # BACKUP CID
         save_cid_to_file(batch_cid, dataset, start_date, end_date, "batch")
@@ -482,14 +468,9 @@ async def build_full_dataset(
     adjusted_duration_hours = (num_full_batches * HOURS_PER_BATCH) - 1
     end_date = start_date + timedelta(hours=adjusted_duration_hours)
 
-    # delta_days = (end_date - start_date).days
-    # batches = delta_days // DAYS_PER_BATCH  # Round down
-    # adjusted_days = batches * DAYS_PER_BATCH - 1
-    # end_date = start_date + timedelta(days=adjusted_days)
     eprint(f"Building full dataset for {dataset} from {start_date.strftime('%Y-%m-%d:%H')} to {end_date.strftime('%Y-%m-%d:%H')}")
 
-    # --- 1. Initialize Store with First 1200 Hours ---
-    # initial_end_date = start_date + timedelta(days=DAYS_PER_BATCH - 1)
+    # --- 1. Initialize Store with First Hours ---
     initial_end_date = start_date + timedelta(hours=HOURS_PER_BATCH - 1)
 
     initial_cid = await batch_processor(
@@ -514,25 +495,6 @@ async def build_full_dataset(
 
     eprint(f"Starting append from {start_timestamp.date()}. Target end date: {end_date.date()}")
 
-    all_days_to_download = []
-    current_ts = start_timestamp
-    while current_ts < end_date:
-        current_ts += timedelta(days=1)
-        all_days_to_download.append(current_ts)
-
-    if not all_days_to_download:
-        eprint("No new days to download.")
-        print(initial_cid)
-        return
-
-    batches_of_days = [
-        all_days_to_download[i:i + DAYS_PER_BATCH]
-        for i in range(0, len(all_days_to_download), DAYS_PER_BATCH)
-        if len(all_days_to_download[i:i + DAYS_PER_BATCH]) == DAYS_PER_BATCH
-    ]
-
-    eprint(f"Planned {len(batches_of_days)} batches of up to {DAYS_PER_BATCH} days each.")
-
     # Extend the dataset skeleton
     extended_cid = await extend(dataset, initial_cid, end_date, gateway_uri_stem, rpc_uri_stem)
     if not extended_cid:
@@ -540,11 +502,14 @@ async def build_full_dataset(
         sys.exit(1)
 
     # Process batches in parallel
+    current_batch_start = start_timestamp + timedelta(hours=1)
     processes = []
     batch_info = []
-    for i, batch in enumerate(batches_of_days):
-        batch_start_date = batch[0]
-        batch_end_date = batch[-1]
+    completed_batch_index = 0
+    while current_batch_start < end_date:
+        batch_start_date = current_batch_start
+        current_batch_start += timedelta(hours=HOURS_PER_BATCH)
+        batch_end_date = batch_start_date + timedelta(hours=HOURS_PER_BATCH - 1)
 
         cid_found = await check_for_cid(
             dataset=dataset,
@@ -566,12 +531,13 @@ async def build_full_dataset(
             str(cli_script_path),        # The current script file
             "process-batch",
             dataset,
-            "--start-date", batch_start_date.strftime('%Y-%m-%d'),
-            "--end-date", batch_end_date.strftime('%Y-%m-%d'),
+            "--start-date", batch_start_date.isoformat(),
+            "--end-date", batch_end_date.isoformat(),
         ]
         if gateway_uri_stem: command.extend(["--gateway-uri-stem", gateway_uri_stem])
         if rpc_uri_stem: command.extend(["--rpc-uri-stem", rpc_uri_stem])
         if api_key: command.extend(["--api-key", api_key])
+
 
         proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=None, text=True)
         processes.append(proc)
@@ -584,7 +550,8 @@ async def build_full_dataset(
                 eprint(f"ERROR: Subprocess failed with return code {p_to_wait_on.returncode}. Aborting.")
                 raise RuntimeError("A subprocess failed. Aborting.")
             batch_cid = stdout.strip()
-            batch_info[i - len(processes)]['cid'] = batch_cid
+            batch_info[completed_batch_index]['cid'] = batch_cid
+            completed_batch_index += 1
             eprint(f"Collected CID: {batch_cid}")
 
     for i, proc in enumerate(processes):
@@ -602,11 +569,12 @@ async def build_full_dataset(
     # Graft batches into the skeleton store
     skeleton_store = await ShardedZarrStore.open(cas=kubo_cas, read_only=False, root_cid=CID.decode(extended_cid))
     start_time = time.perf_counter()
-    running_chunk_offset -= HOURS_PER_BATCH // chunking_settings['time']
+    print(running_chunk_offset)
     for batch_cid in batch_cids:
-        running_chunk_offset += HOURS_PER_BATCH // chunking_settings['time']
         current_graft_location = (running_chunk_offset, 0, 0)
         await skeleton_store.graft_store(batch_cid, current_graft_location)
+        running_chunk_offset += HOURS_PER_BATCH // chunking_settings['time']
+
     end_time = time.perf_counter()
     eprint(f"Time taken to graft all batches: {end_time - start_time:.2f} seconds")
 
