@@ -656,6 +656,18 @@ wheels = [
 ]
 
 [[package]]
+name = "ecmwf-opendata"
+version = "0.3.22"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "multiurl" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bd/9b/556cb2c5260ec468b28564fa2dc66d195fa33d8e4b18277ae7f7c02b22b9/ecmwf_opendata-0.3.22.tar.gz", hash = "sha256:480628068dddeefb6774d9576f2cce8d9dff491dcde4832d8e6777b8b8f3549f", size = 26645, upload-time = "2025-07-08T08:32:32.935Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d6/01/217d82406175418d177e00ad1bc8c121985b80e43318837633a56f0745a8/ecmwf_opendata-0.3.22-py3-none-any.whl", hash = "sha256:0da32e28ece7349c81c1cfac59d228e172bea9c61b6e0f6bb45d98e2d2d64bf2", size = 20433, upload-time = "2025-07-08T08:32:31.16Z" },
+]
+
+[[package]]
 name = "etl-scripts"
 version = "0.1.0"
 source = { editable = "." }
@@ -665,6 +677,7 @@ dependencies = [
     { name = "cdsapi" },
     { name = "cfgrib" },
     { name = "click" },
+    { name = "ecmwf-opendata" },
     { name = "numcodecs" },
     { name = "py-hamt" },
     { name = "rasterio" },
@@ -686,6 +699,7 @@ requires-dist = [
     { name = "cdsapi", specifier = ">=0.7.5" },
     { name = "cfgrib", specifier = ">=0.9.15.0" },
     { name = "click", specifier = ">=8.1.7" },
+    { name = "ecmwf-opendata", specifier = ">=0.3.22" },
     { name = "numcodecs", specifier = "==0.15.1" },
     { name = "py-hamt", git = "https://github.com/dclimate/py-hamt?rev=964496bb1e5b45869823419c8b5aa6a89cd2f8f6" },
     { name = "rasterio", specifier = ">=1.4.3" },

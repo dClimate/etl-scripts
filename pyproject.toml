@@ -20,6 +20,7 @@ dependencies = [
     "xarray[io,parallel,viz]>=2025.3.0",
     "zarr==3.0.8",
     "rasterio>=1.4.3",
+    "ecmwf-opendata>=0.3.22",
 ]
 
 # numcodecs, dask, pandas, numpy, and multiformats are imports in various files, but not in pyproject.toml dependencies, since they are required by xarray, so we just use the existing compatible versions that are installed when xarray is installed
