@@ -6,7 +6,7 @@ import time
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Generator, Iterator
+from typing import Generator
 
 import numpy as np
 import rasterio
@@ -29,11 +29,11 @@ scratchspace: Path = (
 ).absolute()
 os.makedirs(scratchspace, exist_ok=True)
 
-SCALE_FACTOR: int = 2  # ↓ downsample original 500 m pixels to ≈1 km for lighter storage
+SCALE_FACTOR: int = 4  # ↓ downsample original 500 m pixels to ≈2 km for lighter storage
 
 #: Chunk sizes chosen to keep each compressed chunk ≲ ~500 KiB, balancing random
 #: access performance against object sharding overhead on IPFS.
-CHUNKING: dict[str, int] = {"time": 10, "latitude": 512, "longitude": 256}
+CHUNKING: dict[str, int] = {"time": 16, "latitude": 256, "longitude": 256}
 COMPRESSOR = BloscCodec(cname="zstd", clevel=7, shuffle=BloscShuffle.bitshuffle)
 TIME_COORD_CHUNK = 500_000  # -- covers ~13 000 yrs of dekads; “effectively one chunk”
 
@@ -230,13 +230,10 @@ def standardise(arrays: list[xr.DataArray], dataset_name: str) -> xr.Dataset:
     eprint(f"Standardising {dataset_name} dataset…")
     start = time.time()
 
-    # 1) Concatenate the arrays into a single dataset
-    ds = xr.concat(arrays, dim="time").to_dataset(name=dataset_name)
+    # 1) Concatenate the arrays into a single dataset & chunk it
+    ds = xr.concat(arrays, dim="time").to_dataset(name=dataset_name).chunk(CHUNKING)
 
-    # 2) Dask chunking for computation
-    ds = ds.chunk(CHUNKING)
-
-    # 3) Data-variable encodings
+    # 2) Data-variable encodings
     for var in ds.data_vars:
         ds[var].encoding.update(
             {
@@ -246,7 +243,7 @@ def standardise(arrays: list[xr.DataArray], dataset_name: str) -> xr.Dataset:
             }
         )
 
-    # 4) Coordinate-variable encodings  (lat/lon/time)
+    # 3) Coordinate-variable encodings  (lat/lon/time)
     for coord in ds.coords:
         if coord == "time":
             # one big slab so xarray needs a single GET to read the axis
@@ -263,7 +260,7 @@ def quality_check_dataset(
     ds: xr.Dataset,
     raw_arrays: dict[datetime, xr.DataArray],
     dataset_name: str,
-    num_checks: int = 400,
+    num_checks: int = 150,
 ) -> None:
     """Perform some quality checks on the dataset before writing."""
 

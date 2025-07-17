@@ -35,6 +35,7 @@ import dask
 import numpy as np
 import requests
 import xarray as xr
+from dask.diagnostics.progress import ProgressBar
 from multiformats import CID
 from utils import (
     CHUNKING,
@@ -157,7 +158,10 @@ async def instantiate(
             start = time.time()
             eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
             mode_kwargs = {"mode": "w"} if i == 0 else {"append_dim": "time"}
-            ds.to_zarr(store=store, zarr_format=3, **mode_kwargs)
+
+            with ProgressBar():
+                ds.to_zarr(store=store, zarr_format=3, **mode_kwargs)
+
             eprint(
                 f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s"
             )
@@ -230,7 +234,10 @@ async def append(
 
             start = time.time()
             eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
-            ds.to_zarr(store=store, zarr_format=3, append_dim="time")
+
+            with ProgressBar():
+                ds.to_zarr(store=store, zarr_format=3, append_dim="time")
+
             eprint(
                 f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s"
             )
