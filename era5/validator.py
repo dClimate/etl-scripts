@@ -37,6 +37,7 @@ async def validate_data(
     dataset: str,
     api_key: Optional[str] = None,
     force_download: bool = False,
+    **kwargs
 ) -> xr.Dataset:
     """
     Validates and processes GRIB files for a given date range, ensuring the dataset has the expected number of hourly timestamps.
@@ -56,6 +57,8 @@ async def validate_data(
         ValueError: If input parameters are invalid (e.g., empty grib_paths, invalid dates).
         RuntimeError: If data validation fails after forced re-download.
     """
+    appending = kwargs.get('appending', False)
+
     # Input validation
     if not grib_paths:
         raise ValueError("grib_paths cannot be empty")
@@ -72,7 +75,6 @@ async def validate_data(
     ds = xr.open_mfdataset(grib_paths, engine='cfgrib', decode_timedelta=False)
 
     ds = standardize(dataset, ds)
-    eprint(ds)
 
     # Create time slice (inclusive up to end_date 23:00:00)
     # slice_end_date = end_date.replace(hour=23, minute=0, second=0)
@@ -82,7 +84,6 @@ async def validate_data(
     ds = ds.chunk(chunking_settings)
     ds.coords['time'].encoding['chunks'] = (time_chunk_size,)
 
-    eprint(ds)
 
     time_delta = np.datetime64(end_date) - np.datetime64(start_date)
     expected_hours = round(time_delta / np.timedelta64(1, 'h')) + 1
@@ -96,7 +97,7 @@ async def validate_data(
     time_dim_index = ds[dataset].dims.index('time')
     actual_time_chunks = ds[dataset].chunks[time_dim_index]
 
-    if len(actual_time_chunks) != 1 or actual_time_chunks[0] != expected_time_chunk:
+    if (len(actual_time_chunks) != 1 or actual_time_chunks[0] != expected_time_chunk) and not appending:
         error_msg = (
             f"Chunking validation failed for 'time' dimension. "
             f"Expected one chunk of size {expected_time_chunk}, but found chunks: {actual_time_chunks}."

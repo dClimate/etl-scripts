@@ -45,6 +45,10 @@ start_dates = {
     "total_precipitation": datetime(1940, 1, 1, 7, 0, 0),  # First data is from 1940-01-02
 }
 
+era5_env: dict[str, str]
+with open(Path(__file__).parent / "era5-env.json") as f:
+    era5_env = json.load(f)
+
 CHUNKER = "size-1048576"
 chunking_settings = {"time": 5000, "latitude": 6, "longitude": 8}
 time_chunk_size = 500000
@@ -64,6 +68,8 @@ def get_latest_timestamp(dataset: str, api_key: str | None = None) -> datetime:
             "data_format": "grib",
             "download_format": "unarchived",
         }
+        if api_key is None:
+            api_key = era5_env["CDS_API_KEY"]
         if api_key is None:
             client = cdsapi.Client(quiet=True)
         else:

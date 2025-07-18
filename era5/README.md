@@ -50,7 +50,7 @@ The command-line interface (CLI) provides several commands for processing the ER
 
 To build a new dataset from scratch, use the `build-dataset` command. This command will download the data for the specified dataset, process it, and create a new IPFS Zarr store.
 
-Validation is buggy so you need to include your apikey. Build dataset is a very long running process. It may take several hours.
+Validation is buggy so you need to include your apikey or include in the env as CDS_API_KEY Build dataset is a very long running process. It may take several hours.
 It will also only return the last full chunked possible end date. This means you will gave to call the append command to finish it.
 
 Finalizition only will only process finalized data from era5.

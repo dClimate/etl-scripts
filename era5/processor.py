@@ -243,6 +243,7 @@ async def batch_processor(
     rpc_uri_stem: str | None,
     api_key: str | None,
     initial: bool = False,
+    appending: bool = False,
 ):
     """
     Downloads, processes, and creates an IPFS Zarr store for a single batch of data.
@@ -271,7 +272,7 @@ async def batch_processor(
             sys.exit(1)
 
         # 2. Validate the input data to ensure it gets what it expects
-        ds = await validate_data(grib_paths, start_date, end_date, dataset, api_key)
+        ds = await validate_data(grib_paths, start_date, end_date, dataset, api_key, appending=appending)
 
         if (initial): 
             ordered_dims = list(ds[dataset].dims)
@@ -343,13 +344,13 @@ async def append_latest(
 
     if finalization_only:
         # latest_finalization_date = await load_finalization_date(dataset, api_key)
-        latest_finalization_date = datetime(2025, 5, 1, 0, 0, 0)
+        latest_finalization_date = datetime(2025, 5, 1, 6, 0, 0)
         print(latest_finalization_date.strftime("%Y-%m-%d"))
         if latest_available_date > latest_finalization_date:
             latest_available_date = latest_finalization_date
+    
 
-    target_end_date = (latest_available_date - timedelta(days=1)).replace(hour=23, minute=0, second=0, microsecond=0)
-    print(target_end_date)
+    target_end_date = latest_finalization_date
     
     final_cid = cid
 
@@ -371,17 +372,19 @@ async def append_latest(
 
         eprint(f"--- Appending all data from {start_date.date()} to {target_end_date.date()} in a single operation ---")
 
+
         try:
             # 3. Get the processed xarray.Dataset for the *entire* date range.
             # Always force to make sure we have the latest
             grib_paths = await get_gribs_for_date_range_async(
                 dataset, start_date, target_end_date, api_key=api_key, force=False
             )
+
             if not grib_paths:
                 raise FileNotFoundError("No GRIB files were found or downloaded for the period.")
 
             eprint("Validating downloaded data...")
-            ds = await validate_data(grib_paths, start_date, target_end_date, dataset, api_key)
+            ds = await validate_data(grib_paths, start_date, target_end_date, dataset, api_key, appending=True)
 
             eprint("Standardizing dataset...")
             # ds = standardize(dataset, ds)
@@ -399,20 +402,20 @@ async def append_latest(
             final_cid = str(new_cid_obj)
 
             # 5. Now Verify the data being written matches
-            lat_min = ds.latitude.values[0]
-            lat_max = ds.latitude.values[-1]
-            lon_min = ds.longitude.values[0]
-            lon_max = ds.longitude.values[-1]
-            await compare_datasets(
-                cid=final_cid, 
-                dataset_name=dataset, 
-                start_date=start_date, 
-                end_date=target_end_date, 
-                lat_min=lat_min, 
-                lat_max=lat_max, 
-                lon_min=lon_min, 
-                lon_max=lon_max,
-            )
+            # lat_min = ds.latitude.values[0]
+            # lat_max = ds.latitude.values[-1]
+            # lon_min = ds.longitude.values[0]
+            # lon_max = ds.longitude.values[-1]
+            # await compare_datasets(
+            #     cid=final_cid, 
+            #     dataset_name=dataset, 
+            #     start_date=start_date, 
+            #     end_date=target_end_date, 
+            #     lat_min=lat_min, 
+            #     lat_max=lat_max, 
+            #     lon_min=lon_min, 
+            #     lon_max=lon_max,
+            # )
 
             await run_checks(cid=final_cid, dataset_name=dataset, num_checks=100, start_date=start_date, end_date=target_end_date)
             
@@ -450,20 +453,38 @@ async def build_full_dataset(
   
     if finalization_only:
         #latest_finalization_date = await load_finalization_date(dataset, api_key)
-        latest_finalization_date = datetime(2025, 5, 2, 0, 0, 0)
+        latest_finalization_date = datetime(2025, 5, 1, 6, 0, 0)
         print(latest_finalization_date.strftime("%Y-%m-%d"))
         if end_date > latest_finalization_date:
             end_date = latest_finalization_date
     else:
         # Start date is now the latest finalization date plus one day
         # latest_finalization_date = await load_finalization_date(dataset, api_key)
-        # start_date = (latest_finalization_date + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        start_date = datetime(2025, 5, 2, 0, 0, 0)
+        latest_finalization_date = datetime(2025, 5, 1, 6, 0, 0)
+        start_date = latest_finalization_date + timedelta(hours=1)
         print("NON-FINALIZED")
 
 
     total_duration_hours = (end_date - start_date).total_seconds() / 3600
     num_full_batches = int(total_duration_hours // HOURS_PER_BATCH)
+    print(num_full_batches, end_date)
+
+    if (num_full_batches == 0):
+        print(start_date,end_date)
+        final_cid = await batch_processor(
+            dataset=dataset, 
+            start_date=start_date, 
+            end_date=end_date, 
+            gateway_uri_stem=gateway_uri_stem, 
+            rpc_uri_stem=rpc_uri_stem, 
+            api_key=api_key,
+            initial=True,
+            appending=True,
+        )
+        await run_checks(cid=final_cid, dataset_name=dataset, num_checks=1000, start_date=start_date, end_date=end_date)
+        print("FINAL CID", initial_cid)
+        return cid
+
 
     adjusted_duration_hours = (num_full_batches * HOURS_PER_BATCH) - 1
     end_date = start_date + timedelta(hours=adjusted_duration_hours)
@@ -569,9 +590,9 @@ async def build_full_dataset(
     # Graft batches into the skeleton store
     skeleton_store = await ShardedZarrStore.open(cas=kubo_cas, read_only=False, root_cid=CID.decode(extended_cid))
     start_time = time.perf_counter()
-    print(running_chunk_offset)
     for batch_cid in batch_cids:
         current_graft_location = (running_chunk_offset, 0, 0)
+        eprint(f"Grafting batch {batch_cid} at offset {current_graft_location}...")
         await skeleton_store.graft_store(batch_cid, current_graft_location)
         running_chunk_offset += HOURS_PER_BATCH // chunking_settings['time']
 

@@ -30,27 +30,17 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
         case _:
             raise ValueError(f"Invalid dataset value {dataset}")
 
-
-    if "valid_time" in ds.coords and len(ds.valid_time.dims) == 2:
-
+    if "time" in ds.dims and "step" in ds.dims:
         ds_stack = ds.stack(throwaway=("time", "step"))
         ds_linear = ds_stack.swap_dims({"throwaway": "valid_time"})
         ds = ds_linear.drop_vars(["throwaway"])
+        ds = ds.groupby("valid_time").first(skipna=True)
 
-        # eprint("Processing multi-dimensional valid_time...")
-        # ds_stack = ds.stack(throwaway=("time", "step"))
-        # ds_linear = ds_stack.rename({"throwaway": "valid_time"})  # Rename stacked dim to valid_time
-        # ds = ds_linear.drop_vars(["throwaway"], errors="ignore")
-        ds = ds.sortby('valid_time')
-        
-        _, index = np.unique(ds['valid_time'], return_index=True)
-        ds = ds.isel(valid_time=index)
 
-        eprint("After handling multi-dimensional valid_time:")
-        eprint(ds.dims)
-        eprint(ds.coords)
-
-    ds = ds.drop_vars(["number", "step", "surface", "time"])
+    # for loop to try and drop number, step, surface, time
+    for var in ["number", "step", "surface", "time"]:
+        if var in ds:
+            ds = ds.drop_vars(var, errors="ignore")
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=UserWarning, message="rename 'valid_time' to 'time'")
         # UserWarning: rename 'valid_time' to 'time' does not create an index anymore. Try using swap_dims instead or use set_index after rename to create an indexed coordinate.
@@ -86,7 +76,7 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
         # fill value should be float NaN
         da.encoding["_FillValue"] = np.nan
 
-    if list(ds.dims) != ["time", "latitude", "longitude"]:
-        ds = ds.transpose('time', 'latitude', 'longitude')
+    # if list(ds.dims) != ["time", "latitude", "longitude"]:
+    ds = ds.transpose('time', 'latitude', 'longitude')
 
     return ds

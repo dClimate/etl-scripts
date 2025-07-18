@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import eccodes
 from datetime import datetime, timedelta
 from math import ceil
 from pathlib import Path
@@ -46,18 +47,53 @@ r2 = boto3.client(
     aws_secret_access_key=era5_env["AWS_SECRET_ACCESS_KEY"],
 )
 
-def check_finalized(path: Path):
-    """Checks if an ERA5 GRIB data file has finalized data. Assumes there is only one data variable inside the GRIB file, which is the case usually for ERA5. Writes true if finalized, false if preliminary."""
-    # assume path exist due to click argument verification
+def check_finalized(path: Path) -> bool:
+    """
+    Robustly checks a GRIB file for finalized and preliminary data by iterating
+    through every message using the low-level eccodes library.
 
-    ds = xr.open_dataset(path, backend_kwargs={"read_keys": ["expver"]})
+    This avoids the interpretation issues seen with xarray/cfgrib on certain files.
 
+    Parameters
+    ----------
+    path
+        A Path object pointing to the GRIB file.
 
-    is_finalized: bool = False
-    for v in ds.data_vars:
-        is_finalized = int(ds[v].GRIB_expver) == 1
+    Returns
+    -------
+    A dictionary indicating the presence of finalized (ERA5) and 
+    preliminary (ERA5T) data.
+    """
+    unique_expvers = set()
 
-    return is_finalized
+    try:
+        # Open the GRIB file in binary read mode
+        with open(path, 'rb') as f:
+            # Loop while there are still messages in the file
+            while True:
+                # Get a handle to the next GRIB message
+                gid = eccodes.codes_grib_new_from_file(f)
+                if gid is None:
+                    break  # End of file
+
+                try:
+                    # Get the value of the 'expver' key from the message
+                    expver = eccodes.codes_get(gid, 'expver')
+                    unique_expvers.add(expver)
+                finally:
+                    # Always release the message handle
+                    eccodes.codes_release(gid)
+
+    except eccodes.ECCodesError as e:
+        print(f"An ECCodes error occurred: {e}")
+        raise
+    if "0005" in unique_expvers:
+        # The file contains preliminary data.
+        return False
+    else:
+        print(path, True)
+        # The file contains no preliminary data.
+        return True
 
 async def is_file_on_r2(key: str, r2_client) -> bool:
     """Asynchronously checks if a file exists in the R2 bucket."""
@@ -290,6 +326,8 @@ async def download_grib_async(
     
     # Instantiate CDS API client
     client_args = {"quiet": True}
+    if not api_key:
+        api_key = era5_env["CDS_API_KEY"]
     if api_key:
         client_args['url'] = "https://cds.climate.copernicus.eu/api"
         client_args['key'] = api_key
@@ -381,6 +419,8 @@ async def load_finalization_date(dataset, cdsapi_key):
         ],
         "format": "netcdf",
     }
+    if not cdsapi_key:
+        cdsapi_key = era5_env["CDS_API_KEY"]
     client_args = {"quiet": True}
     client_args['url'] = "https://cds.climate.copernicus.eu/api"
     client_args['key'] = cdsapi_key
@@ -418,5 +458,4 @@ async def load_finalization_date(dataset, cdsapi_key):
             f"No finalized data detected in {path}, even though *expver* dimension is present"
         )
     inclusive_date = npdt_to_pydt(previous_time)
-    exclusive_date = (inclusive_date + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    return exclusive_date
+    return inclusive_date

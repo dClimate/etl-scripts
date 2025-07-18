@@ -18,12 +18,6 @@ from era5.utils import CHUNKER, dataset_names, chunking_settings, time_chunk_siz
 
 scratchspace: Path = (Path(__file__).parent.parent / "scratchspace" / "era5").absolute()
 
-# --- Global Cache for GRIB files ---
-# This is a performance optimization. It avoids reloading the same monthly GRIB file
-# from disk over and over again. The key will be the file path, the value will be the
-# loaded xarray.Dataset object.
-GRIB_CACHE = {}
-
 async def check_zeros_at_location(
     cid: str,
     dataset_name: str,
@@ -147,10 +141,6 @@ def find_and_load_grib(timestamp: np.datetime64, dataset_name: str, grib_dir: Pa
     grib_filename = f"{dataset_name}-{dt_object.strftime('%Y%m')}.grib"
     grib_filepath = grib_dir / grib_filename
 
-    # Check the cache first
-    if grib_filepath in GRIB_CACHE:
-        return GRIB_CACHE[grib_filepath]
-
     # If not in cache, check if the file exists on disk
     if not grib_filepath.exists():
         eprint(f"⚠️ WARNING: Source GRIB file not found: {grib_filepath}", file=sys.stderr)
@@ -161,8 +151,6 @@ def find_and_load_grib(timestamp: np.datetime64, dataset_name: str, grib_dir: Pa
         grib_ds = xr.open_dataset(grib_filepath, engine='cfgrib', decode_timedelta=False)
         standardized_grib_ds = standardize(dataset_name, grib_ds)
         
-        # Store the loaded and processed dataset in the cache
-        GRIB_CACHE[grib_filepath] = standardized_grib_ds
         return standardized_grib_ds
     except Exception as e:
         eprint(f"❌ ERROR: Could not load or process GRIB file {grib_filepath}: {e}", file=sys.stderr)
@@ -192,7 +180,7 @@ def load_grib_range(start_date: str, end_date: str, dataset_name: str, grib_dir:
         raise FileNotFoundError("Could not find any source GRIB files for the specified date range.")
 
     eprint(f"   --> Found {len(grib_files)} files. Loading with xr.open_mfdataset...")
-    grib_ds = xr.open_mfdataset(grib_files, engine='cfgrib', decode_timedelta=False, combine='by_coords')
+    grib_ds = xr.open_mfdataset(grib_files, engine='cfgrib', decode_timedelta=False)
 
     # Standardize the entire combined dataset once
     return standardize(dataset_name, grib_ds)
@@ -275,8 +263,8 @@ async def run_checks(cid: str, dataset_name: str, num_checks: int, start_date, e
 
                 if np.equal(zarr_value, grib_value):
                     match_count += 1
-                    if (match_count % 5 == 0):
-                        eprint(f"{match_count} Points Match")
+                    if (match_count % 1 == 0):
+                        eprint(f"✅ {match_count} Points Match")
                 else:
                     difference = zarr_value - grib_value
                     error_message = (
@@ -294,7 +282,7 @@ async def run_checks(cid: str, dataset_name: str, num_checks: int, start_date, e
                         f"\n"
                         f"------------------------------------------------------------------"
                     )
-                    print("ERROR FOUND")
+                    print("ERROR FOUND", error_message)
                     
                     # Raise an exception to halt execution
                     # raise ValueError(error_message)
@@ -328,28 +316,31 @@ async def compare_datasets(cid: str, dataset_name: str, start_date, end_date, la
             zarr_store = await ShardedZarrStore.open(cas=cas, read_only=True, root_cid=cid)
             zarr_ds = xr.open_zarr(zarr_store)
 
-            zarr_slice = zarr_ds.sel(
-                time=slice(start_date, end_date),
-                latitude=slice(lat_min, lat_max),
-                longitude=slice(lon_min, lon_max)
-            ).load()
-
-            eprint("✅ Zarr data slice loaded successfully.")
-            if zarr_slice.nbytes == 0:
-                 eprint(f"❌ FATAL: Zarr slice is empty for the specified bounds.")
-                 sys.exit(1)
-
-            # 2. Load corresponding GRIB data for the entire range
-            eprint("⏳ Loading source GRIB data for the entire range...")
+            is_single_point = (start_date == end_date) and (lat_min == lat_max) and (lon_min == lon_max)
             grib_ds = load_grib_range(start_date, end_date, dataset_name, grib_dir)
 
-            # Select the exact same slice from the loaded GRIB data
-            grib_slice = grib_ds.sel(
-                time=slice(start_date, end_date),
-                latitude=slice(lat_min, lat_max),
-                longitude=slice(lon_min, lon_max)
-            ).load()
-            eprint("✅ GRIB data slice loaded successfully.\n")
+            if is_single_point:
+                eprint(f"Single point verification at Lat: {lat_min}, Lon: {lon_min}, Date: {start_date}")
+                zarr_slice = zarr_ds.sel(time=start_date, latitude=lat_min, longitude=lon_min, method='nearest').load()
+                grib_slice = grib_ds.sel(time=start_date, latitude=lat_min, longitude=lon_min, method='nearest').load()
+            else:
+                eprint("Loading Zarr data slice for the specified bounds...")
+                zarr_slice = zarr_ds.sel(
+                    time=slice(start_date, end_date),
+                    latitude=slice(lat_min, lat_max),
+                    longitude=slice(lon_min, lon_max),
+                ).load()
+                eprint("✅ Zarr data slice loaded successfully.")
+                if zarr_slice.nbytes == 0:
+                    eprint(f"❌ FATAL: Zarr slice is empty for the specified bounds.")
+                    sys.exit(1)
+                eprint("⏳ Loading source GRIB data for the entire range...")
+                grib_slice = grib_ds.sel(
+                    time=slice(start_date, end_date),
+                    latitude=slice(lat_min, lat_max),
+                    longitude=slice(lon_min, lon_max),
+                ).load()
+                eprint("✅ GRIB data slice loaded successfully.")
 
             # 3. Compare the two data arrays
             eprint("⏳ Comparing Zarr and GRIB data arrays...")
