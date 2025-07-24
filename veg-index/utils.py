@@ -33,7 +33,7 @@ SCALE_FACTOR: int = 4  # ↓ downsample original 500 m pixels to ≈2 km for
 
 #: Chunk sizes chosen to keep each compressed chunk ≲ ~500 KiB, balancing random
 #: access performance against object sharding overhead on IPFS.
-CHUNKING: dict[str, int] = {"time": 16, "latitude": 256, "longitude": 256}
+CHUNKING: dict[str, int] = {"time": 32, "latitude": 128, "longitude": 128}
 COMPRESSOR = BloscCodec(cname="zstd", clevel=7, shuffle=BloscShuffle.bitshuffle)
 TIME_COORD_CHUNK = 500_000  # -- covers ~13 000 yrs of dekads; “effectively one chunk”
 
