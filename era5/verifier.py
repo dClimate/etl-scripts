@@ -16,7 +16,7 @@ from era5.standardizer import standardize
 from etl_scripts.grabbag import eprint, npdt_to_pydt
 from era5.utils import CHUNKER, dataset_names, chunking_settings, time_chunk_size
 
-scratchspace: Path = (Path(__file__).parent/ "scratchspace").absolute()
+scratchspace: Path = (Path(__file__).parent / "scratchspace").absolute()
 
 async def check_zeros_at_location(
     cid: str,
@@ -307,7 +307,7 @@ async def compare_datasets(cid: str, dataset_name: str, start_date, end_date, la
     eprint(f"Time range: {start_date} to {end_date.strftime('%Y-%m-%d %H:%M:%S')}")
     eprint(f"Spatial bounds: Lat [{lat_min}, {lat_max}], Lon [{lon_min}, {lon_max}]\n")
 
-    grib_dir: Path = scratchspace
+    grib_dir: Path = scratchspace / dataset_name
 
     async with KuboCAS() as cas:
         try:
@@ -315,7 +315,6 @@ async def compare_datasets(cid: str, dataset_name: str, start_date, end_date, la
             eprint("⏳ Loading Zarr dataset from IPFS...")
             zarr_store = await ShardedZarrStore.open(cas=cas, read_only=True, root_cid=cid)
             zarr_ds = xr.open_zarr(zarr_store)
-
             is_single_point = (start_date == end_date) and (lat_min == lat_max) and (lon_min == lon_max)
             grib_ds = load_grib_range(start_date, end_date, dataset_name, grib_dir)
 

@@ -35,7 +35,7 @@ from era5.verifier import compare_datasets, run_checks
 from era5.utils import CHUNKER, dataset_names, chunking_settings, time_chunk_size, start_dates
 
 
-scratchspace: Path = (Path(__file__).parent/ "scratchspace").absolute()
+scratchspace: Path = (Path(__file__).parent / "scratchspace").absolute()
 os.makedirs(scratchspace, exist_ok=True)
 
 era5_env: dict[str, str]
@@ -79,12 +79,12 @@ async def chunked_write(ds: xr.Dataset, variable_name: str, rpc_uri_stem, gatewa
     async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem, chunker=CHUNKER) as kubo_cas:
         # Note: I've modified it slightly to accept an existing KuboCAS instance
         #       and return the CID as a string for easier use.
-        ordered_dims = list(ds[variable_name].sizes)
+        ordered_dims = list(ds[variable_name].dims)
         array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
         chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
         if ordered_dims[0] != 'time':
             ds = ds.transpose('time', 'latitude', 'longitude', ...)
-            ordered_dims = list(ds[variable_name].sizes)
+            ordered_dims = list(ds[variable_name].dims)
             array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
             chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
 
@@ -282,7 +282,7 @@ async def batch_processor(
         ds = await validate_data(grib_paths, start_date, end_date, dataset, api_key, appending=appending)
 
         if (initial): 
-            ordered_dims = list(ds[dataset].sizes)
+            ordered_dims = list(ds[dataset].dims)
             array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
             chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
             if ordered_dims != ["time", "latitude", "longitude"]:
@@ -290,6 +290,7 @@ async def batch_processor(
                 ds = ds.transpose(*ordered_dims)
                 array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
                 chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
+
         # 4. Write to the store
         batch_cid = await chunked_write(ds, dataset, rpc_uri_stem=rpc_uri_stem, gateway_uri_stem=gateway_uri_stem)
 
@@ -402,7 +403,7 @@ async def append_latest(
             ds_main = xr.open_zarr(main_store)
             # If the size is less than 5000 we need to concate together
 
-            if (ds_main.sizes["time"] < chunking_settings["time"]):
+            if (ds_main.dims["time"] < chunking_settings["time"]):
                 eprint("Rechunking dataset...")
                 old_chunked_ds = xr.concat([ds_main, ds], dim="time")
                 del old_chunked_ds[dataset].encoding['chunks']
@@ -471,6 +472,7 @@ async def build_full_dataset(
     start_date = start_dates[dataset] if dataset in start_dates else datetime(1940, 1, 1, 0, 0, 0)
     end_date = get_latest_timestamp(dataset, api_key=api_key)
   
+  
     if finalization_only:
         latest_finalization_date = await load_finalization_date(dataset, api_key)
         # latest_finalization_date = datetime(2025, 4, 30, 23, 0, 0)
@@ -481,12 +483,12 @@ async def build_full_dataset(
         # Start date is now the latest finalization date plus one day
         latest_finalization_date = await load_finalization_date(dataset, api_key)
         # latest_finalization_date = datetime(2025, 4, 30, 23, 0, 0)
+        print(latest_finalization_date.strftime("%Y-%m-%d-%H"))
         start_date = latest_finalization_date + timedelta(hours=1)
 
 
     total_duration_hours = (end_date - start_date).total_seconds() / 3600
     num_full_batches = int(total_duration_hours // HOURS_PER_BATCH)
-
     if (num_full_batches == 0):
 
         # end_date = datetime(2025, 5, 19, 7, 0, 0)

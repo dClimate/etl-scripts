@@ -14,7 +14,7 @@ from etl_scripts.grabbag import eprint
 
 # Define the path to your central CID tracking file
 CIDS_FILE = Path(__file__).parent / "cids.json"
-scratchspace: Path = (Path(__file__).parent/ "scratchspace").absolute()
+scratchspace: Path = (Path(__file__).parent / "scratchspace").absolute()
 
 
 async def update_dataset(dataset, cid, finalization_only):

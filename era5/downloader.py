@@ -33,7 +33,7 @@ from etl_scripts.grabbag import eprint, npdt_to_pydt
 
 from era5.utils import CHUNKER, dataset_names, chunking_settings, time_chunk_size
 
-scratchspace: Path = (Path(__file__).parent/ "scratchspace").absolute()
+scratchspace: Path = (Path(__file__).parent / "scratchspace").absolute()
 os.makedirs(scratchspace, exist_ok=True)
 
 era5_env: dict[str, str]
@@ -155,6 +155,7 @@ def make_grib_filepath(dataset: str, timestamp: datetime, period: str) -> Path:
         raise ValueError(f"Invalid period {period}")
 
     path: Path = scratchspace / dataset
+    os.makedirs(path, exist_ok=True)
     match period:
         case "hour":
             # ISO8601 compatible filename, don't use the variant with dashes and colons since mac filesystem turns colons into backslashes
