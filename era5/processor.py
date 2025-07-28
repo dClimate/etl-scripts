@@ -318,13 +318,6 @@ async def batch_processor(
 
         eprint(f"--- Batch process finished successfully for {start_date.date()} to {end_date.date()} ---")
         
-        #eprint("Cleaning up GRIB files...")
-        # for path in grib_paths:
-            #     try:
-            #         os.remove(path)
-            #     except OSError as e:
-            #         eprint(f"Warning: Could not remove GRIB file {path}: {e}")
-        
         return batch_cid
     except Exception as e:
         eprint(f"ERROR: An error occurred during Zarr creation/upload: {e}")
@@ -441,6 +434,12 @@ async def append_latest(
 
                 await run_checks(cid=final_cid, dataset_name=dataset, num_checks=100, start_date=start_date, end_date=target_end_date)
             
+            for path in grib_paths:
+                try:
+                    os.remove(path)
+                except OSError as e:
+                    eprint(f"Warning: Could not remove GRIB file {path}: {e}")
+
         except Exception as e:
             eprint(f"❌ ERROR: Failed to process or append data. Error: {e}")
             sys.exit(1)

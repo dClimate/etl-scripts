@@ -120,17 +120,6 @@ async def orchestrator():
         with open(CIDS_FILE, 'w') as f:
             json.dump(updated_cids, f, indent=2)
 
-        # Delete all files from scratchspace that were used in this run
-        # File names follor dataset_YYYYMM and end with .grib or .grib.<extension>
-        # for file in scratchspace.glob(f"{dataset}_*.grib*"):
-        #     try:
-        #         file.unlink()
-        #         eprint(f"   Deleted scratchspace file: {file.name}")
-        #     except FileNotFoundError:
-        #         eprint(f"   File not found for deletion: {file.name}")
-        #     except Exception as e:
-        #         eprint(f"   Error deleting file {file.name}: {e}")
-
 
     # After checking all datasets, write the changes back to the file if any
     if has_updates:
