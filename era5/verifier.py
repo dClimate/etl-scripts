@@ -16,7 +16,7 @@ from era5.standardizer import standardize
 from etl_scripts.grabbag import eprint, npdt_to_pydt
 from era5.utils import CHUNKER, dataset_names, chunking_settings, time_chunk_size
 
-scratchspace: Path = (Path(__file__).parent.parent / "scratchspace" / "era5").absolute()
+scratchspace: Path = (Path(__file__).parent/ "scratchspace").absolute()
 
 async def check_zeros_at_location(
     cid: str,
@@ -205,7 +205,7 @@ async def run_checks(cid: str, dataset_name: str, num_checks: int, start_date, e
     eprint(f"Time range: {start_date or 'All'} to {end_date or 'All'}")
     # eprint(f"Spatial bounds: Lat [{lat_min}, {lat_max}], Lon [{lon_min}, {lon_max}]\n")
 
-    grib_dir: Path = scratchspace
+    grib_dir: Path = scratchspace / dataset_name
 
     match_count = 0
     mismatch_count = 0
@@ -263,7 +263,7 @@ async def run_checks(cid: str, dataset_name: str, num_checks: int, start_date, e
 
                 if np.equal(zarr_value, grib_value):
                     match_count += 1
-                    if (match_count % 1 == 0):
+                    if (match_count % 10 == 0):
                         eprint(f"✅ {match_count} Points Match")
                 else:
                     difference = zarr_value - grib_value

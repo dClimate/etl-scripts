@@ -35,7 +35,7 @@ from era5.verifier import compare_datasets, run_checks
 from era5.utils import CHUNKER, dataset_names, chunking_settings, time_chunk_size, start_dates
 
 
-scratchspace: Path = (Path(__file__).parent.parent / "scratchspace" / "era5").absolute()
+scratchspace: Path = (Path(__file__).parent/ "scratchspace").absolute()
 os.makedirs(scratchspace, exist_ok=True)
 
 era5_env: dict[str, str]
@@ -57,7 +57,7 @@ def save_cid_to_file(
 ):
     """Saves a given CID to a text file in the scratchspace/era5/cids directory."""
     try:
-        cid_dir = scratchspace / "cids"
+        cid_dir = scratchspace / dataset / "cids"
         os.makedirs(cid_dir, exist_ok=True)
 
         start_str = start_date.isoformat().replace(':', '-')
@@ -79,12 +79,12 @@ async def chunked_write(ds: xr.Dataset, variable_name: str, rpc_uri_stem, gatewa
     async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem, chunker=CHUNKER) as kubo_cas:
         # Note: I've modified it slightly to accept an existing KuboCAS instance
         #       and return the CID as a string for easier use.
-        ordered_dims = list(ds[variable_name].dims)
+        ordered_dims = list(ds[variable_name].sizes)
         array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
         chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
         if ordered_dims[0] != 'time':
             ds = ds.transpose('time', 'latitude', 'longitude', ...)
-            ordered_dims = list(ds[variable_name].dims)
+            ordered_dims = list(ds[variable_name].sizes)
             array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
             chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
 
@@ -95,8 +95,15 @@ async def chunked_write(ds: xr.Dataset, variable_name: str, rpc_uri_stem, gatewa
             chunks_per_shard=6250,
             read_only=False,
         )
+
+        encoding_options = {
+            'time': {
+                'dtype': 'float64',
+                'units': 'seconds since 1970-01-01'
+            }
+        }
     
-        ds.to_zarr(store=store_write, mode="w")
+        ds.to_zarr(store=store_write, mode="w", encoding=encoding_options)
         root_cid = await store_write.flush()
         return str(root_cid)
 
@@ -202,7 +209,7 @@ async def check_for_cid(
 ):
 
     # Check if a CID for this exact batch has already been computed and saved.
-    cid_dir = scratchspace / "cids"
+    cid_dir = scratchspace / dataset / "cids"
     start_str = start_date.isoformat().replace(':', '-')
     end_str = end_date.isoformat().replace(':', '-')
     cid_filename = f"{dataset}-batch-{start_str}-to-{end_str}.cid"
@@ -275,7 +282,7 @@ async def batch_processor(
         ds = await validate_data(grib_paths, start_date, end_date, dataset, api_key, appending=appending)
 
         if (initial): 
-            ordered_dims = list(ds[dataset].dims)
+            ordered_dims = list(ds[dataset].sizes)
             array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
             chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
             if ordered_dims != ["time", "latitude", "longitude"]:
@@ -338,19 +345,21 @@ async def append_latest(
     
     # 1. Determine the full date range for the append operation.
     if end_date is None:
+        # latest_available_date = datetime(2025, 7, 19, 7, 0, 0)
         latest_available_date = get_latest_timestamp(dataset, api_key=api_key)
     else:
         latest_available_date = end_date
 
     if finalization_only:
-        # latest_finalization_date = await load_finalization_date(dataset, api_key)
-        latest_finalization_date = datetime(2025, 5, 1, 6, 0, 0)
+        latest_finalization_date = await load_finalization_date(dataset, api_key)
+        # latest_finalization_date = datetime(2025, 4, 30, 23, 0, 0)
         print(latest_finalization_date.strftime("%Y-%m-%d"))
         if latest_available_date > latest_finalization_date:
             latest_available_date = latest_finalization_date
+        latest_available_date = latest_finalization_date
     
 
-    target_end_date = latest_finalization_date
+    target_end_date = latest_available_date
     
     final_cid = cid
 
@@ -387,44 +396,55 @@ async def append_latest(
             ds = await validate_data(grib_paths, start_date, target_end_date, dataset, api_key, appending=True)
 
             eprint("Standardizing dataset...")
-            # ds = standardize(dataset, ds)
 
             # 4. Open the main Zarr store for writing.
             main_store = await ShardedZarrStore.open(cas=kubo_cas, read_only=False, root_cid=cid)
-            
-            # 5. Append all the new data in one call.
-            eprint("Appending data to the Zarr store...")
-            ds.to_zarr(main_store, mode='a', append_dim="time")
-            
-            # 6. Flush the store to commit changes and get the final CID.
-            eprint("Flushing store to get new root CID...")
-            new_cid_obj = await main_store.flush()
-            final_cid = str(new_cid_obj)
+            ds_main = xr.open_zarr(main_store)
+            # If the size is less than 5000 we need to concate together
 
-            # 5. Now Verify the data being written matches
-            # lat_min = ds.latitude.values[0]
-            # lat_max = ds.latitude.values[-1]
-            # lon_min = ds.longitude.values[0]
-            # lon_max = ds.longitude.values[-1]
-            # await compare_datasets(
-            #     cid=final_cid, 
-            #     dataset_name=dataset, 
-            #     start_date=start_date, 
-            #     end_date=target_end_date, 
-            #     lat_min=lat_min, 
-            #     lat_max=lat_max, 
-            #     lon_min=lon_min, 
-            #     lon_max=lon_max,
-            # )
+            if (ds_main.sizes["time"] < chunking_settings["time"]):
+                eprint("Rechunking dataset...")
+                old_chunked_ds = xr.concat([ds_main, ds], dim="time")
+                del old_chunked_ds[dataset].encoding['chunks']
+                # Rechunk the dataset to the desired chunking settings
+                ds_main_rechunked = old_chunked_ds.chunk(chunking_settings)
+                # Write the rechunked dataset back to the store
+                final_cid = await chunked_write(ds_main_rechunked, dataset, rpc_uri_stem=rpc_uri_stem, gateway_uri_stem=gateway_uri_stem)
+                await run_checks(cid=final_cid, dataset_name=dataset, num_checks=100, start_date=start_date, end_date=target_end_date)
+                
+            else:
+                # 5. Append all the new data in one call.
+                eprint("Appending data to the Zarr store...")
+                ds.to_zarr(main_store, mode='a', append_dim="time")
+                
+                # 6. Flush the store to commit changes and get the final CID.
+                eprint("Flushing store to get new root CID...")
+                new_cid_obj = await main_store.flush()
 
-            await run_checks(cid=final_cid, dataset_name=dataset, num_checks=100, start_date=start_date, end_date=target_end_date)
+                final_cid = str(new_cid_obj)
+                # 5. Now Verify the data being written matches
+                # lat_min = ds.latitude.values[0]
+                # lat_max = ds.latitude.values[-1]
+                # lon_min = ds.longitude.values[0]
+                # lon_max = ds.longitude.values[-1]
+                # await compare_datasets(
+                #     cid=final_cid, 
+                #     dataset_name=dataset, 
+                #     start_date=start_date, 
+                #     end_date=target_end_date, 
+                #     lat_min=lat_min, 
+                #     lat_max=lat_max, 
+                #     lon_min=lon_min, 
+                #     lon_max=lon_max,
+                # )
+
+                await run_checks(cid=final_cid, dataset_name=dataset, num_checks=100, start_date=start_date, end_date=target_end_date)
             
         except Exception as e:
             eprint(f"❌ ERROR: Failed to process or append data. Error: {e}")
             sys.exit(1)
     
     eprint(f"\n✅ Append operation complete! Final CID: {final_cid}")
-    print(final_cid)
     
     save_cid_to_file(final_cid, dataset, start_date, target_end_date, "append-direct")
 
@@ -452,25 +472,24 @@ async def build_full_dataset(
     end_date = get_latest_timestamp(dataset, api_key=api_key)
   
     if finalization_only:
-        #latest_finalization_date = await load_finalization_date(dataset, api_key)
-        latest_finalization_date = datetime(2025, 5, 1, 6, 0, 0)
-        print(latest_finalization_date.strftime("%Y-%m-%d"))
+        latest_finalization_date = await load_finalization_date(dataset, api_key)
+        # latest_finalization_date = datetime(2025, 4, 30, 23, 0, 0)
+        print(latest_finalization_date.strftime("%Y-%m-%d-%H"))
         if end_date > latest_finalization_date:
             end_date = latest_finalization_date
     else:
         # Start date is now the latest finalization date plus one day
-        # latest_finalization_date = await load_finalization_date(dataset, api_key)
-        latest_finalization_date = datetime(2025, 5, 1, 6, 0, 0)
+        latest_finalization_date = await load_finalization_date(dataset, api_key)
+        # latest_finalization_date = datetime(2025, 4, 30, 23, 0, 0)
         start_date = latest_finalization_date + timedelta(hours=1)
-        print("NON-FINALIZED")
 
 
     total_duration_hours = (end_date - start_date).total_seconds() / 3600
     num_full_batches = int(total_duration_hours // HOURS_PER_BATCH)
-    print(num_full_batches, end_date)
 
     if (num_full_batches == 0):
-        print(start_date,end_date)
+
+        # end_date = datetime(2025, 5, 19, 7, 0, 0)
         final_cid = await batch_processor(
             dataset=dataset, 
             start_date=start_date, 
@@ -482,8 +501,8 @@ async def build_full_dataset(
             appending=True,
         )
         await run_checks(cid=final_cid, dataset_name=dataset, num_checks=1000, start_date=start_date, end_date=end_date)
-        print("FINAL CID", initial_cid)
-        return cid
+        print("FINAL CID", final_cid)
+        return final_cid
 
 
     adjusted_duration_hours = (num_full_batches * HOURS_PER_BATCH) - 1

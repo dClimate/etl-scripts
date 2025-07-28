@@ -1,19 +1,22 @@
 {
   "era5": {
     "2m_temperature": {
-      "finalized": "bafyr4icrox4pxashkfmbyztn7jhp6zjlpj3bufg5ggsjux74zr7ocnqdpu",
-      "non-finalized": "bafyr4ibj3bfl5oo7bf6gagzr2g33jlnf23mq2xo632mbl6ytfry7jbuepy",
-      "finalization_date": "2025-04-30T23:00:00Z"
+      "finalized": "bafyr4iacuutc5bgmirkfyzn4igi2wys7e42kkn674hx3c4dv4wrgjp2k2u",
+      "non-finalized": "bafyr4ihicmzx4uw4pefk7idba3mz5r5g27au3l7d62yj4gguxx6neaa5ti",
+      "finalization_date": "2025-04-30T23:00:00Z",
+      "finalization_date_checked": "2025-07-25"
     },
     "surface_pressure": {
       "finalized": "null",
       "non-finalized": "null",
-      "finalization_date": "null"
+      "finalization_date": "null",
+      "finalization_date_checked": "null"
     },
     "total_precipitation": {
-      "finalized": "null",
-      "non-finalized": "null",
-      "finalization_date": "null"
+      "finalized": "bafyr4icium3zr6dyewfzkcwpnsb77nmxeblaomdk3kz3f2wz2rqq3i2yfi",
+      "non-finalized": "bafyr4ifh3khz7f2mj6subudsbri7wfbna7s2iw5inn2wvbhkgms7k6n6ly",
+      "finalization_date": "null",
+      "finalization_date_checked": "null"
     }
   }
 }

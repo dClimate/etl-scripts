@@ -33,7 +33,7 @@ from etl_scripts.grabbag import eprint, npdt_to_pydt
 
 from era5.utils import CHUNKER, dataset_names, chunking_settings, time_chunk_size
 
-scratchspace: Path = (Path(__file__).parent.parent / "scratchspace" / "era5").absolute()
+scratchspace: Path = (Path(__file__).parent/ "scratchspace").absolute()
 os.makedirs(scratchspace, exist_ok=True)
 
 era5_env: dict[str, str]
@@ -154,7 +154,7 @@ def make_grib_filepath(dataset: str, timestamp: datetime, period: str) -> Path:
     if period not in period_options:
         raise ValueError(f"Invalid period {period}")
 
-    path: Path = scratchspace
+    path: Path = scratchspace / dataset
     match period:
         case "hour":
             # ISO8601 compatible filename, don't use the variant with dashes and colons since mac filesystem turns colons into backslashes
@@ -358,7 +358,7 @@ def save_cid_to_file(
 ):
     """Saves a given CID to a text file in the scratchspace/era5/cids directory."""
     try:
-        cid_dir = scratchspace / "cids"
+        cid_dir = scratchspace / dataset / "cids"
         os.makedirs(cid_dir, exist_ok=True)
 
         start_str = start_date.strftime('%Y-%m-%d')
