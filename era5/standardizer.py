@@ -30,7 +30,7 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
         case _:
             raise ValueError(f"Invalid dataset value {dataset}")
 
-    if "time" in ds.dims and "step" in ds.dims:
+    if "time" in ds.sizes and "step" in ds.sizes:
         ds_stack = ds.stack(throwaway=("time", "step"))
         ds_linear = ds_stack.swap_dims({"throwaway": "valid_time"})
         ds = ds_linear.drop_vars(["throwaway"])
@@ -76,7 +76,7 @@ def standardize(dataset: str, ds: xr.Dataset) -> xr.Dataset:
         # fill value should be float NaN
         da.encoding["_FillValue"] = np.nan
 
-    # if list(ds.dims) != ["time", "latitude", "longitude"]:
+    # if list(ds.sizes) != ["time", "latitude", "longitude"]:
     ds = ds.transpose('time', 'latitude', 'longitude')
 
     return ds

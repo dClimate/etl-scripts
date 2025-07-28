@@ -56,7 +56,7 @@ async def check_zeros_at_location(
             zarr_ds = xr.open_zarr(zarr_store, chunks='auto')  # Enable dask for parallel loading
             elapsed = time.time() - start_time
             eprint(f"✅ Zarr dataset loaded successfully in {elapsed:.2f} seconds.")
-            eprint(f"   Dimensions: {zarr_ds.dims}")
+            eprint(f"   Dimensions: {zarr_ds.sizes}")
 
             # Filter time coordinates
             time_coords = zarr_ds.time.values
@@ -219,7 +219,7 @@ async def run_checks(cid: str, dataset_name: str, num_checks: int, start_date, e
             zarr_store = await ShardedZarrStore.open(cas=cas, read_only=True, root_cid=cid)
             zarr_ds = xr.open_zarr(zarr_store)
             eprint("✅ Zarr dataset loaded successfully.")
-            eprint(f"   Dimensions: {zarr_ds.dims}\n")
+            eprint(f"   Dimensions: {zarr_ds.sizes}\n")
 
             # Filter coordinates based on input options
             time_coords = zarr_ds.time.values
@@ -429,7 +429,7 @@ def debug_xarray_differences(da1: xr.DataArray, da2: xr.DataArray, name1="L", na
         if nan_mismatch_count > 0:
             eprint(f"  - Found {nan_mismatch_count} locations with NaN mismatches.")
             # Find the first example of a NaN mismatch
-            example_coords = nan_mismatch_mask.where(nan_mismatch_mask, drop=True).isel({dim: 0 for dim in nan_mismatch_mask.dims}).coords
+            example_coords = nan_mismatch_mask.where(nan_mismatch_mask, drop=True).isel({dim: 0 for dim in nan_mismatch_mask.sizes}).coords
             val1 = da1.sel(example_coords).item()
             val2 = da2.sel(example_coords).item()
             eprint(f"    - Example at {dict(example_coords)}:")
@@ -443,7 +443,7 @@ def debug_xarray_differences(da1: xr.DataArray, da2: xr.DataArray, name1="L", na
             eprint(f"    - Maximum absolute difference: {max_diff:.10f}")
             
             # Find location of the largest difference
-            max_diff_coords = diff.where(diff == max_diff, drop=True).isel({dim: 0 for dim in diff.dims}).coords
+            max_diff_coords = diff.where(diff == max_diff, drop=True).isel({dim: 0 for dim in diff.sizes}).coords
             val1 = da1.sel(max_diff_coords).item()
             val2 = da2.sel(max_diff_coords).item()
             eprint(f"    - Location of max difference: {dict(max_diff_coords)}")

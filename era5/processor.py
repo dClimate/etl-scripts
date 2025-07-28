@@ -79,12 +79,12 @@ async def chunked_write(ds: xr.Dataset, variable_name: str, rpc_uri_stem, gatewa
     async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem, chunker=CHUNKER) as kubo_cas:
         # Note: I've modified it slightly to accept an existing KuboCAS instance
         #       and return the CID as a string for easier use.
-        ordered_dims = list(ds[variable_name].dims)
+        ordered_dims = list(ds[variable_name].sizes)
         array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
         chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
         if ordered_dims[0] != 'time':
             ds = ds.transpose('time', 'latitude', 'longitude', ...)
-            ordered_dims = list(ds[variable_name].dims)
+            ordered_dims = list(ds[variable_name].sizes)
             array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
             chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
 
@@ -282,7 +282,7 @@ async def batch_processor(
         ds = await validate_data(grib_paths, start_date, end_date, dataset, api_key, appending=appending)
 
         if (initial): 
-            ordered_dims = list(ds[dataset].dims)
+            ordered_dims = list(ds[dataset].sizes)
             array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
             chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
             if ordered_dims != ["time", "latitude", "longitude"]:
@@ -396,7 +396,7 @@ async def append_latest(
             ds_main = xr.open_zarr(main_store)
             # If the size is less than 5000 we need to concate together
 
-            if (ds_main.dims["time"] < chunking_settings["time"]):
+            if (ds_main.sizes["time"] < chunking_settings["time"]):
                 eprint("Rechunking dataset...")
                 old_chunked_ds = xr.concat([ds_main, ds], dim="time")
                 del old_chunked_ds[dataset].encoding['chunks']

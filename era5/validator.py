@@ -88,13 +88,10 @@ async def validate_data(
     time_delta = np.datetime64(end_date) - np.datetime64(start_date)
     expected_hours = round(time_delta / np.timedelta64(1, 'h')) + 1
     actual_hours = ds.sizes.get('time', 0)
-    eprint(actual_hours)
-    eprint(expected_hours)
-    eprint(start_date)
-    eprint(end_date)
+    eprint(f"Expected {expected_hours} hours, found {actual_hours}. From {start_date} to {end_date}.")
 
     expected_time_chunk = chunking_settings['time']
-    time_dim_index = ds[dataset].dims.index('time')
+    time_dim_index = ds[dataset].sizes.index('time')
     actual_time_chunks = ds[dataset].chunks[time_dim_index]
 
     if (len(actual_time_chunks) != 1 or actual_time_chunks[0] != expected_time_chunk) and not appending:
