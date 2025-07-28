@@ -91,10 +91,9 @@ async def validate_data(
     eprint(f"Expected {expected_hours} hours, found {actual_hours}. From {start_date} to {end_date}.")
 
     expected_time_chunk = chunking_settings['time']
-    time_dim_index = ds[dataset].sizes.index('time')
-    actual_time_chunks = ds[dataset].chunks[time_dim_index]
+    actual_time_chunks = ds[dataset].sizes['time']
 
-    if (len(actual_time_chunks) != 1 or actual_time_chunks[0] != expected_time_chunk) and not appending:
+    if (actual_time_chunks != expected_time_chunk) and not appending:
         error_msg = (
             f"Chunking validation failed for 'time' dimension. "
             f"Expected one chunk of size {expected_time_chunk}, but found chunks: {actual_time_chunks}."
