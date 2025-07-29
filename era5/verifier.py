@@ -143,7 +143,7 @@ def find_and_load_grib(timestamp: np.datetime64, dataset_name: str, grib_dir: Pa
 
     # If not in cache, check if the file exists on disk
     if not grib_filepath.exists():
-        eprint(f"⚠️ WARNING: Source GRIB file not found: {grib_filepath}", file=sys.stderr)
+        eprint(f"⚠️ WARNING: Source GRIB file not found: {grib_filepath}")
         return None
 
     # Load the GRIB file and standardize it
@@ -153,7 +153,7 @@ def find_and_load_grib(timestamp: np.datetime64, dataset_name: str, grib_dir: Pa
         
         return standardized_grib_ds
     except Exception as e:
-        eprint(f"❌ ERROR: Could not load or process GRIB file {grib_filepath}: {e}", file=sys.stderr)
+        eprint(f"❌ ERROR: Could not load or process GRIB file {grib_filepath}: {e}")
         return None
 
 def load_grib_range(start_date: str, end_date: str, dataset_name: str, grib_dir: Path) -> xr.Dataset:
@@ -228,14 +228,14 @@ async def run_checks(cid: str, dataset_name: str, num_checks: int, start_date, e
             if end_date:
                 time_coords = time_coords[time_coords <= np.datetime64(end_date)]
             if len(time_coords) == 0:
-                eprint(f"❌ FATAL: No time coordinates available in the specified range {start_date} to {end_date}", file=sys.stderr)
+                eprint(f"❌ FATAL: No time coordinates available in the specified range {start_date} to {end_date}")
                 sys.exit(1)
 
             lat_coords = zarr_ds.latitude.values
             lon_coords = zarr_ds.longitude.values
 
         except Exception as e:
-            eprint(f"❌ FATAL: Could not load Zarr dataset from CID {cid}. Error: {e}", file=sys.stderr)
+            eprint(f"❌ FATAL: Could not load Zarr dataset from CID {cid}. Error: {e}")
             sys.exit(1)
         
         for i in range(num_checks):

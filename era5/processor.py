@@ -12,6 +12,7 @@ import itertools
 import dask.array as da
 import subprocess
 import warnings
+import glob
 
 import aioboto3
 import boto3
@@ -339,8 +340,8 @@ async def append_latest(
     
     # 1. Determine the full date range for the append operation.
     if end_date is None:
-        # latest_available_date = datetime(2025, 7, 19, 7, 0, 0)
         latest_available_date = get_latest_timestamp(dataset, api_key=api_key)
+        # latest_available_date = datetime(2025, 7, 24, 5, 0, 0)
     else:
         latest_available_date = end_date
 
@@ -351,6 +352,8 @@ async def append_latest(
         if latest_available_date > latest_finalization_date:
             latest_available_date = latest_finalization_date
         latest_available_date = latest_finalization_date
+
+    eprint(f"Latest available date: {latest_available_date}")
     
 
     target_end_date = latest_available_date
@@ -403,6 +406,7 @@ async def append_latest(
                 # Rechunk the dataset to the desired chunking settings
                 ds_main_rechunked = old_chunked_ds.chunk(chunking_settings)
                 # Write the rechunked dataset back to the store
+                eprint("Writing to ipfs")
                 final_cid = await chunked_write(ds_main_rechunked, dataset, rpc_uri_stem=rpc_uri_stem, gateway_uri_stem=gateway_uri_stem)
                 await run_checks(cid=final_cid, dataset_name=dataset, num_checks=100, start_date=start_date, end_date=target_end_date)
                 
@@ -437,6 +441,10 @@ async def append_latest(
             for path in grib_paths:
                 try:
                     os.remove(path)
+                    # Remove any idx files
+                    idx_path = f"{path}.*.idx"  # Pattern to match .idx files
+                    for idx_file in glob.glob(idx_path):
+                        os.remove(idx_file)
                 except OSError as e:
                     eprint(f"Warning: Could not remove GRIB file {path}: {e}")
 
