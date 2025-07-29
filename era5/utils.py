@@ -36,13 +36,14 @@ dataset_names = [
     "surface_pressure",
     "surface_solar_radiation_downwards",
     "total_precipitation",
-    "land-precip-total" # DOUBLE CHECK THIS
+    "land_total_precipitation" # DOUBLE CHECK THIS
     "era5_volumetric_soil_water_layer_3" # DOUBLE CHECK THIS
 ]
 
 start_dates = {
     "2m_temperature": datetime(1940, 1, 1),
     "total_precipitation": datetime(1940, 1, 1, 7, 0, 0),  # First data is from 1940-01-02
+    "land_total_precipitation": datetime(1950, 1, 1, 0, 0, 0),  # First data is from 1950-01-01
 }
 
 era5_env: dict[str, str]

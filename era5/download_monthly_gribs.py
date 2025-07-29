@@ -23,7 +23,7 @@ from botocore.exceptions import ClientError as S3ClientError
 
 # --- Basic Setup ---
 SCRATCHSPACE_BASE = Path(__file__).parent.resolve()
-scratchspace: Path = SCRATCHSPACE_BASE / "scratchspace" / "era5"
+scratchspace: Path = SCRATCHSPACE_BASE / "scratchspace"
 os.makedirs(scratchspace, exist_ok=True)
 
 # --- Environment and R2 Configuration ---
@@ -43,7 +43,7 @@ def eprint(*args, **kwargs):
 dataset_names = [
     "2m_temperature", "10m_u_component_of_wind", "10m_v_component_of_wind",
     "100m_u_component_of_wind", "100m_v_component_of_wind", "surface_pressure",
-    "surface_solar_radiation_downwards", "total_precipitation",
+    "surface_solar_radiation_downwards", "total_precipitation", "land_total_precipitation"
 ]
 datasets_choice = click.Choice(dataset_names)
 
@@ -55,7 +55,13 @@ def next_month(dt: datetime) -> datetime:
 
 def make_grib_filepath(dataset: str, timestamp: datetime) -> Path:
     """Creates a standardized filepath for a monthly GRIB file."""
-    return scratchspace / f"{dataset}-{timestamp.strftime('%Y%m')}.grib"
+    path: Path = scratchspace / dataset
+    os.makedirs(path, exist_ok=True)
+    # if dataset is land then its a zip
+    file_end = "grib"
+    if dataset.startswith("land_"):
+        file_end = "zip"
+    return path / f"{dataset}-{timestamp.strftime('%Y%m')}.{file_end}"
 
 async def is_file_on_r2(key: str, r2_client) -> bool:
     """Asynchronously checks if a file exists in the R2 bucket."""
@@ -82,7 +88,6 @@ async def _upload_with_put_object(s3_client, filepath: Path, bucket: str, key: s
         eprint(f"☁️ Starting synchronous upload in thread: {key}...")
         try:
             # Create a brand new, standard boto3 client inside the thread.
-            # This client is truly synchronous and blocking.
             boto3_s3_client = boto3.client("s3", **s3_config)
             
             # This call will now BLOCK until the upload is complete, fails, or times out.
@@ -90,19 +95,14 @@ async def _upload_with_put_object(s3_client, filepath: Path, bucket: str, key: s
             
             eprint(f"✅ Finished synchronous upload in thread: {key}")
         except Exception as e:
-            # We can catch specific botocore exceptions if needed
             eprint(f"❌ Error during synchronous upload for {key}: {e}")
-            # Re-raise the exception so the main async task knows about the failure
             raise
 
     try:
         # Run the genuinely blocking upload function in asyncio's thread pool.
-        # This await will now correctly wait for the entire file transfer.
         await asyncio.to_thread(_sync_upload)
     except Exception as e:
-        # The exception from the thread is caught here.
         eprint(f"❌ Upload task for {key} failed.")
-        # Re-raise it to be caught by the main result processing loop
         raise
 
 
@@ -122,8 +122,6 @@ async def _download_from_r2_sync(bucket: str, key: str, filepath: Path):
             # Create a standard, blocking boto3 client inside the thread
             boto3_s3_client = boto3.client("s3", **s3_config)
             
-            # download_file is a high-level, managed transfer that is
-            # the most reliable way to download an object to a local file.
             boto3_s3_client.download_file(bucket, key, str(filepath))
             
             eprint(f"✅  [Thread] Finished synchronous download: {key}")
@@ -179,12 +177,25 @@ async def download_grib_month_async(
     num_days = (next_month_start - month_start).days
     day_request = [f"{i+1:02d}" for i in range(num_days)]
 
+    # Base request parameters common to all datasets
     request = {
-        "product_type": "reanalysis", "variable": dataset, "year": timestamp.strftime("%Y"),
-        "month": timestamp.strftime("%m"), "day": day_request, "time": [f"{h:02d}:00" for h in range(24)],
+        "year": timestamp.strftime("%Y"),
+        "month": timestamp.strftime("%m"),
+        "day": day_request,
+        "time": [f"{h:02d}:00" for h in range(24)],
         "format": "grib",
     }
     
+    # --- Select dataset and parameters based on variable ---
+    if dataset.startswith("land_"):
+        cds_dataset_name = "reanalysis-era5-land"
+        # For the API request, remove the "land_" prefix from the variable name
+        request["variable"] = dataset.removeprefix("land_")
+    else:
+        cds_dataset_name = "reanalysis-era5-single-levels"
+        request["variable"] = dataset
+        request["product_type"] = "reanalysis"
+
     client_args = {"quiet": True, "url": "https://cds.climate.copernicus.eu/api"}
     if api_key:
         client_args['key'] = api_key
@@ -192,7 +203,7 @@ async def download_grib_month_async(
     # Use standard asyncio.to_thread to run the blocking download
     def _sync_cds_download():
         client = cdsapi.Client(**client_args)
-        client.retrieve("reanalysis-era5-single-levels", request, str(download_filepath))
+        client.retrieve(cds_dataset_name, request, str(download_filepath))
 
     await asyncio.to_thread(_sync_cds_download)
     eprint(f"✅ Downloaded from Copernicus: {filename}")
