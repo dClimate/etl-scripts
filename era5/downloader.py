@@ -178,9 +178,13 @@ async def get_gribs_for_date_range_async(
     force: bool = False
 ) -> list[Path]:
     """
-    Determines the months required for a date range and ensures the monthly GRIB files
-    are downloaded locally, fetching from R2 or Copernicus as needed.
+    Determines the optimal download strategy (daily or monthly) based on the date range.
+    For short ranges (< 7 days), it downloads daily GRIB files. For longer ranges,
+    it fetches entire months to optimize for bulk data acquisition.
     """
+    # Calculate the time difference to determine the download strategy
+    time_difference = end_date - start_date
+    daily_download_threshold = timedelta(days=7)
 
     session = aioboto3.Session()
     async with session.client(
@@ -190,26 +194,46 @@ async def get_gribs_for_date_range_async(
         aws_secret_access_key=era5_env["AWS_SECRET_ACCESS_KEY"],
     ) as s3_client:
         try:
-            required_months: Set[datetime] = set()
-            current_month_start = start_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            
-            # Identify all unique months spanned by the date range
-            while current_month_start <= end_date:
-                required_months.add(current_month_start)
-                current_month_start = next_month(current_month_start)
+            grib_paths: list[Path]
 
-            eprint(f"Date range requires {len(required_months)} monthly GRIB files.")
-            
-            # Create concurrent download tasks for each required month
-            download_tasks = [
-                download_grib_async(dataset, month_ts, "month", s3_client, api_key=api_key, force=force)
-                for month_ts in required_months
-            ]
-            
-            # Await all downloads to complete
-            monthly_grib_paths = await asyncio.gather(*download_tasks)
-            
-            return monthly_grib_paths
+            # If the range is short, download by the day
+            if time_difference < daily_download_threshold:
+                eprint("💡 Date range is less than 7 days. Using daily download strategy.")
+                required_days: set[datetime] = set()
+                current_day = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+                # Identify all unique days spanned by the date range
+                while current_day <= end_date:
+                    required_days.add(current_day)
+                    current_day += timedelta(days=1)
+
+                eprint(f"Date range requires {len(required_days)} daily GRIB files.")
+                download_tasks = [
+                    download_grib_async(dataset, day_ts, "day", s3_client, api_key=api_key, force=force)
+                    for day_ts in required_days
+                ]
+                grib_paths = await asyncio.gather(*download_tasks)
+
+            # Otherwise, download by the month for efficiency with large date ranges
+            else:
+                eprint("💡 Date range is 7 days or more. Using monthly download strategy.")
+                required_months: set[datetime] = set()
+                current_month_start = start_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+                # Identify all unique months spanned by the date range
+                while current_month_start <= end_date:
+                    required_months.add(current_month_start)
+                    current_month_start = next_month(current_month_start)
+
+                eprint(f"Date range requires {len(required_months)} monthly GRIB files.")
+                download_tasks = [
+                    download_grib_async(dataset, month_ts, "month", s3_client, api_key=api_key, force=force)
+                    for month_ts in required_months
+                ]
+                grib_paths = await asyncio.gather(*download_tasks)
+
+            return grib_paths
+
         except Exception as e:
             eprint(f"ERROR: A download failed while fetching initial data: {e}")
             sys.exit(1)
@@ -316,14 +340,22 @@ async def download_grib_async(
             day_request = [(timestamp + timedelta(days=i)).strftime("%d") for i in range(delta)]
 
     request = {
-        "product_type": "reanalysis",
-        "variable": dataset,
         "year": timestamp.strftime("%Y"),
         "month": timestamp.strftime("%m"),
         "day": day_request,
-        "time": hour_request,
-        "format": "grib", # Use 'format' for CDS API, 'data_format' is for older APIs
+        "time": [f"{h:02d}:00" for h in range(24)],
+        "format": "grib",
     }
+
+     # --- Select dataset and parameters based on variable ---
+    if dataset.startswith("land_"):
+        cds_dataset_name = "reanalysis-era5-land"
+        # For the API request, remove the "land_" prefix from the variable name
+        request["variable"] = dataset.removeprefix("land_")
+    else:
+        cds_dataset_name = "reanalysis-era5-single-levels"
+        request["variable"] = dataset
+        request["product_type"] = "reanalysis"
     
     # Instantiate CDS API client
     client_args = {"quiet": True}
@@ -339,7 +371,7 @@ async def download_grib_async(
     # Run the blocking 'retrieve' call in a separate thread
     await asyncio.to_thread(
         client.retrieve,
-        "reanalysis-era5-single-levels",
+        cds_dataset_name,
         request,
         str(download_filepath)
     )
