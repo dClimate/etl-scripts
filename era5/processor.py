@@ -76,6 +76,37 @@ def save_cid_to_file(
     except Exception as e:
         eprint(f"⚠️ Warning: Could not save CID to file. Error: {e}")
 
+def cleanup_files(grib_paths: list[Path], dataset: str):
+    """
+    Cleans up GRIB and related files after processing to save disk space.
+    For land datasets, removes the extracted .grib files but keeps the .zip files.
+    For regular datasets, removes the .grib files.
+    Also removes any .idx files.
+    """
+    for path in grib_paths:
+        try:
+            # For land datasets, we want to delete the extracted .grib file
+            # but keep the original .zip file for caching
+            if dataset.startswith("land_"):
+                # The path returned is the .grib file, delete it
+                if path.suffix == ".grib":
+                    eprint(f"Removing extracted GRIB file: {path}")
+                    os.remove(path)
+                # Keep the .zip file for caching
+            else:
+                # For regular datasets, remove the .grib file
+                eprint(f"Removing GRIB file: {path}")
+                os.remove(path)
+            
+            # Remove any idx files associated with this path
+            idx_pattern = f"{path}.*.idx"
+            for idx_file in glob.glob(idx_pattern):
+                eprint(f"Removing index file: {idx_file}")
+                os.remove(idx_file)
+                
+        except OSError as e:
+            eprint(f"Warning: Could not remove file {path}: {e}")
+
 async def chunked_write(ds: xr.Dataset, variable_name: str, rpc_uri_stem, gateway_uri_stem) -> str:
     async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem, chunker=CHUNKER) as kubo_cas:
         # Note: I've modified it slightly to accept an existing KuboCAS instance
@@ -317,6 +348,10 @@ async def batch_processor(
         # BACKUP CID
         save_cid_to_file(batch_cid, dataset, start_date, end_date, "batch")
 
+        # Clean up files after successful processing
+        eprint("Cleaning up temporary files...")
+        cleanup_files(grib_paths, dataset)
+
         eprint(f"--- Batch process finished successfully for {start_date.date()} to {end_date.date()} ---")
         
         return batch_cid
@@ -348,7 +383,7 @@ async def append_latest(
     if finalization_only:
         latest_finalization_date = await load_finalization_date(dataset, api_key)
         # latest_finalization_date = datetime(2025, 4, 30, 23, 0, 0)
-        print(latest_finalization_date.strftime("%Y-%m-%d"))
+        eprint(latest_finalization_date.strftime("%Y-%m-%d"))
         if latest_available_date > latest_finalization_date:
             latest_available_date = latest_finalization_date
         latest_available_date = latest_finalization_date
@@ -438,15 +473,9 @@ async def append_latest(
 
                 await run_checks(cid=final_cid, dataset_name=dataset, num_checks=100, start_date=start_date, end_date=target_end_date)
             
-            for path in grib_paths:
-                try:
-                    os.remove(path)
-                    # Remove any idx files
-                    idx_path = f"{path}.*.idx"  # Pattern to match .idx files
-                    for idx_file in glob.glob(idx_path):
-                        os.remove(idx_file)
-                except OSError as e:
-                    eprint(f"Warning: Could not remove GRIB file {path}: {e}")
+            # Clean up files after successful processing
+            eprint("Cleaning up temporary files...")
+            cleanup_files(grib_paths, dataset)
 
         except Exception as e:
             eprint(f"❌ ERROR: Failed to process or append data. Error: {e}")
@@ -483,14 +512,14 @@ async def build_full_dataset(
     if finalization_only:
         latest_finalization_date = await load_finalization_date(dataset, api_key)
         # latest_finalization_date = datetime(2025, 4, 30, 23, 0, 0)
-        print(latest_finalization_date.strftime("%Y-%m-%d-%H"))
+        eprint(latest_finalization_date.strftime("%Y-%m-%d-%H"))
         if end_date > latest_finalization_date:
             end_date = latest_finalization_date
     else:
         # Start date is now the latest finalization date plus one day
         latest_finalization_date = await load_finalization_date(dataset, api_key)
         # latest_finalization_date = datetime(2025, 4, 30, 23, 0, 0)
-        print(latest_finalization_date.strftime("%Y-%m-%d-%H"))
+        eprint(latest_finalization_date.strftime("%Y-%m-%d-%H"))
         start_date = latest_finalization_date + timedelta(hours=1)
 
 

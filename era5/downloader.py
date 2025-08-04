@@ -16,6 +16,7 @@ import subprocess
 import warnings
 import tempfile
 import pathlib
+import zipfile
 
 import aioboto3
 import boto3
@@ -156,19 +157,65 @@ def make_grib_filepath(dataset: str, timestamp: datetime, period: str) -> Path:
 
     path: Path = scratchspace / dataset
     os.makedirs(path, exist_ok=True)
+    
+    # Determine file extension based on dataset prefix
+    file_extension = ".zip" if dataset.startswith("land_") else ".grib"
+    
     match period:
         case "hour":
             # ISO8601 compatible filename, don't use the variant with dashes and colons since mac filesystem turns colons into backslashes
-            # dataset-YYYYMMDDTHHMMSS.grib
-            path = path / f"{dataset}-{timestamp.strftime('%Y%m%dT%H0000')}.grib"
+            # dataset-YYYYMMDDTHHMMSS.grib/.zip
+            path = path / f"{dataset}-{timestamp.strftime('%Y%m%dT%H0000')}{file_extension}"
         case "day":
-            # dataset-YYYYMMDD.grib
-            path = path / f"{dataset}-{timestamp.strftime('%Y%m%d')}.grib"
+            # dataset-YYYYMMDD.grib/.zip
+            path = path / f"{dataset}-{timestamp.strftime('%Y%m%d')}{file_extension}"
         case "month":
-            # dataset-YYYYMM.grib
-            path = path / f"{dataset}-{timestamp.strftime('%Y%m')}.grib"
+            # dataset-YYYYMM.grib/.zip
+            path = path / f"{dataset}-{timestamp.strftime('%Y%m')}{file_extension}"
 
     return path
+
+def extract_zip_to_grib(zip_path: Path) -> Path:
+    """
+    Extracts a zip file to a .grib file in the same location.
+    Only extracts if the .grib file doesn't already exist.
+    
+    Parameters
+    ----------
+    zip_path
+        Path to the zip file to extract
+        
+    Returns
+    -------
+    Path to the extracted .grib file
+    """
+    # Determine the target .grib file path
+    grib_path = zip_path.with_suffix('.grib')
+    
+    # Only extract if the .grib file doesn't exist
+    if not grib_path.exists():
+        eprint(f"Extracting {zip_path.name} to {grib_path.name}")
+        
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            # Extract all files to the same directory as the zip file
+            zip_ref.extractall(zip_path.parent)
+            
+            # Find the extracted .grib file and rename it to match our expected naming
+            extracted_files = zip_ref.namelist()
+            grib_files = [f for f in extracted_files if f.endswith('.grib')]
+            
+            if not grib_files:
+                raise ValueError(f"No .grib file found in {zip_path}")
+            
+            # If there's a .grib file with a different name, rename it
+            extracted_grib_path = zip_path.parent / grib_files[0]
+            if extracted_grib_path != grib_path:
+                extracted_grib_path.rename(grib_path)
+                eprint(f"Renamed {extracted_grib_path.name} to {grib_path.name}")
+    else:
+        eprint(f"GRIB file {grib_path.name} already exists, skipping extraction")
+    
+    return grib_path
 
 async def get_gribs_for_date_range_async(
     dataset: str,
@@ -287,8 +334,18 @@ async def download_grib_async(
         raise ValueError(f"Invalid period {period}")
 
     download_filepath = make_grib_filepath(dataset, timestamp, period)
-    # Run synchronous file check in a thread to avoid blocking the event loop
-    file_on_disk = await asyncio.to_thread(download_filepath.exists)
+    
+    # For land datasets, check if either the zip file or the extracted grib file exists
+    if dataset.startswith("land_"):
+        grib_filepath = download_filepath.with_suffix('.grib')
+        zip_exists = await asyncio.to_thread(download_filepath.exists)
+        grib_exists = await asyncio.to_thread(grib_filepath.exists)
+        file_on_disk = zip_exists or grib_exists
+    else:
+        grib_filepath = None
+        grib_exists = False
+        # Run synchronous file check in a thread to avoid blocking the event loop
+        file_on_disk = await asyncio.to_thread(download_filepath.exists)
 
     # If it exist on the disk, check for finalization 
     # If not finalized, force download to make sure we have latest info
@@ -298,7 +355,9 @@ async def download_grib_async(
     # Eventually the finalized etl will catchup to to this date, and will redownload again to make sure it has the latest cache
     # Only when the full month is finalized do we upload it
     if (file_on_disk):
-        if not check_finalized(download_filepath):
+        # For land datasets, check finalization on the grib file
+        check_path = grib_filepath if dataset.startswith("land_") and grib_exists else download_filepath
+        if not check_finalized(check_path):
             eprint("FORCING FOR NOW")
             # force = True
 
@@ -315,11 +374,22 @@ async def download_grib_async(
             eprint(f"File {filename} on both R2 and disk, skipping download.")
         elif file_on_r2 and not file_on_disk:
             eprint(f"Downloading {filename} from R2 to {download_filepath}")
-            await _download_from_r2_sync(era5_env["BUCKET_NAME"], filename, str(download_filepath))
+            await _download_from_r2_sync(era5_env["BUCKET_NAME"], filename, download_filepath)
+            # For land datasets, extract the downloaded zip file
+            if dataset.startswith("land_") and download_filepath.suffix == ".zip":
+                grib_filepath = await asyncio.to_thread(extract_zip_to_grib, download_filepath)
+                return grib_filepath
         elif not file_on_r2 and file_on_disk:
             await _upload_with_r2_async(s3_client, str(download_filepath), era5_env["BUCKET_NAME"], filename)
 
-        return download_filepath
+        # For land datasets, if we have a zip but no grib, extract it
+        if dataset.startswith("land_") and zip_exists and not grib_exists:
+            grib_filepath = await asyncio.to_thread(extract_zip_to_grib, download_filepath)
+            return grib_filepath
+        elif dataset.startswith("land_") and grib_exists:
+            return grib_filepath
+        else:
+            return download_filepath
 
     # --- Prepare and execute Copernicus API request ---
     all_hours = [f"{h:02d}:00" for h in range(24)]
@@ -379,6 +449,12 @@ async def download_grib_async(
     if upload_to_r2_at_end:
         await _upload_with_r2_async(s3_client, str(download_filepath), era5_env["BUCKET_NAME"], filename)
 
+    # Handle zip extraction for land datasets
+    if dataset.startswith("land_") and download_filepath.suffix == ".zip":
+        # Extract the zip file and return the path to the .grib file
+        grib_filepath = await asyncio.to_thread(extract_zip_to_grib, download_filepath)
+        return grib_filepath
+    
     return download_filepath
 
 
