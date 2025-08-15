@@ -464,14 +464,18 @@ async def batch_processor_land_chunked(
 
 
         
-        # Clean up GRIB files for this chunk
-        cleanup_files(grib_paths, dataset)
-        
         # Move to next chunk
         current_start = chunk_end + timedelta(hours=1)
     
     eprint(f"✅ Land dataset processing complete: {current_cid}")
     await run_checks(cid=current_cid, dataset_name=dataset, num_checks=100, start_date=start_date, end_date=end_date)
+
+    grib_paths = await get_gribs_for_date_range_async(
+        dataset, start_date, end_date, api_key=api_key, force=False
+    )
+
+    # Clean up GRIB files for this chunk
+    cleanup_files(grib_paths, dataset)
 
     
     # Save final CID
