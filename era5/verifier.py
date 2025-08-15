@@ -189,29 +189,30 @@ async def run_checks(cid: str, dataset_name: str, num_checks: int, start_date, e
     """
     Verifies a sharded ERA5 Zarr dataset on IPFS against local source GRIB files.
 
-    It loads the Zarr dataset from the given CID, then in a loop, it picks
-    random points in time and space (within the specified date range and lat/lon bounds)
-    and compares the value in the Zarr dataset with the value from the corresponding source GRIB file.
+    Iterates over monthly intervals between start_date and end_date. If the range
+    exceeds 8 months, randomly selects 10 months to process. Loads the corresponding
+    monthly GRIB file once per month and performs num_checks random spatial checks
+    within each month. Compares values from the Zarr dataset with the GRIB file for
+    the selected points.
 
     Arguments:
-      CID: The root CID of the sharded Zarr dataset to verify.
-      DATASET_NAME: The name of the dataset (e.g., '2m_temperature').
-      GRIB_DIR: The path to the directory containing your monthly source GRIB files.
+        cid: The root CID of the sharded Zarr dataset to verify.
+        dataset_name: The name of the dataset (e.g., '2m_temperature').
+        num_checks: Number of random spatial checks to perform per month.
+        start_date: Start date (YYYY-MM-DD) for the verification range.
+        end_date: End date (YYYY-MM-DD) for the verification range.
     """
     eprint("--- ERA5 Zarr Verification Script ---")
     eprint(f"CID: {cid}")
     eprint(f"Dataset: {dataset_name}")
-    eprint(f"Checks to perform: {num_checks}")
-    eprint(f"Time range: {start_date or 'All'} to {end_date or 'All'}")
-    # eprint(f"Spatial bounds: Lat [{lat_min}, {lat_max}], Lon [{lon_min}, {lon_max}]\n")
+    eprint(f"Checks to perform per month: {num_checks}")
+    eprint(f"Time range: {start_date or 'All'} to {end_date or 'All'}\n")
 
     grib_dir: Path = scratchspace / dataset_name
 
     match_count = 0
     mismatch_count = 0
     error_count = 0
-
-    # await check_zeros_at_location(cid, dataset_name, start_date, end_date)
 
     async with KuboCAS() as cas:
         try:
@@ -234,65 +235,122 @@ async def run_checks(cid: str, dataset_name: str, num_checks: int, start_date, e
             lat_coords = zarr_ds.latitude.values
             lon_coords = zarr_ds.longitude.values
 
+            # Convert start_date and end_date to pandas Timestamps for month iteration
+            start_dt = pd.to_datetime(start_date) if start_date else pd.to_datetime(time_coords[0])
+            end_dt = pd.to_datetime(end_date) if end_date else pd.to_datetime(time_coords[-1])
+            # Ensure start_dt is the first day of the month
+            start_dt = start_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            # Generate monthly intervals
+            months = pd.date_range(start=start_dt, end=end_dt, freq='MS')
+
+            # Calculate number of months
+            num_months = len(months)
+            if num_months == 0:
+                eprint(f"❌ FATAL: No months available in the specified range {start_date} to {end_date}")
+                sys.exit(1)
+
+            # If more than 8 months, randomly select 10 months
+            if num_months > 8:
+                eprint(f"Range exceeds 8 months ({num_months} months). Randomly selecting 10 months.")
+                months = np.random.choice(months, size=20, replace=False)
+                months = sorted(months)  # Sort for chronological processing
+                # Keep months as datetime64 for processing, convert to strings only for printing
+                month_strings = [pd.Timestamp(month).to_pydatetime().strftime('%Y-%m') for month in months]
+                num_months = len(months)
+            else:
+                eprint(f"Processing all {num_months} months.")
+
+            # Use month_strings for printing, keep months as datetime64
+            eprint(f"Processing {num_months} months: {month_strings}")
+            for month in months:
+                month_str = pd.Timestamp(month).to_pydatetime().strftime('%Y-%m')
+                eprint(f"\n⏳ Processing month: {month_str}")
+                # Load the GRIB file for the current month
+                grib_ds = find_and_load_grib(np.datetime64(month), dataset_name, grib_dir)
+                if grib_ds is None:
+                    eprint(f"⚠️ Skipping month {month_str}: GRIB file not found")
+                    error_count += num_checks
+                    continue
+
+                # Filter time coordinates for the current month
+                month_start = np.datetime64(month)
+                month_end = np.datetime64(month + pd.offsets.MonthEnd(0))
+                month_time_coords = time_coords[(time_coords >= month_start) & (time_coords <= month_end)]
+                if len(month_time_coords) == 0:
+                    eprint(f"⚠️ Skipping month {month_str}: No time coordinates in Zarr dataset")
+                    error_count += num_checks
+                    continue
+
+                # Perform random checks for this month
+                for i in range(num_checks):
+                    try:
+                        # Randomly select time within the month and spatial coordinates
+                        rand_time = random.choice(month_time_coords)
+                        rand_lat = random.choice(lat_coords)
+                        rand_lon = random.choice(lon_coords)
+
+                        # Get Zarr value
+                        zarr_value = zarr_ds[dataset_name].sel(
+                            time=rand_time,
+                            latitude=rand_lat,
+                            longitude=rand_lon,
+                            method="nearest"
+                        ).compute().item()
+
+                        # Get GRIB value
+                        grib_value = grib_ds[dataset_name].sel(
+                            time=rand_time,
+                            latitude=rand_lat,
+                            longitude=rand_lon,
+                            method="nearest"
+                        ).compute().item()
+                        is_identical = (zarr_value == grib_value) or (np.isnan(zarr_value) and np.isnan(grib_value))
+                        if is_identical:
+                            match_count += 1
+                            if match_count % 10 == 0:
+                                eprint(f"✅ {match_count} Points Match")
+                        else:
+                            mismatch_count += 1
+                            difference = zarr_value - grib_value if not (np.isnan(zarr_value) or np.isnan(grib_value)) else "NaN mismatch"
+                            error_message = (
+                                f"❌ Data validation failed: Mismatch found in {month_str}\n"
+                                f"------------------------------------------------------------------\n"
+                                f"Coordinates:\n"
+                                f"  - Time: {rand_time}\n"
+                                f"  - Latitude: {rand_lat}\n"
+                                f"  - Longitude: {rand_lon}\n"
+                                f"\n"
+                                f"Values:\n"
+                                f"  - GRIB Value: {grib_value:.6f}\n"
+                                f"  - Zarr Value: {zarr_value:.6f}\n"
+                                f"  - Difference: {difference}\n"
+                                f"\n"
+                                f"------------------------------------------------------------------"
+                            )
+                            eprint(error_message)
+
+                    except Exception as e:
+                        error_count += 1
+                        eprint(f"❌ Error during check {i+1} in {month_str}: {e}")
+                        continue
+
+                # Close the GRIB dataset to free memory
+                grib_ds.close()
+
         except Exception as e:
             eprint(f"❌ FATAL: Could not load Zarr dataset from CID {cid}. Error: {e}")
             sys.exit(1)
-        
-        for i in range(num_checks):
-            rand_time = random.choice(time_coords)
-            rand_lat = random.choice(lat_coords)
-            rand_lon = random.choice(lon_coords)
-            try:
-                zarr_value = zarr_ds[dataset_name].sel(
-                    time=rand_time,
-                    latitude=rand_lat,
-                    longitude=rand_lon,
-                    method="nearest"  # Added to handle potential coordinate precision issues
-                ).compute().item()
-        
-                grib_ds = find_and_load_grib(rand_time, dataset_name, grib_dir)
-                if grib_ds is None:
-                     raise ValueError("Could not load grib")
 
-                grib_value = grib_ds[dataset_name].sel(
-                    time=rand_time,
-                    latitude=rand_lat,
-                    longitude=rand_lon,
-                    method="nearest"
-                ).compute().item()
-
-                if np.equal(zarr_value, grib_value):
-                    match_count += 1
-                    if (match_count % 10 == 0):
-                        eprint(f"✅ {match_count} Points Match")
-                else:
-                    difference = zarr_value - grib_value
-                    error_message = (
-                        f"❌ Data validation failed: Mismatch found between Zarr and GRIB data.\n"
-                        f"------------------------------------------------------------------\n"
-                        f"Coordinates:\n"
-                        f"  - Time: {rand_time}\n"
-                        f"  - Latitude: {rand_lat}\n"
-                        f"  - Longitude: {rand_lon}\n"
-                        f"\n"
-                        f"Values:\n"
-                        f"  - GRIB Value: {grib_value:.6f}\n"
-                        f"  - Zarr Value: {zarr_value:.6f}\n"
-                        f"  - Difference: {difference:.6f}\n"
-                        f"\n"
-                        f"------------------------------------------------------------------"
-                    )
-                    print("ERROR FOUND", error_message)
-                    
-                    # Raise an exception to halt execution
-                    # raise ValueError(error_message)
-
-            except Exception as e:
-                raise
-    
     eprint("\n\n--- Verification Complete ---")
-    eprint(f"Total points checked: {num_checks}")
+    eprint(f"Total points checked: {num_checks * num_months}")
+    eprint(f"Matches: {match_count}")
+    eprint(f"Mismatches: {mismatch_count}")
+    eprint(f"Errors: {error_count}")
     eprint("---------------------------")
+    # if error count > 0: raise an error
+    if error_count > 0:
+        eprint(f"❌ FATAL: {error_count} errors occurred during verification. Please check the logs for details.")
+        raise RuntimeError("Verification failed with errors.")
 
 async def compare_datasets(cid: str, dataset_name: str, start_date, end_date, lat_min: float, lat_max: float, lon_min: float, lon_max: float):
     """

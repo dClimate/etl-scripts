@@ -10,6 +10,7 @@ import time
 from zarr.storage import MemoryStore
 import itertools
 import dask.array as da
+import dask
 import subprocess
 import warnings
 import glob
@@ -26,6 +27,8 @@ from botocore.exceptions import ClientError as S3ClientError
 from multiformats import CID
 from py_hamt import ShardedZarrStore, KuboCAS
 import asyncio
+import gc
+import psutil
 from etl_scripts.grabbag import eprint, npdt_to_pydt
 
 from era5.utils import get_latest_timestamp
@@ -34,7 +37,6 @@ from era5.validator import validate_data
 from era5.standardizer import standardize
 from era5.verifier import compare_datasets, run_checks
 from era5.utils import CHUNKER, dataset_names, chunking_settings, time_chunk_size, start_dates
-
 
 scratchspace: Path = (Path(__file__).parent / "scratchspace").absolute()
 os.makedirs(scratchspace, exist_ok=True)
@@ -46,8 +48,6 @@ with open(Path(__file__).parent / "era5-env.json") as f:
 datasets_choice = click.Choice(dataset_names)
 period_options = ["hour", "day", "month"]
 period_choice = click.Choice(period_options)
-
-
 
 def save_cid_to_file(
     cid: str,
@@ -138,6 +138,39 @@ async def chunked_write(ds: xr.Dataset, variable_name: str, rpc_uri_stem, gatewa
         ds.to_zarr(store=store_write, mode="w", encoding=encoding_options)
         root_cid = await store_write.flush()
         return str(root_cid)
+
+async def chunked_write_regular(ds: xr.Dataset, variable_name: str, rpc_uri_stem, gateway_uri_stem) -> str:
+    async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem, chunker=CHUNKER) as kubo_cas:
+        # Note: I've modified it slightly to accept an existing KuboCAS instance
+        #       and return the CID as a string for easier use.
+        ordered_dims = list(ds[variable_name].sizes)
+        array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
+        chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
+        if ordered_dims[0] != 'time':
+            ds = ds.transpose('time', 'latitude', 'longitude', ...)
+            ordered_dims = list(ds[variable_name].sizes)
+            array_shape = tuple(ds.sizes[dim] for dim in ordered_dims)
+            chunk_shape = tuple(ds.chunks[dim][0] for dim in ordered_dims)
+
+        store_write = await ShardedZarrStore.open(
+            cas=kubo_cas,
+            array_shape=array_shape,
+            chunk_shape=chunk_shape,
+            chunks_per_shard=6250,
+            read_only=False,
+        )
+
+        encoding_options = {
+            'time': {
+                'dtype': 'float64',
+                'units': 'seconds since 1970-01-01'
+            }
+        }
+    
+        ds.to_zarr(store=store_write, mode="w", encoding=encoding_options)
+        root_cid = await store_write.flush()
+        return str(root_cid)
+
 
 async def extend(
     dataset: str,
@@ -300,6 +333,13 @@ async def batch_processor(
         if cid_found:
             return cid_found
         eprint(f"--- Starting batch process for {dataset} from {start_date.date()} to {end_date.date()} ---")
+
+        # Check if this is a land dataset that needs special handling
+        if dataset.startswith("land_"):
+            return await batch_processor_land_chunked(
+                dataset, start_date, end_date, gateway_uri_stem, rpc_uri_stem, api_key, initial, appending
+            )
+    
         ds: xr.Dataset | None = None
         # 1. INITIAL DOWNLOAD
         eprint("Attempting to fetch GRIBs from cache or source...")
@@ -325,25 +365,15 @@ async def batch_processor(
 
         # 4. Write to the store
         batch_cid = await chunked_write(ds, dataset, rpc_uri_stem=rpc_uri_stem, gateway_uri_stem=gateway_uri_stem)
+        
+        # Clean up dataset after writing
+        ds.close()
+        del ds
+
+        await run_checks(cid=batch_cid, dataset_name=dataset, num_checks=100, start_date=start_date, end_date=end_date)
 
         eprint("Uploaded to IPFS")
         eprint(batch_cid)
-
-        # 5. Now Verify the data being written matches
-        # lat_min = ds.latitude.values[0]
-        # lat_max = ds.latitude.values[-1]
-        # lon_min = ds.longitude.values[0]
-        # lon_max = ds.longitude.values[-1]
-        # await compare_datasets(
-        #     cid=batch_cid, 
-        #     dataset_name=dataset, 
-        #     start_date=start_date, 
-        #     end_date=end_date, 
-        #     lat_min=lat_min, 
-        #     lat_max=lat_max, 
-        #     lon_min=lon_min, 
-        #     lon_max=lon_max,
-        # )
 
         # BACKUP CID
         save_cid_to_file(batch_cid, dataset, start_date, end_date, "batch")
@@ -358,6 +388,178 @@ async def batch_processor(
     except Exception as e:
         eprint(f"ERROR: An error occurred during Zarr creation/upload: {e}")
         sys.exit(1)
+
+async def batch_processor_land_chunked(
+    dataset: str,
+    start_date: datetime,
+    end_date: datetime,
+    gateway_uri_stem: str | None,
+    rpc_uri_stem: str | None,
+    api_key: str | None,
+    initial: bool = False,
+    appending: bool = False,
+):
+    """
+    Specialized batch processor for land datasets that processes in 1000-hour chunks
+    to manage memory usage, then concatenates and rechunks to achieve final 5000-hour chunks.
+    """
+    eprint(f"🔥 Land dataset detected - processing in 1000-hour chunks")
+    
+    total_hours = int(((end_date - start_date).total_seconds() / 3600) + 1)
+    chunk_hours = 1000
+    
+    eprint(f"Processing {total_hours} hours in {chunk_hours}-hour chunks")
+    
+    current_cid = None
+    current_start = start_date
+    chunk_count = 0
+    
+    while current_start <= end_date:
+        # Calculate chunk end date
+        chunk_end = min(current_start + timedelta(hours=chunk_hours - 1), end_date)
+        chunk_count += 1
+        
+        eprint(f"📦 Processing chunk {chunk_count}: {current_start.date()} to {chunk_end.date()}")
+        
+        # 1. Download GRIBs for this chunk
+        eprint(f"   Fetching GRIBs for chunk {chunk_count}...")
+        grib_paths = await get_gribs_for_date_range_async(
+            dataset, current_start, chunk_end, api_key=api_key, force=False
+        )
+        if not grib_paths:
+            eprint(f"No GRIB files found for chunk {chunk_count}, skipping...")
+            current_start = chunk_end + timedelta(hours=1)
+            continue
+
+        # 2. Validate and process this chunk
+        eprint(f"   Validating chunk {chunk_count}...")
+        ds_chunk = await validate_data(
+            grib_paths, current_start, chunk_end, dataset, api_key, appending=True
+        )
+  
+        if current_cid is None:
+            # First chunk - create initial store
+            eprint(f"   Writing initial chunk {chunk_count} to IPFS...")
+            
+            if initial:
+                ordered_dims = list(ds_chunk[dataset].sizes)
+                if ordered_dims != ["time", "latitude", "longitude"]:
+                    ds_chunk = ds_chunk.transpose("time", "latitude", "longitude")
+            
+            current_cid = await chunked_write(ds_chunk, dataset, rpc_uri_stem, gateway_uri_stem)
+            eprint(f"   Initial chunk written: {current_cid}")
+        else:
+            # Subsequent chunks - append with smart rechunking
+            eprint(f"   Appending chunk {chunk_count}...")
+            current_cid = await append_chunk_with_rechunking(
+                ds_chunk, dataset, current_cid, rpc_uri_stem, gateway_uri_stem, 
+                current_start, chunk_end
+            )
+            eprint(f"   Chunk {chunk_count} appended: {current_cid}")
+        
+        # Clean up chunk dataset
+        ds_chunk.close()
+        del ds_chunk
+        gc.collect()
+
+
+        
+        # Clean up GRIB files for this chunk
+        cleanup_files(grib_paths, dataset)
+        
+        # Move to next chunk
+        current_start = chunk_end + timedelta(hours=1)
+    
+    eprint(f"✅ Land dataset processing complete: {current_cid}")
+    await run_checks(cid=current_cid, dataset_name=dataset, num_checks=100, start_date=start_date, end_date=end_date)
+
+    
+    # Save final CID
+    save_cid_to_file(current_cid, dataset, start_date, end_date, "batch")
+    
+    return current_cid
+
+async def append_chunk_with_rechunking(
+    new_chunk_ds: xr.Dataset,
+    dataset: str,
+    existing_cid: str,
+    rpc_uri_stem: str,
+    gateway_uri_stem: str,
+    chunk_start: datetime,
+    chunk_end: datetime,
+) -> str:
+    """
+    Appends a new chunk to an existing store, with smart rechunking when approaching target size.
+    """
+    async with KuboCAS(rpc_base_url=rpc_uri_stem, gateway_base_url=gateway_uri_stem, chunker=CHUNKER) as kubo_cas:
+        # Open the existing store
+        main_store = await ShardedZarrStore.open(cas=kubo_cas, read_only=False, root_cid=existing_cid)
+        ds_main = xr.open_zarr(main_store)
+        
+        current_hours = ds_main.sizes["time"]
+        new_hours = new_chunk_ds.sizes["time"]
+        total_hours_after = current_hours + new_hours
+        
+        eprint(f"   Current store: {current_hours} hours, adding: {new_hours} hours, total will be: {total_hours_after}")
+        
+        # Check if we need to rechunk to reach target chunking
+        target_chunk_size = chunking_settings["time"]  # Should be 5000
+        
+        if current_hours < target_chunk_size and total_hours_after >= target_chunk_size:
+            eprint("   Rechunking dataset to target chunk size...")
+            
+            # Force cleanup before large operations
+            ds_main.close()
+            
+            # Concatenate datasets
+            eprint("   Concatenating datasets...")
+            old_chunked_ds = xr.concat([ds_main, new_chunk_ds], dim="time")
+            
+            # Remove encoding chunks to allow rechunking
+            if dataset in old_chunked_ds and 'chunks' in old_chunked_ds[dataset].encoding:
+                del old_chunked_ds[dataset].encoding['chunks']
+                eprint("   Removed old encoding chunks")
+            
+            # Clean up individual datasets
+            del ds_main
+            gc.collect()
+            
+            # Rechunk using conservative settings
+            eprint("   Rechunking concatenated dataset to target chunks...")
+            with dask.config.set({
+                'array.rechunk.threshold': 2,  # Very conservative
+                'scheduler': 'synchronous'     # Avoid parallel overhead
+            }):
+                ds_main_rechunked = old_chunked_ds.chunk(chunking_settings)
+            
+            # Clean up old dataset
+            old_chunked_ds.close()
+            del old_chunked_ds
+            gc.collect()
+            
+            # Write the rechunked dataset to a new store
+            eprint("   Writing rechunked dataset to IPFS...")
+            final_cid = await chunked_write_regular(ds_main_rechunked, dataset, rpc_uri_stem, gateway_uri_stem)
+            
+            # Clean up rechunked dataset
+            ds_main_rechunked.close()
+            del ds_main_rechunked
+            gc.collect()
+            
+            eprint(f"   ✅ Rechunking complete: {final_cid}")
+            return final_cid
+            
+        else:
+            # Simple append (no rechunking needed yet)
+            eprint("   Simple append (no rechunking needed)...")
+            new_chunk_ds.to_zarr(main_store, mode='a', append_dim="time")
+            new_cid = await main_store.flush()
+            
+            # Clean up
+            ds_main.close()
+            del ds_main
+            
+            return str(new_cid)
     
 async def append_latest(
     dataset: str,
@@ -435,14 +637,38 @@ async def append_latest(
             # If the size is less than 5000 we need to concate together
 
             if (ds_main.sizes["time"] < chunking_settings["time"]):
-                eprint("Rechunking dataset...")
+                eprint("Rechunking dataset with memory management...")
+                
+                # Force cleanup before large operations
+                ds_main.close()
+                
+                # Use Dask's disk-based concat and rechunking
+                eprint("Concatenating datasets using Dask...")
                 old_chunked_ds = xr.concat([ds_main, ds], dim="time")
-                del old_chunked_ds[dataset].encoding['chunks']
-                # Rechunk the dataset to the desired chunking settings
-                ds_main_rechunked = old_chunked_ds.chunk(chunking_settings)
+                
+                # Remove encoding chunks to allow rechunking
+                if dataset in old_chunked_ds and 'chunks' in old_chunked_ds[dataset].encoding:
+                    del old_chunked_ds[dataset].encoding['chunks']
+
+                
+                # Rechunk using Dask's disk-based method
+                eprint("Rechunking dataset (with memory limits)...")
+                with dask.config.set({'array.rechunk.threshold': 2}):  # Very conservative
+                    ds_main_rechunked = old_chunked_ds.chunk(chunking_settings)
+                
+                
+                # Clean up old dataset
+                old_chunked_ds.close()
+                del old_chunked_ds
+                
                 # Write the rechunked dataset back to the store
                 eprint("Writing to ipfs")
                 final_cid = await chunked_write(ds_main_rechunked, dataset, rpc_uri_stem=rpc_uri_stem, gateway_uri_stem=gateway_uri_stem)
+                
+                # Clean up rechunked dataset
+                ds_main_rechunked.close()
+                del ds_main_rechunked
+                
                 await run_checks(cid=final_cid, dataset_name=dataset, num_checks=100, start_date=start_date, end_date=target_end_date)
                 
             else:
@@ -455,21 +681,6 @@ async def append_latest(
                 new_cid_obj = await main_store.flush()
 
                 final_cid = str(new_cid_obj)
-                # 5. Now Verify the data being written matches
-                # lat_min = ds.latitude.values[0]
-                # lat_max = ds.latitude.values[-1]
-                # lon_min = ds.longitude.values[0]
-                # lon_max = ds.longitude.values[-1]
-                # await compare_datasets(
-                #     cid=final_cid, 
-                #     dataset_name=dataset, 
-                #     start_date=start_date, 
-                #     end_date=target_end_date, 
-                #     lat_min=lat_min, 
-                #     lat_max=lat_max, 
-                #     lon_min=lon_min, 
-                #     lon_max=lon_max,
-                # )
 
                 await run_checks(cid=final_cid, dataset_name=dataset, num_checks=100, start_date=start_date, end_date=target_end_date)
             
@@ -486,6 +697,7 @@ async def append_latest(
     save_cid_to_file(final_cid, dataset, start_date, target_end_date, "append-direct")
 
     return final_cid
+
 
 
 ##
@@ -508,17 +720,16 @@ async def build_full_dataset(
     start_date = start_dates[dataset] if dataset in start_dates else datetime(1940, 1, 1, 0, 0, 0)
     end_date = get_latest_timestamp(dataset, api_key=api_key)
   
-  
     if finalization_only:
         latest_finalization_date = await load_finalization_date(dataset, api_key)
-        # latest_finalization_date = datetime(2025, 4, 30, 23, 0, 0)
+        # latest_finalization_date = datetime(2025, 5, 31, 23, 0, 0)
         eprint(latest_finalization_date.strftime("%Y-%m-%d-%H"))
         if end_date > latest_finalization_date:
             end_date = latest_finalization_date
     else:
         # Start date is now the latest finalization date plus one day
         latest_finalization_date = await load_finalization_date(dataset, api_key)
-        # latest_finalization_date = datetime(2025, 4, 30, 23, 0, 0)
+        # latest_finalization_date = datetime(2025, 5, 31, 23, 0, 0)
         eprint(latest_finalization_date.strftime("%Y-%m-%d-%H"))
         start_date = latest_finalization_date + timedelta(hours=1)
 

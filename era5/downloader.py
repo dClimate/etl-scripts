@@ -67,6 +67,11 @@ def check_finalized(path: Path) -> bool:
     """
     unique_expvers = set()
 
+    # if suffix is not a grib continue
+    if not path.suffix == ".grib":
+        eprint(f"Skipping {path} as it is not a GRIB file.")
+        return False
+
     try:
         # Open the GRIB file in binary read mode
         with open(path, 'rb') as f:
@@ -128,6 +133,7 @@ dataset_names = [
     "surface_pressure",
     "surface_solar_radiation_downwards",
     "total_precipitation",
+    "land_total_precipitation",
 ]
 datasets_choice = click.Choice(dataset_names)
 period_options = ["hour", "day", "month"]
@@ -178,7 +184,6 @@ def make_grib_filepath(dataset: str, timestamp: datetime, period: str) -> Path:
 def extract_zip_to_grib(zip_path: Path) -> Path:
     """
     Extracts a zip file to a .grib file in the same location.
-    Only extracts if the .grib file doesn't already exist.
     
     Parameters
     ----------
@@ -189,33 +194,32 @@ def extract_zip_to_grib(zip_path: Path) -> Path:
     -------
     Path to the extracted .grib file
     """
-    # Determine the target .grib file path
-    grib_path = zip_path.with_suffix('.grib')
+    import tempfile
+    import shutil
     
-    # Only extract if the .grib file doesn't exist
-    if not grib_path.exists():
-        eprint(f"Extracting {zip_path.name} to {grib_path.name}")
+    eprint(f"Extracting {zip_path.name}")
+    
+    # Create a temporary directory to avoid conflicts with parallel extractions
+    with tempfile.TemporaryDirectory(dir=zip_path.parent) as temp_dir:
+        temp_path = Path(temp_dir)
         
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            # Extract all files to the same directory as the zip file
-            zip_ref.extractall(zip_path.parent)
+            # Extract to temporary directory
+            zip_ref.extractall(temp_path)
             
-            # Find the extracted .grib file and rename it to match our expected naming
+            # Find the extracted .grib file
             extracted_files = zip_ref.namelist()
             grib_files = [f for f in extracted_files if f.endswith('.grib')]
             
             if not grib_files:
                 raise ValueError(f"No .grib file found in {zip_path}")
             
-            # If there's a .grib file with a different name, rename it
-            extracted_grib_path = zip_path.parent / grib_files[0]
-            if extracted_grib_path != grib_path:
-                extracted_grib_path.rename(grib_path)
-                eprint(f"Renamed {extracted_grib_path.name} to {grib_path.name}")
-    else:
-        eprint(f"GRIB file {grib_path.name} already exists, skipping extraction")
-    
-    return grib_path
+            # Move the grib file to final location with zip-based name
+            temp_grib_path = temp_path / grib_files[0]
+            final_grib_path = zip_path.with_suffix('.grib')
+            
+            shutil.move(str(temp_grib_path), str(final_grib_path))
+            return final_grib_path
 
 async def get_gribs_for_date_range_async(
     dataset: str,
@@ -341,6 +345,7 @@ async def download_grib_async(
         zip_exists = await asyncio.to_thread(download_filepath.exists)
         grib_exists = await asyncio.to_thread(grib_filepath.exists)
         file_on_disk = zip_exists or grib_exists
+        eprint(f"Land dataset files exist: ZIP={zip_exists}, GRIB={grib_exists}")
     else:
         grib_filepath = None
         grib_exists = False
