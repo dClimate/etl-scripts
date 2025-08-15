@@ -242,6 +242,7 @@ async def run_checks(cid: str, dataset_name: str, num_checks: int, start_date, e
             start_dt = start_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             # Generate monthly intervals
             months = pd.date_range(start=start_dt, end=end_dt, freq='MS')
+            month_strings = [pd.Timestamp(month).to_pydatetime().strftime('%Y-%m') for month in months]
 
             # Calculate number of months
             num_months = len(months)
