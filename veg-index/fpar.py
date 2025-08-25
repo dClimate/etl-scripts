@@ -236,7 +236,9 @@ async def append(
             eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
 
             with ProgressBar():
-                ds.to_zarr(store=store, zarr_format=3, append_dim="time", align_chunks=True)
+                ds.to_zarr(
+                    store=store, zarr_format=3, append_dim="time", align_chunks=True
+                )
 
             eprint(
                 f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s"
