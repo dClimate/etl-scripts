@@ -130,9 +130,11 @@ def grib_to_xarray(path: Path, param: str) -> xr.DataArray:
       drops scalar `step` if present; renames scalar `time` -> `valid_time`.
     - Adds minimal, consistent attributes.
     """
-    ds = cfgrib.open_dataset(
-        str(path),
+    ds = xr.open_dataset(
+        path,
+        engine="cfgrib",
         backend_kwargs={"filter_by_keys": {"shortName": param}, "indexpath": ""},
+        decode_timedelta=True,
     )
 
     da = ds[param]
