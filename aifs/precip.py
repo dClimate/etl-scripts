@@ -14,22 +14,23 @@ python precip.py append --cid bafy... --out zarr://my/precip.zarr
 """
 from __future__ import annotations
 
+import itertools
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import asyncclick as click
 import dask
 import numpy as np
 import xarray as xr
-from utils import (
-    aifs_client,
-    download_tprate_slice,
-    grib_to_xarray,
-    standardise,
-)
+from dask.diagnostics.progress import ProgressBar
+from ecmwf.opendata import Client
+from multiformats import CID
+from utils import aifs_client, download_aifs_ens_slice, grib_to_xarray, standardise
+
+from etl_scripts.grabbag import eprint, npdt_to_pydt
+from etl_scripts.hamt_store_contextmanager import ipfs_hamt_store
 
 dask.config.set(scheduler="threads", num_workers=os.cpu_count())
 
@@ -39,71 +40,141 @@ def cli() -> None:
     pass
 
 
+def download_and_process_data(
+    client: Client, force: bool, date_with_hour: tuple[datetime, int]
+) -> xr.DataArray:
+    date, hour = date_with_hour
+    param = "tp"
+    path = download_aifs_ens_slice(
+        cli=client,
+        date=date,
+        fhour=hour,
+        param=param,
+        product="cf",
+        force=force,
+    )
+    da = grib_to_xarray(path, param)
+    return da.expand_dims(
+        forecast_reference_time=[np.datetime64(date, "ns")],
+        step=[np.timedelta64(hour, "h")],
+    )
+
+
+def _build_times_and_steps_list(
+    start_date: datetime, end_date: datetime
+) -> list[tuple[datetime, int]]:
+    hours = range(0, 360, 6)
+    dates: list[datetime] = []
+    while start_date < end_date:
+        dates.append(start_date)
+        start_date += timedelta(days=1)
+    return list(itertools.product(dates, hours))
+
+
 @cli.command("instantiate")
 @click.argument("start_date", type=click.DateTime(formats=["%Y-%m-%d"]))
 @click.argument("end_date", type=click.DateTime(formats=["%Y-%m-%d"]))
 @click.option("--gateway-uri-stem")
 @click.option("--rpc-uri-stem")
-@click.option("--force", is_flag=True, help="Redownload even if file exists.")
+@click.option("--force", is_flag=True, default=False, help="Redownload file.")
 async def instantiate(
     start_date: datetime,
     end_date: datetime,
     gateway_uri_stem: str | None,
     rpc_uri_stem: str | None,
     force: bool,
-
-    run_date: datetime, max_step: int, out: str) -> None:
+) -> None:
     """Download one full forecast run (all steps 0…max_step) into a Zarr store."""
-    cli = aifs_client()
-    steps = list(range(0, max_step + 6, 6))
+    client = aifs_client()
 
-    # 1) download all lead times in parallel
-    def _worker(fhr: int) -> xr.DataArray:
-        path = download_tprate_slice(cli, run_date, fhr, product="pf")
-        da   = grib_to_xarray(path)
-        ts   = np.datetime64(run_date + timedelta(hours=fhr), "ns")
-        return da.expand_dims(time=[ts])
+    def _worker(date_with_hour: tuple[datetime, int]) -> xr.DataArray:
+        return download_and_process_data(client, force, date_with_hour)
 
-    t0 = time.time()
-    with ThreadPoolExecutor() as pool:
-        arrays = list(pool.map(_worker, steps))
-    print(f"✓ Downloaded {len(arrays)} slices in {time.time() - t0:.1f}s")
+    # AIFS data is available up to 2 days in the past
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    if start_date < today - timedelta(days=2):
+        raise ValueError("start_date must be at most 2 days in the past")
 
-    # 2) concatenate & store
-    ds = standardise(arrays, dataset_name="AIFS-Precip")
-    ds.to_zarr(out, mode="w", zarr_format=3)
-    print(f"✓ Wrote archive to {out}")
-
-
-
-
+    dates_with_hours = _build_times_and_steps_list(start_date, end_date)
     async with ipfs_hamt_store(gateway_uri_stem, rpc_uri_stem) as (store, hamt):
-        # ── process in contiguous batches ────────────────────────────────────────
-        for i in range(0, len(dates), batch_size):
-            slab = dates[i : i + batch_size]
+        # 1) download all lead times in parallel
+        t0 = time.time()
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            arrays = list(pool.map(_worker, dates_with_hours))
+        eprint(f"✓ Downloaded {len(arrays)} slices in {time.time() - t0:.1f}s")
 
-            # Download and process all TIFF in parallel
-            start = time.time()
-            with ThreadPoolExecutor() as executor:
-                arrays = list(executor.map(_process_tiff_file, slab))
-            eprint(f"✓ Downloaded {len(slab)} dekads in {time.time() - start:.2f}s")
+        ds = standardise(arrays, dataset_name="AIFS-Precip")
 
-            ds = standardise(arrays, dataset_name="FPAR")
-            quality_check_dataset(
-                ds, raw_arrays=dict(zip(slab, arrays)), dataset_name="FPAR"
-            )
-
-            start = time.time()
-            eprint(f"Writing dekads {slab[0].date()} → {slab[-1].date()}…")
-            mode_kwargs = {"mode": "w"} if i == 0 else {"append_dim": "time"}
-            ds.to_zarr(store=store, zarr_format=3, **mode_kwargs)
-            eprint(
-                f"✓ Wrote dekads {slab[0].date()} → {slab[-1].date()} in {time.time() - start:.2f}s"
-            )
+        # 2) concatenate & store
+        with ProgressBar():
+            ds.to_zarr(store=store, mode="w", zarr_format=3)
+        eprint(f"✓ Wrote archive {dates_with_hours[0]} → {dates_with_hours[-1]}")
 
     eprint("✓ Done. Final HAMT CID:")
     print(hamt.root_node_id)
 
+
+@cli.command("append")
+@click.argument("cid")
+@click.option("--end-date", type=click.DateTime(formats=["%Y-%m-%d"]))
+@click.option("--gateway-uri-stem")
+@click.option("--rpc-uri-stem")
+@click.option("--force", is_flag=True)
+async def append(
+    cid: str,
+    end_date: datetime | None,
+    gateway_uri_stem: str | None,
+    rpc_uri_stem: str | None,
+    force: bool,
+) -> None:
+    """Extend an existing IPFS AIFS Zarr with all available dekads up to *end_date*."""
+
+    client = aifs_client()
+
+    def _worker(date_with_hour: tuple[datetime, int]) -> xr.DataArray:
+        return download_and_process_data(client, force, date_with_hour)
+
+    # ── open the existing store ──────────────────────────────────────────────
+    async with ipfs_hamt_store(
+        gateway_uri_stem, rpc_uri_stem, root_cid=CID.decode(cid)
+    ) as (store, hamt):
+        latest = npdt_to_pydt(xr.open_zarr(store=store).time[-1].values)
+        start_date = latest + timedelta(days=1)
+        end_date = end_date or datetime.now(UTC)
+
+        # AIFS data is available up to 2 days in the past
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        if start_date == today:
+            eprint("✓ No new dekads to append.")
+        elif start_date < today - timedelta(days=2):
+            eprint(
+                "We only have access to the last 2 days of data. >> The dataset will have a gap! <<"
+            )
+            start_date = today - timedelta(days=2)
+
+        dates_with_hours = _build_times_and_steps_list(start_date, end_date)
+
+        # 1) download all lead times in parallel
+        t0 = time.time()
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            arrays = list(pool.map(_worker, dates_with_hours))
+        eprint(f"✓ Downloaded {len(arrays)} slices in {time.time() - t0:.1f}s")
+
+        ds = standardise(arrays, dataset_name="AIFS-Precip")
+
+        # 2) concatenate & store
+        t1 = time.time()
+        with ProgressBar():
+            ds.to_zarr(
+                store=store,
+                zarr_format=3,
+                append_dim="forecast_reference_time",
+                align_chunks=True,
+            )
+        eprint(f"✓ Wrote archive {dates_with_hours[0]} → {dates_with_hours[-1]}")
+
+    eprint("✓ Done. New HAMT CID:")
+    print(hamt.root_node_id)
 
 
 if __name__ == "__main__":
