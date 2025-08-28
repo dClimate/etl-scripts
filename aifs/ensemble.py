@@ -83,7 +83,7 @@ def _build_times_and_steps_list(
 @cli.command("instantiate")
 @click.argument("start_date", type=click.DateTime(formats=["%Y-%m-%d"]))
 @click.argument("end_date", type=click.DateTime(formats=["%Y-%m-%d"]))
-@click.option("--variable", type=click.Choice(tuple(SUPPORTED_VARIABLES.keys())))
+@click.argument("variable", type=click.Choice(tuple(SUPPORTED_VARIABLES.keys())))
 @click.option("--gateway-uri-stem")
 @click.option("--rpc-uri-stem")
 @click.option("--force", is_flag=True, default=False, help="Redownload file.")
@@ -128,8 +128,8 @@ async def instantiate(
 
 @cli.command("append")
 @click.argument("cid")
+@click.argument("variable", type=click.Choice(tuple(SUPPORTED_VARIABLES.keys())))
 @click.option("--end-date", type=click.DateTime(formats=["%Y-%m-%d"]))
-@click.option("--variable", type=click.Choice(tuple(SUPPORTED_VARIABLES.keys())))
 @click.option("--gateway-uri-stem")
 @click.option("--rpc-uri-stem")
 @click.option("--force", is_flag=True)
