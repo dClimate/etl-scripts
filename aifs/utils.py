@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-import cfgrib
 import numpy as np
 import requests
 import xarray as xr
