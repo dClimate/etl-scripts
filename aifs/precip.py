@@ -65,7 +65,7 @@ def _build_times_and_steps_list(
 ) -> list[tuple[datetime, int]]:
     hours = range(0, 360, 6)
     dates: list[datetime] = []
-    while start_date < end_date:
+    while start_date <= end_date:
         dates.append(start_date)
         start_date += timedelta(days=1)
     return list(itertools.product(dates, hours))
@@ -148,7 +148,7 @@ async def append(
             eprint("✓ No new dekads to append.")
         elif start_date < today - timedelta(days=2):
             eprint(
-                "We only have access to the last 2 days of data. >> The dataset will have a gap! <<"
+                "We only have access to the last 3 days of data. >> The dataset will have a gap! <<"
             )
             start_date = today - timedelta(days=2)
 
@@ -163,7 +163,6 @@ async def append(
         ds = standardise(arrays, dataset_name="AIFS-Precip")
 
         # 2) concatenate & store
-        t1 = time.time()
         with ProgressBar():
             ds.to_zarr(
                 store=store,
