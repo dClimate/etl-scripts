@@ -34,6 +34,13 @@ from etl_scripts.hamt_store_contextmanager import ipfs_hamt_store
 
 dask.config.set(scheduler="threads", num_workers=os.cpu_count())
 
+SUPPORTED_VARIABLES: dict[str, tuple[str, str]] = {
+    "precipitation": ("tp", "AIFS-ensembles Precipitation"),
+    "temperature": ("2t", "AIFS-ensembles 2m Temperature"),
+    "windU": ("10u", "AIFS-ensembles 10m Wind U"),
+    "windV": ("10v", "AIFS-ensembles 10m Wind V"),
+    "soilMoisture": ("swvl1", "AIFS-ensembles Soil Moisture L1"),
+}
 
 @click.group()
 def cli() -> None:
@@ -41,10 +48,12 @@ def cli() -> None:
 
 
 def download_and_process_data(
-    client: Client, force: bool, date_with_hour: tuple[datetime, int]
+    client: Client,
+    param: str,
+    force: bool,
+    date_with_hour: tuple[datetime, int]
 ) -> xr.DataArray:
     date, hour = date_with_hour
-    param = "tp"
     path = download_aifs_ens_slice(
         cli=client,
         date=date,
@@ -74,21 +83,24 @@ def _build_times_and_steps_list(
 @cli.command("instantiate")
 @click.argument("start_date", type=click.DateTime(formats=["%Y-%m-%d"]))
 @click.argument("end_date", type=click.DateTime(formats=["%Y-%m-%d"]))
+@click.option("--variable", type=click.Choice(tuple(SUPPORTED_VARIABLES.keys())))
 @click.option("--gateway-uri-stem")
 @click.option("--rpc-uri-stem")
 @click.option("--force", is_flag=True, default=False, help="Redownload file.")
 async def instantiate(
     start_date: datetime,
     end_date: datetime,
+    variable: str,
     gateway_uri_stem: str | None,
     rpc_uri_stem: str | None,
     force: bool,
 ) -> None:
     """Download one full forecast run (all steps 0…max_step) into a Zarr store."""
     client = aifs_client()
+    param, dataset_name = SUPPORTED_VARIABLES[variable]
 
     def _worker(date_with_hour: tuple[datetime, int]) -> xr.DataArray:
-        return download_and_process_data(client, force, date_with_hour)
+        return download_and_process_data(client, param, force, date_with_hour)
 
     # AIFS data is available up to 2 days in the past
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -103,7 +115,7 @@ async def instantiate(
             arrays = list(pool.map(_worker, dates_with_hours))
         eprint(f"✓ Downloaded {len(arrays)} slices in {time.time() - t0:.1f}s")
 
-        ds = standardise(arrays, dataset_name="AIFS-Precip")
+        ds = standardise(arrays, dataset_name=dataset_name)
 
         # 2) concatenate & store
         with ProgressBar():
@@ -117,12 +129,14 @@ async def instantiate(
 @cli.command("append")
 @click.argument("cid")
 @click.option("--end-date", type=click.DateTime(formats=["%Y-%m-%d"]))
+@click.option("--variable", type=click.Choice(tuple(SUPPORTED_VARIABLES.keys())))
 @click.option("--gateway-uri-stem")
 @click.option("--rpc-uri-stem")
 @click.option("--force", is_flag=True)
 async def append(
     cid: str,
     end_date: datetime | None,
+    variable: str,
     gateway_uri_stem: str | None,
     rpc_uri_stem: str | None,
     force: bool,
@@ -130,9 +144,10 @@ async def append(
     """Extend an existing IPFS AIFS Zarr with all available dekads up to *end_date*."""
 
     client = aifs_client()
+    param, dataset_name = SUPPORTED_VARIABLES[variable]
 
     def _worker(date_with_hour: tuple[datetime, int]) -> xr.DataArray:
-        return download_and_process_data(client, force, date_with_hour)
+        return download_and_process_data(client, param, force, date_with_hour)
 
     # ── open the existing store ──────────────────────────────────────────────
     async with ipfs_hamt_store(
@@ -160,7 +175,7 @@ async def append(
             arrays = list(pool.map(_worker, dates_with_hours))
         eprint(f"✓ Downloaded {len(arrays)} slices in {time.time() - t0:.1f}s")
 
-        ds = standardise(arrays, dataset_name="AIFS-Precip")
+        ds = standardise(arrays, dataset_name=dataset_name)
 
         # 2) concatenate & store
         with ProgressBar():
