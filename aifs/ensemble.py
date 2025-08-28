@@ -62,7 +62,7 @@ def download_and_process_data(
         product="cf",
         force=force,
     )
-    da = grib_to_xarray(path, param)
+    da = grib_to_xarray(path)
     return da.expand_dims(
         forecast_reference_time=[np.datetime64(date, "ns")],
         step=[np.timedelta64(hour, "h")],

@@ -119,7 +119,7 @@ def download_aifs_ens_slice(
     return target
 
 
-def grib_to_xarray(path: Path, param: str) -> xr.DataArray:
+def grib_to_xarray(path: Path) -> xr.DataArray:
     """
     Open a GRIB file and return a cleaned, latitude/longitude-sorted DataArray.
 
@@ -129,27 +129,23 @@ def grib_to_xarray(path: Path, param: str) -> xr.DataArray:
       drops scalar `step` if present; renames scalar `time` -> `valid_time`.
     - Adds minimal, consistent attributes.
     """
-    ds = xr.open_dataset(
-        path,
-        engine="cfgrib",
-        backend_kwargs={"filter_by_keys": {"shortName": param}, "indexpath": ""},
-        decode_timedelta=True,
-    )
+    ds = xr.open_dataset(path, engine="cfgrib", decode_timedelta=True)
 
-    da = ds[param]
+    data_var = next(iter(ds.data_vars.variables.keys()))
+    da = ds[data_var]
     da = da.rename({"time": "forecast_reference_time"})
     da = da.reset_coords(["valid_time"], drop=True)
     da = da.sortby(["latitude", "longitude"])
 
     # Attach tidy attrs (preserve units/long_name when present)
-    src_attrs = ds[param].attrs
+    src_attrs = ds[data_var].attrs
     da = da.assign_attrs(
         {
             "long_name": src_attrs.get("long_name")
             or src_attrs.get("GRIB_name")
-            or param,
+            or data_var,
             "units": src_attrs.get("units"),
-            "param_short_name": param,
+            "param_short_name": data_var,
             "source": "ECMWF AIFS-ENS Open Data",
             "Conventions": "CF-1.10",
         }
@@ -188,14 +184,16 @@ def standardise(arrays: list[xr.DataArray], dataset_name: str) -> xr.Dataset:
 
     # order by FRT, and within each group order by step
     frt_keys = sorted(groups.keys())
-    nested = [sorted(groups[frt], key=lambda d: d["step"].values.item()) for frt in frt_keys]
+    nested = [
+        sorted(groups[frt], key=lambda d: d["step"].values.item()) for frt in frt_keys
+    ]
 
     ds = xr.combine_nested(
         nested,
         concat_dim=["forecast_reference_time", "step"],
         coords="minimal",
         join="exact",
-        combine_attrs="drop_conflicts"
+        combine_attrs="drop_conflicts",
     )
     ds = ds.to_dataset(name=dataset_name).chunk(CHUNKING)
 
