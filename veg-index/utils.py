@@ -100,6 +100,16 @@ def yield_dekad_dates(
             )
             cur = cur.replace(year=year, month=month, day=1)
 
+def check_for_tiff_existence(ts: datetime) -> bool:
+    """Return **True** if the GeoTIFF for *ts* exists locally or remotely."""
+
+    exists_locally = (scratchspace / tiff_filename(ts)).exists()
+    if exists_locally:
+        return True
+
+    exists_remotely = requests.head(tiff_url(ts)).status_code == 200
+    return exists_remotely
+
 
 def download_tiff(ts: datetime, *, force: bool = False) -> Path:
     """Download the GeoTIFF for *ts* to *scratchspace* (with resume/cache).
@@ -145,7 +155,7 @@ def download_tiff(ts: datetime, *, force: bool = False) -> Path:
                     fh.write(chunk)
             tmp.rename(path)
     except (requests.RequestException, KeyboardInterrupt) as exc:
-        with suppress(FileNotFoundError):
+        with suppress(FileNotFoundError, UnboundLocalError):
             tmp.unlink(missing_ok=True)  # purge incomplete fragment
         raise RuntimeError(f"Could not fetch {url!s}") from exc
 

@@ -39,6 +39,7 @@ from dask.diagnostics.progress import ProgressBar
 from multiformats import CID
 from utils import (
     CHUNKING,
+    check_for_tiff_existence,
     download_tiff,
     quality_check_dataset,
     standardise,
@@ -209,12 +210,15 @@ async def append(
         gateway_uri_stem, rpc_uri_stem, root_cid=CID.decode(cid)
     ) as (store, hamt):
         latest = npdt_to_pydt(xr.open_zarr(store=store).time[-1].values)
+        eprint(f"Latest dekad: {latest.date()}")
         start_date = latest + timedelta(days=10)  # first dekad NOT in store
         end_date = end_date or datetime.now(UTC)
 
         dates = list(yield_dekad_dates(start_date, end_date))
+        dates = [ts for ts in dates if check_for_tiff_existence(ts)]
         if not dates:
             eprint("✓ No new dekads to append.")
+            print(-1)
             return
 
         # ── process in contiguous batches ───────────────────────────────────────
